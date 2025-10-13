@@ -1,0 +1,384 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { DISCURSOS_PUBLICOS } from './discursos';
+import { PublicTalksSchedule, PublicTalkAssignment } from '../App';
+
+interface ReunionPublicaProps {
+    schedule: PublicTalksSchedule;
+    onSave: (schedule: PublicTalksSchedule) => Promise<void>;
+    canManage: boolean;
+}
+
+const TALK_CATEGORIES: Record<string, number[]> = {
+    'BIBLIA/DIOS': [4, 26, 37, 54, 70, 76, 80, 88, 99, 101, 114, 124, 133, 137, 139, 145, 164, 169, 175, 187],
+    'EVANGELIZACIÓN/MINISTERIO': [17, 63, 66, 81],
+    'FAMILIA/JÓVENES': [5, 13, 27, 28, 29, 30, 104, 110, 113, 118, 146, 190],
+    'FE/ESPIRITUALIDAD': [1, 9, 16, 18, 22, 31, 44, 46, 60, 67, 71, 74, 87, 142, 147, 149, 151, 158, 159, 166, 168, 172, 188, 189, 192],
+    'MUNDO, NO SER PARTE DEL': [11, 25, 33, 39, 51, 53, 59, 64, 79, 97, 107, 115, 116, 119, 123, 131, 138, 160, 167, 178, 179, 183, 191],
+    'NORMAS Y CUALIDADES CRISTIANAS': [7, 10, 12, 14, 15, 42, 48, 68, 69, 72, 75, 77, 78, 100, 103, 112, 144, 148, 157, 165, 171, 185],
+    'PRUEBAS/PROBLEMAS': [32, 50, 57, 65, 73, 93, 105, 108, 117, 141, 143, 177, 184, 186, 194],
+    'REINO/PARAÍSO': [19, 21, 23, 24, 35, 47, 49, 61, 62, 85, 90, 91, 109, 111, 120, 122, 130, 132, 154, 162, 170, 174, 180, 182],
+    'RELIGIÓN/ADORACIÓN': [3, 8, 36, 43, 45, 52, 55, 56, 58, 82, 83, 86, 89, 92, 94, 95, 96, 125, 126, 127, 128, 129, 134, 135, 136, 140, 155, 161, 163, 173],
+    'ÚLTIMOS DÍAS/JUICIO DE DIOS': [2, 6, 20, 34, 38, 40, 41, 84, 98, 102, 106, 121, 150, 152, 153, 156, 176, 181, 193],
+};
+const CATEGORY_NAMES = Object.keys(TALK_CATEGORIES);
+
+const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canManage }) => {
+    const [localSchedule, setLocalSchedule] = useState<PublicTalksSchedule>({});
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingSlot, setEditingSlot] = useState<{ talkNumber: number; slotIndex: number; data: Partial<PublicTalkAssignment> } | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [status, setStatus] = useState('');
+
+    const [yearPage, setYearPage] = useState(0);
+    const START_YEAR = 2024;
+    const YEARS_PER_PAGE = 6;
+    
+    const [whatsAppModalData, setWhatsAppModalData] = useState<{ talkNumber: number; data: PublicTalkAssignment } | null>(null);
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('all');
+    const [dateFilter, setDateFilter] = useState('');
+
+    useEffect(() => {
+        const fullSchedule: PublicTalksSchedule = {};
+
+        const maxLength = Object.values(schedule).reduce((max, arr) => (arr ? Math.max(max, arr.length) : max), 0);
+        const requiredLength = Math.max(maxLength, (yearPage + 1) * YEARS_PER_PAGE);
+
+        DISCURSOS_PUBLICOS.forEach(talk => {
+            const talkKey = talk.number.toString();
+            const existingAssignments = schedule[talkKey] || [];
+            
+            const newAssignments = Array(requiredLength).fill(null);
+            for (let i = 0; i < existingAssignments.length; i++) {
+                if (i < newAssignments.length) {
+                    newAssignments[i] = existingAssignments[i];
+                }
+            }
+            fullSchedule[talkKey] = newAssignments;
+        });
+        setLocalSchedule(fullSchedule);
+    }, [schedule, yearPage]);
+
+    const filteredDiscursos = useMemo(() => {
+        let talks = [...DISCURSOS_PUBLICOS];
+
+        if (dateFilter) {
+            const talkNumbersOnDate = new Set<number>();
+            Object.entries(localSchedule).forEach(([talkNum, assignments]) => {
+                if (assignments?.some(a => a?.date === dateFilter)) {
+                    talkNumbersOnDate.add(Number(talkNum));
+                }
+            });
+            talks = talks.filter(talk => talkNumbersOnDate.has(talk.number));
+        }
+
+        if (categoryFilter !== 'all') {
+            const categoryTalks = TALK_CATEGORIES[categoryFilter];
+            if (categoryTalks) {
+                talks = talks.filter(talk => categoryTalks.includes(talk.number));
+            }
+        }
+
+        if (searchQuery) {
+            const lowercasedQuery = searchQuery.toLowerCase();
+            talks = talks.filter(talk => 
+                talk.title.toLowerCase().includes(lowercasedQuery) ||
+                talk.number.toString().startsWith(searchQuery)
+            );
+        }
+
+        return talks;
+    }, [searchQuery, categoryFilter, dateFilter, localSchedule]);
+
+    const handleSlotClick = (talkNumber: number, slotIndex: number) => {
+        const currentData = localSchedule[talkNumber]?.[slotIndex] || {};
+        setEditingSlot({ talkNumber, slotIndex, data: currentData });
+        setIsModalOpen(true);
+    };
+
+    const handleModalSave = (newData: PublicTalkAssignment) => {
+        if (!editingSlot) return;
+        const { talkNumber, slotIndex } = editingSlot;
+        
+        setLocalSchedule(prev => {
+            const newSchedule = { ...prev };
+            const talkAssignments = [...(newSchedule[talkNumber] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
+            talkAssignments[slotIndex] = newData;
+            newSchedule[talkNumber] = talkAssignments;
+            return newSchedule;
+        });
+
+        setIsModalOpen(false);
+        setEditingSlot(null);
+    };
+
+    const handleModalDelete = () => {
+        if (!editingSlot) return;
+        const { talkNumber, slotIndex } = editingSlot;
+        
+        setLocalSchedule(prev => {
+            const newSchedule = { ...prev };
+            const talkAssignments = [...(newSchedule[talkNumber] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
+            talkAssignments[slotIndex] = null;
+            newSchedule[talkNumber] = talkAssignments;
+            return newSchedule;
+        });
+
+        setIsModalOpen(false);
+        setEditingSlot(null);
+    };
+
+    const handleSaveChanges = async () => {
+        setIsSaving(true);
+        setStatus('Guardando...');
+        try {
+            await onSave(localSchedule);
+            setStatus('¡Cambios guardados con éxito!');
+        } catch (error) {
+            setStatus('Error al guardar los cambios.');
+        } finally {
+            setIsSaving(false);
+            setTimeout(() => setStatus(''), 3000);
+        }
+    };
+    
+    const WhatsAppShareModal: React.FC<{ talkNumber: number; data: PublicTalkAssignment; onClose: () => void; }> = ({ talkNumber, data, onClose }) => {
+        const [hospitality, setHospitality] = useState('no_ha_confirmado');
+        const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talkNumber);
+    
+        const generateMessage = () => {
+            let hospitalityText = '';
+            switch (hospitality) {
+                case 'si':
+                    hospitalityText = 'Sí, se quedará a la hospitalidad.';
+                    break;
+                case 'no':
+                    hospitalityText = 'No, no se quedará a la hospitalidad.';
+                    break;
+                case 'no_ha_confirmado':
+                    hospitalityText = 'No ha confirmado.';
+                    break;
+            }
+    
+            const message = `*Discurso Público para el ${data.date}* 🗓️\n\n` +
+                `*Título:* ${talkInfo?.number}. ${talkInfo?.title}\n` +
+                `*Orador:* ${data.speakerName || ''}\n` +
+                `*Congregación:* ${data.congregation || ''}\n` +
+                `*Canción:* ${data.song || ''}\n\n` +
+                `*¿Se quedará a la hospitalidad?*\n${hospitalityText}`;
+            
+            return message;
+        };
+        
+        const message = generateMessage();
+    
+        const handleSend = () => {
+            const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+            window.open(url, '_blank');
+        };
+    
+        return (
+             <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-[60] p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 border-b">
+                        <h3 className="text-xl font-bold">Compartir por WhatsApp</h3>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">¿Se quedará a la hospitalidad?</label>
+                            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                                <label className="flex items-center"><input type="radio" name="hospitality" value="si" checked={hospitality === 'si'} onChange={(e) => setHospitality(e.target.value)} className="mr-2"/> Sí</label>
+                                <label className="flex items-center"><input type="radio" name="hospitality" value="no" checked={hospitality === 'no'} onChange={(e) => setHospitality(e.target.value)} className="mr-2"/> No</label>
+                                <label className="flex items-center"><input type="radio" name="hospitality" value="no_ha_confirmado" checked={hospitality === 'no_ha_confirmado'} onChange={(e) => setHospitality(e.target.value)} className="mr-2"/> No ha confirmado</label>
+                            </div>
+                        </div>
+                        <div className="bg-gray-100 p-4 rounded-md max-h-60 overflow-y-auto">
+                            <p className="font-semibold text-gray-800 mb-2">Vista previa del mensaje:</p>
+                            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">{message}</pre>
+                        </div>
+                    </div>
+                    <div className="p-4 bg-gray-50 flex justify-end gap-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md">Cancelar</button>
+                        <button type="button" onClick={handleSend} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Enviar a WhatsApp</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const AssignmentModal = () => {
+        if (!isModalOpen || !editingSlot) return null;
+
+        const [formData, setFormData] = useState<Partial<PublicTalkAssignment>>(editingSlot.data);
+        const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === editingSlot.talkNumber);
+
+        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+            setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        };
+
+        const handleSave = (e: React.FormEvent) => {
+            e.preventDefault();
+            handleModalSave(formData as PublicTalkAssignment);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 border-b">
+                        <h3 className="text-xl font-bold text-gray-800">Asignar Discurso</h3>
+                        <p className="text-sm text-gray-600">{talkInfo?.number}. {talkInfo?.title}</p>
+                    </div>
+                    <form onSubmit={handleSave}>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Fecha</label>
+                                <input type="date" name="date" value={formData.date || ''} onChange={handleChange} required className="mt-1 w-full p-2 border rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Orador</label>
+                                <input type="text" name="speakerName" value={formData.speakerName || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" placeholder="Nombre del orador" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Canción</label>
+                                <input type="text" name="song" value={formData.song || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" placeholder="Número y título de la canción" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Congregación</label>
+                                <input type="text" name="congregation" value={formData.congregation || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" placeholder="Congregación del orador" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Celular</label>
+                                <input type="tel" name="phone" value={formData.phone || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" placeholder="Número de celular" />
+                            </div>
+                        </div>
+                        <div className="p-4 bg-gray-50 flex flex-wrap justify-between items-center gap-2">
+                            <button type="button" onClick={handleModalDelete} className="px-3 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 text-sm">Eliminar</button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setWhatsAppModalData({ talkNumber: editingSlot.talkNumber, data: formData as PublicTalkAssignment })}
+                                    className="px-3 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 text-sm"
+                                >
+                                    WhatsApp
+                                </button>
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-3 py-2 bg-gray-200 rounded-md text-sm">Cancelar</button>
+                                <button type="submit" className="px-3 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 text-sm">Guardar</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+
+    const displayedYears = Array.from({ length: YEARS_PER_PAGE }, (_, i) => START_YEAR + yearPage * YEARS_PER_PAGE + i);
+
+    return (
+        <div className="container mx-auto p-4 bg-white rounded-lg shadow-md">
+            <AssignmentModal />
+            {whatsAppModalData && (
+                <WhatsAppShareModal 
+                    talkNumber={whatsAppModalData.talkNumber} 
+                    data={whatsAppModalData.data} 
+                    onClose={() => setWhatsAppModalData(null)}
+                />
+            )}
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <h1 className="text-2xl font-bold text-center text-gray-800">Registro de Discursos Públicos</h1>
+                <div className="flex items-center gap-4">
+                    <div className="h-6 text-blue-600 font-semibold">{status}</div>
+                    <button onClick={handleSaveChanges} disabled={isSaving || !canManage} title={!canManage ? "No tiene permiso para guardar cambios" : ""} className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
+                <div>
+                    <label htmlFor="search-query" className="block text-sm font-medium text-gray-700">Buscar por Título o Número:</label>
+                    <input type="search" id="search-query" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ej: Jehová, el 'Gran Creador' o 101" className="mt-1 w-full p-2 border rounded-md"/>
+                </div>
+                <div>
+                    <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700">Filtrar por Categoría:</label>
+                    <select id="category-filter" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md">
+                        <option value="all">Todas las categorías</option>
+                        {CATEGORY_NAMES.map(cat => <option key={cat} value={cat}>{cat.replace('/', ' / ')}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="date-filter" className="block text-sm font-medium text-gray-700">Filtrar por Fecha:</label>
+                    <input type="date" id="date-filter" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md"/>
+                </div>
+            </div>
+
+            <div className="flex justify-center items-center gap-4 my-4">
+                <button
+                    onClick={() => setYearPage(p => Math.max(0, p - 1))}
+                    disabled={yearPage === 0}
+                    className="px-4 py-2 bg-gray-200 rounded-md disabled:opacity-50"
+                >
+                    Anterior
+                </button>
+                <span className="font-semibold text-gray-700">
+                    Años: {displayedYears[0]} – {displayedYears[YEARS_PER_PAGE - 1]}
+                </span>
+                <button
+                    onClick={() => setYearPage(p => p + 1)}
+                    className="px-4 py-2 bg-gray-200 rounded-md"
+                >
+                    Siguiente
+                </button>
+            </div>
+            
+            <div className="overflow-x-auto">
+                <div className="min-w-[800px]">
+                    {/* Header */}
+                    <div className="flex items-center bg-gray-100 p-2 font-bold border-b-2 border-gray-300 sticky top-0 z-10">
+                        <div className="flex-1">Título del Discurso</div>
+                        <div className="grid grid-cols-6 gap-2 w-1/2 text-center text-sm">
+                            {displayedYears.map(year => <span key={year}>{year}</span>)}
+                        </div>
+                    </div>
+                    {/* Body */}
+                    <div className="max-h-[70vh] overflow-y-auto">
+                    {filteredDiscursos.length > 0 ? filteredDiscursos.map(talk => {
+                        const isNoUsar = talk.title.toLowerCase().includes('(no usar)');
+                        return (
+                        <div key={talk.number} className={`flex items-center p-2 border-b ${isNoUsar ? 'bg-gray-200 text-gray-500' : 'hover:bg-blue-50'}`}>
+                            <div className="flex-1 text-sm">
+                                <span className="font-semibold">{talk.number}.</span> {talk.title}
+                            </div>
+                            <div className="grid grid-cols-6 gap-2 w-1/2">
+                                {displayedYears.map((year, localSlotIndex) => {
+                                    const globalSlotIndex = yearPage * YEARS_PER_PAGE + localSlotIndex;
+                                    const assignment = localSchedule[talk.number]?.[globalSlotIndex];
+                                    return (
+                                        <button
+                                            key={globalSlotIndex}
+                                            disabled={isNoUsar || !canManage}
+                                            onClick={() => handleSlotClick(talk.number, globalSlotIndex)}
+                                            title={assignment ? `${assignment.date}\n${assignment.speakerName}` : 'Asignar discurso'}
+                                            className={`h-8 text-xs border rounded-md transition-colors disabled:cursor-not-allowed ${
+                                                assignment?.date ? (new Date(assignment.date + 'T00:00:00') < new Date() ? 'bg-gray-300' : 'bg-blue-200 hover:bg-blue-300') : 'bg-white hover:bg-gray-200'
+                                            } disabled:bg-gray-300 truncate px-1`}
+                                        >
+                                            {assignment?.date || ''}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}) : (
+                        <div className="text-center p-6 text-gray-500">
+                            No se encontraron discursos que coincidan con los filtros aplicados.
+                        </div>
+                    )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default ReunionPublica;

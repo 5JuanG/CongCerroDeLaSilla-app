@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Congregation Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@5.0.10/dist/signature_pad.umd.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.20.0",
+    "vite": "https://aistudiocdn.com/vite@^7.1.7",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+    <script>
+      // ===============================================================
+      // PASO IMPORTANTE: Reemplace esto con la configuración de su app de Firebase
+      // Puede obtener esto desde la Consola de Firebase -> Configuración del proyecto
+      // ===============================================================
+      const firebaseConfig = {
+        apiKey: "AIzaSyCboKuHwSfUjXG-wbqkhzSm7po7RRKe_ms",
+        authDomain: "congcerrodelasilla-app.firebaseapp.com",
+        projectId: "congcerrodelasilla-app",
+        storageBucket: "congcerrodelasilla-app.appspot.com",
+        messagingSenderId: "221006837760",
+        appId: "1:221006837760:web:29ab94309e6de10f96c0e5"
+      };
+
+      // Inicializar Firebase
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      
+      // Hacer que los servicios de Firebase estén disponibles globalmente para la aplicación
+      window.auth = firebase.auth();
+      window.db = firebase.firestore();
+      window.storage = firebase.storage();
+      // Aumentar el tiempo de espera para subidas a 10 minutos (600,000 ms)
+      // para prevenir errores en conexiones de red extremadamente lentas.
+      window.storage.setMaxUploadRetryTime(600000);
+    </script>
+
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
