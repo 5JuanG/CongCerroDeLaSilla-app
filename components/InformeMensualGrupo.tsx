@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Publisher, ServiceReport, MONTHS } from '../App';
+import Tooltip from './Tooltip';
 
 type EditableReport = Omit<ServiceReport, 'id'>;
 
@@ -146,21 +147,25 @@ const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, s
 
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 p-3 bg-gray-50 border rounded-lg text-sm text-gray-700">
                 <h3 className="font-bold text-gray-800 mr-4">Leyenda:</h3>
-                <div className="flex items-center gap-2">
+                <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-red-200 border border-red-300"></div>
                     <span>Pendiente</span>
+                    <Tooltip text="El publicador aún no ha enviado su informe para el mes seleccionado." />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-yellow-200 border border-yellow-300"></div>
                     <span>Prec. Regular</span>
+                     <Tooltip text="El publicador es precursor regular y ya ha entregado su informe." />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-green-200 border border-green-300"></div>
                     <span>Prec. Auxiliar</span>
+                     <Tooltip text="El publicador sirvió como precursor auxiliar este mes y ya entregó su informe." />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-green-50 border border-green-200"></div>
                     <span>Publicador</span>
+                     <Tooltip text="El publicador ya entregó su informe del mes." />
                 </div>
             </div>
     

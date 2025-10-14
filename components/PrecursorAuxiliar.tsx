@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react';
 import { UserRole, MONTHS } from '../App';
 import { GoogleGenAI } from "@google/genai";
+import Tooltip from './Tooltip';
 
 // --- Type Declarations ---
 declare const SignaturePad: any;
@@ -127,7 +128,7 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
                  <div className="mb-8">
                     <label className="block text-lg font-bold text-gray-700 mb-3">Requisito de Horas</label>
                     <div className="flex flex-col sm:flex-row gap-4 rounded-xl border-2 border-gray-200 p-4 bg-gray-50">
-                        <div className="flex-1 relative">
+                        <div className="flex-1 relative group">
                             <input
                                 type="radio"
                                 id="horas15"
@@ -146,11 +147,11 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
                                         ? 'cursor-pointer peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600'
                                         : 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed'
                                     }`}
-                                title={!is15HourOptionEnabled ? 'Opción solo disponible durante campañas especiales.' : ''}
                             >
                                 15 Horas
                                 {!is15HourOptionEnabled && <span className="block text-xs font-normal mt-1">(No disponible actualmente)</span>}
                             </label>
+                             <Tooltip text={!is15HourOptionEnabled ? 'Esta opción solo está disponible durante meses de campaña especial, según lo anuncie la sucursal.' : 'Seleccione si aplicará para el requisito de 15 horas.'} />
                         </div>
                         <div className="flex-1">
                             <input type="radio" id="horas30" name="horas" value="30" checked={horas === '30'} onChange={() => setHoras('30')} className="hidden peer" />
@@ -162,9 +163,10 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
                     <label htmlFor="mes" className="block text-lg font-bold text-gray-700 mb-2">El(los) mes(es) de:</label>
                     <input type="text" id="mes" value={mes} onChange={(e) => setMes(e.target.value)} required className="w-full p-4 text-lg border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition" autoComplete="off" autoCorrect="off" spellCheck="false" translate="no" />
                 </div>
-                <div className="my-8 flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
+                <div className="my-8 flex items-center gap-4 p-4 bg-blue-50 rounded-lg relative group">
                     <input type="checkbox" id="deContinuo" checked={deContinuo} onChange={(e) => setDeContinuo(e.target.checked)} className="h-6 w-6 rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0" />
                     <label htmlFor="deContinuo" className="text-base text-gray-700">Marque la casilla si desea ser precursor auxiliar continuo hasta nuevo aviso.</label>
+                    <Tooltip text="Si marca esta casilla, su solicitud se renovará automáticamente cada mes hasta que notifique lo contrario al comité de servicio." />
                 </div>
                 <p className="text-gray-600 text-base md:text-lg my-6 leading-relaxed">Disfruto de una buena reputación moral y tengo buenos hábitos. He hecho planes para cumplir con el requisito de horas.</p>
                  <div className="mb-6">

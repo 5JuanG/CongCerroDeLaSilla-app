@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TerritoryRecord } from '../App';
+import Tooltip from './Tooltip';
 
 interface TerritoriosProps {
     records: TerritoryRecord[];
@@ -197,7 +197,10 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
                     <thead className="bg-gray-100 text-[10px] md:text-xs">
                         <tr>
                             <th rowSpan={2} className="p-1 md:p-2 border border-gray-400 align-middle">Núm. de terr.</th>
-                            <th rowSpan={2} className="p-1 md:p-2 border border-gray-400 align-middle">Última fecha en que se completó*</th>
+                            <th rowSpan={2} className="p-1 md:p-2 border border-gray-400 align-middle relative group">
+                                Última fecha en que se completó*
+                                <Tooltip text="Muestra la fecha en que se completó la última vuelta de la PÁGINA ANTERIOR. Sirve como referencia para saber cuándo se trabajó por última vez un territorio antes de las vueltas que se muestran en esta página." />
+                            </th>
                             {vueltasRange.map(v => <th colSpan={2} key={v} className="p-1 md:p-2 border border-gray-400 font-bold">Asignado a</th>)}
                         </tr>
                         <tr>

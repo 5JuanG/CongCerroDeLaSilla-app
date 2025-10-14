@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { UserRole, View, Publisher, UserData, Permission } from '../App';
+import { UserRole, View, Publisher, UserData, Permission, ALL_PERMISSIONS } from '../App';
 
 declare const db: any;
 declare const firebase: any;
@@ -7,13 +7,20 @@ declare const firebase: any;
 interface ControlAccesoProps {
     users: UserData[];
     publishers: Publisher[];
+    committeeMembers: string[];
     onUpdateUserPermissions: (userId: string, permissions: Permission[]) => Promise<void>;
     onUpdateServiceCommittee: (memberUids: string[]) => Promise<void>;
     onLinkUserToPublisher: (userId: string, publisherId: string) => Promise<void>;
+    isPublicReportFormEnabled: boolean;
+    onUpdatePublicReportFormEnabled: (isEnabled: boolean) => Promise<void>;
+    onResetData: () => Promise<void>;
+    currentUserRole: UserRole;
+    canManage: boolean;
 }
 
 const roleNames: Record<UserRole, string> = {
     admin: 'Administrador',
+    secretario: 'Secretario',
     overseer: 'Superintendente',
     publisher: 'Publicador',
     helper: 'Ayudante',
@@ -163,70 +170,70 @@ const LinkPublisherModal: React.FC<{
 };
 
 
-const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishers, onUpdateUserPermissions, onUpdateServiceCommittee, onLinkUserToPublisher }) => {
-    const [users, setUsers] = useState<UserData[]>(allUsers);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+const ControlAcceso: React.FC<ControlAccesoProps> = ({ 
+    users,
+    publishers,
+    committeeMembers: initialCommitteeMembers,
+    onUpdateUserPermissions, 
+    onUpdateServiceCommittee, 
+    onLinkUserToPublisher,
+    isPublicReportFormEnabled,
+    onUpdatePublicReportFormEnabled,
+    onResetData,
+    currentUserRole,
+    canManage
+}) => {
     const [status, setStatus] = useState('');
-
-    const [committeeMembers, setCommitteeMembers] = useState<string[]>(['', '', '']);
-    const [adminsAndOverseers, setAdminsAndOverseers] = useState<UserData[]>([]);
+    const [committeeMembers, setCommitteeMembers] = useState<string[]>(initialCommitteeMembers);
+    const [committeeCandidates, setCommitteeCandidates] = useState<UserData[]>([]);
     
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
     const [linkingUser, setLinkingUser] = useState<UserData | null>(null);
+    const [enableReset, setEnableReset] = useState(false);
 
     const { uidToPublisherMap, unlinkedPublishers } = useMemo(() => {
         const map = new Map<string, Publisher>();
-        const linkedPublisherIds = new Set<string>();
-        
         publishers.forEach(p => {
             if (p.authUid) {
                 map.set(p.authUid, p);
-                linkedPublisherIds.add(p.id);
             }
         });
-        
         const unlinked = publishers.filter(p => !p.authUid);
-
         return { uidToPublisherMap: map, unlinkedPublishers: unlinked };
     }, [publishers]);
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        setError('');
-        try {
-            // Users are passed via props, so no need to fetch them here.
-            setUsers(allUsers);
-
-            // Filter for committee candidates
-            const candidates = allUsers.filter((u: UserData) => u.role === 'admin' || u.role === 'overseer');
-            setAdminsAndOverseers(candidates);
-
-            // Fetch service committee
-            const committeeDoc = await db.collection('settings').doc('serviceCommittee').get();
-            if (committeeDoc.exists) {
-                const members = committeeDoc.data().members || [];
-                setCommitteeMembers([members[0] || '', members[1] || '', members[2] || '']);
-            }
-
-        } catch (err) {
-            console.error("Error fetching committee data: ", err);
-            setError('No se pudo cargar la configuración del comité.');
-        } finally {
-            setLoading(false);
-        }
-    }, [allUsers]);
-
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        setCommitteeMembers(initialCommitteeMembers);
+        const candidates = users.filter((u: UserData) => ['admin', 'overseer', 'secretario'].includes(u.role));
+        setCommitteeCandidates(candidates);
+    }, [users, initialCommitteeMembers]);
 
     const handleRoleChange = async (userId: string, newRole: UserRole) => {
         setStatus('Actualizando rol...');
         try {
-            await db.collection('users').doc(userId).update({ role: newRole });
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u)); // Update local state
-            setStatus('¡Rol actualizado con éxito!');
+            const userToUpdate = users.find(u => u.id === userId);
+            const oldRole = userToUpdate?.role;
+    
+            const userRef = db.collection('users').doc(userId);
+            
+            const isNowPrivileged = newRole === 'admin' || newRole === 'secretario';
+            const wasPrivileged = oldRole?.toLowerCase() === 'admin' || oldRole?.toLowerCase() === 'secretario';
+    
+            // Always update the role
+            const updatePayload: { role: UserRole; permissions?: Permission[] } = { role: newRole };
+    
+            if (isNowPrivileged) {
+                // If promoting to admin/secretario, always grant all permissions
+                updatePayload.permissions = ALL_PERMISSIONS;
+            } else if (wasPrivileged && !isNowPrivileged) {
+                // If demoting FROM admin/secretario, reset permissions
+                updatePayload.permissions = [];
+            }
+            // In other cases (e.g., publisher to helper), permissions are not touched here.
+            
+            await userRef.update(updatePayload);
+    
+            setStatus('¡Rol y permisos actualizados con éxito!');
         } catch (err) {
             console.error("Error updating role:", err);
             setStatus('Error al actualizar el rol.');
@@ -244,7 +251,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
     const handleSaveCommittee = async () => {
         setStatus('Guardando Comité de Servicio...');
         try {
-            const finalMembers = [...new Set(committeeMembers.filter(id => id))]; // Remove duplicates and empty strings
+            const finalMembers = [...new Set(committeeMembers.filter(id => id))];
             await onUpdateServiceCommittee(finalMembers);
             setStatus('¡Comité de Servicio actualizado con éxito!');
         } catch(e) {
@@ -258,7 +265,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
         setStatus(`Guardando permisos...`);
         try {
             await onUpdateUserPermissions(userId, permissions);
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions } : u));
+            // The listener in App.tsx will update state.
             setStatus('¡Permisos guardados con éxito!');
         } catch (err) {
             setStatus('Error al guardar los permisos.');
@@ -272,7 +279,6 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
         try {
             await onLinkUserToPublisher(userId, publisherId);
             setStatus('¡Usuario enlazado correctamente!');
-            // No need to refetch, parent component's listener will update props.
         } catch(err) {
             setStatus('Error al enlazar el usuario.');
         } finally {
@@ -280,39 +286,31 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
         }
     };
 
-    if (loading) {
-        return <div className="text-center p-8">Cargando...</div>;
-    }
-
-    if (error) {
-        return <div className="text-center p-8 text-red-600 bg-red-100 rounded-md">{error}</div>;
-    }
-
     return (
         <div className="container mx-auto max-w-6xl space-y-12">
             {editingUser && <PermissionsModal user={editingUser} onClose={() => setEditingUser(null)} onSave={handleSavePermissions} />}
             {linkingUser && <LinkPublisherModal user={linkingUser} unlinkedPublishers={unlinkedPublishers} onClose={() => setLinkingUser(null)} onLink={handleLink} />}
 
-            <h1 className="text-3xl font-bold text-center text-gray-800 mb-4">Control de Acceso</h1>
+            <h1 className="text-3xl font-bold text-center text-gray-800 mb-4">Control de Acceso (Versión Corregida)</h1>
             {status && <p className="text-center text-blue-600 font-semibold mb-4">{status}</p>}
 
-            {/* Service Committee Management */}
             <div className="bg-white shadow-md rounded-lg p-6">
                 <h2 className="text-xl font-bold text-blue-700 mb-2">Comité de Servicio</h2>
-                <p className="text-sm text-gray-500 mb-4">Designe hasta tres miembros del comité. Solo administradores y superintendentes pueden ser seleccionados.</p>
+                <p className="text-sm text-gray-500 mb-4">Designe hasta tres miembros del comité. Solo administradores, secretarios y superintendentes pueden ser seleccionados.</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[0, 1, 2].map(index => (
                         <div key={index}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Miembro {index + 1}</label>
                             <select
-                                value={committeeMembers[index]}
+                                value={committeeMembers[index] || ''}
                                 onChange={e => handleCommitteeMemberChange(index, e.target.value)}
                                 className="w-full p-2 border border-gray-300 rounded-md"
+                                disabled={!canManage}
                             >
                                 <option value="">-- Vacante --</option>
-                                {adminsAndOverseers.map(user => {
+                                {committeeCandidates.map(user => {
                                     const publisher = uidToPublisherMap.get(user.id);
-                                    const displayName = publisher ? [publisher.Nombre, publisher.Apellido, publisher['2do Apellido'], publisher['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ') : user.email;
+                                    const displayName = publisher ? [publisher.Nombre, publisher.Apellido].filter(Boolean).join(' ') : user.email;
                                     return (
                                         <option key={user.id} value={user.id} disabled={committeeMembers.includes(user.id) && committeeMembers[index] !== user.id}>
                                             {displayName}
@@ -323,15 +321,36 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
                         </div>
                     ))}
                 </div>
-                <div className="text-right mt-4">
-                    <button onClick={handleSaveCommittee} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Guardar Comité</button>
-                </div>
+                {canManage && <div className="text-right mt-4"><button onClick={handleSaveCommittee} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Guardar Comité</button></div>}
             </div>
 
-            {/* User Roles & Permissions Management */}
+            <div className="bg-white shadow-md rounded-lg p-6">
+                <h2 className="text-xl font-bold text-blue-700 mb-2">Configuraciones Públicas</h2>
+                <div className={`flex items-center justify-between p-4 bg-gray-50 rounded-lg border ${!canManage ? 'opacity-60' : ''}`}>
+                    <div>
+                        <span className="text-gray-800 font-semibold">Habilitar formularios públicos</span>
+                        <p className="text-sm text-gray-500">Permite a publicadores no registrados enviar informes de servicio y solicitudes de precursorado desde la página de inicio.</p>
+                    </div>
+                    <label htmlFor="toggle-public-forms" className={`flex items-center ${canManage ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                        <div className="relative">
+                            <input
+                                type="checkbox"
+                                id="toggle-public-forms"
+                                className="sr-only"
+                                checked={isPublicReportFormEnabled}
+                                onChange={(e) => onUpdatePublicReportFormEnabled(e.target.checked)}
+                                disabled={!canManage}
+                            />
+                            <div className={`block w-14 h-8 rounded-full transition-colors ${isPublicReportFormEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition ${isPublicReportFormEnabled ? 'transform translate-x-6' : ''}`}></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
             <div>
-                 <h2 className="text-xl font-bold text-blue-700 mb-2">Roles y Permisos de Usuarios</h2>
-                <p className="text-sm text-gray-500 mb-4">Asigne roles a los usuarios y gestione permisos individuales para superintendentes, ayudantes y auxiliares.</p>
+                <h2 className="text-xl font-bold text-blue-700 mb-2">Roles y Permisos de Usuarios</h2>
+                <p className="text-sm text-gray-500 mb-4">Asigne roles y permisos. Solo Administradores y Secretarios pueden hacer cambios.</p>
                 <div className="bg-white shadow-md rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left text-gray-500">
@@ -345,47 +364,26 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
                             <tbody>
                                 {users.map(user => {
                                     const linkedPublisher = uidToPublisherMap.get(user.id);
+                                    const isPrivileged = user.role?.toLowerCase() === 'admin' || user.role?.toLowerCase() === 'secretario';
                                     return (
                                         <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
                                             <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                                                {linkedPublisher ? (
-                                                    <>
-                                                        {[linkedPublisher.Nombre, linkedPublisher.Apellido, linkedPublisher['2do Apellido'], linkedPublisher['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}
-                                                        <span className="block text-xs text-gray-500">{user.email}</span>
-                                                    </>
-                                                ) : (
-                                                    user.email
-                                                )}
+                                                {linkedPublisher ? <>{[linkedPublisher.Nombre, linkedPublisher.Apellido].filter(Boolean).join(' ')}<span className="block text-xs text-gray-500">{user.email}</span></> : user.email}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <select
-                                                    value={user.role}
-                                                    onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
-                                                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                                >
-                                                    <option value="publisher">{roleNames.publisher}</option>
-                                                    <option value="overseer">{roleNames.overseer}</option>
-                                                    <option value="helper">{roleNames.helper}</option>
-                                                    <option value="auxiliary">{roleNames.auxiliary}</option>
-                                                    <option value="admin">{roleNames.admin}</option>
+                                                <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)} disabled={!canManage} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 disabled:bg-gray-200">
+                                                    {Object.entries(roleNames).map(([roleKey, roleName]) => <option key={roleKey} value={roleKey}>{roleName}</option>)}
                                                 </select>
                                             </td>
                                             <td className="px-6 py-4 text-center space-x-4">
-                                                {!linkedPublisher && (
-                                                    <button onClick={() => setLinkingUser(user)} className="font-medium text-green-600 hover:underline">
-                                                        Enlazar con Publicador
-                                                    </button>
-                                                )}
-                                                {['overseer', 'helper', 'auxiliary'].includes(user.role) && (
-                                                    <button
-                                                        onClick={() => setEditingUser(user)}
-                                                        className="font-medium text-blue-600 hover:underline"
-                                                    >
+                                                {!linkedPublisher && <button onClick={() => setLinkingUser(user)} disabled={!canManage} className="font-medium text-green-600 hover:underline disabled:text-gray-400">Enlazar con Publicador</button>}
+                                                
+                                                {isPrivileged ? (
+                                                    <span className="text-xs italic text-gray-500">Todos los permisos (automático)</span>
+                                                ) : (
+                                                    <button onClick={() => setEditingUser(user)} disabled={!canManage} className="font-medium text-blue-600 hover:underline disabled:text-gray-400">
                                                         Gestionar Permisos
                                                     </button>
-                                                )}
-                                                {!['overseer', 'helper', 'auxiliary'].includes(user.role) && linkedPublisher && (
-                                                    <span className="text-gray-400">—</span>
                                                 )}
                                             </td>
                                         </tr>
@@ -396,6 +394,22 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({ users: allUsers, publishe
                     </div>
                 </div>
             </div>
+
+            {currentUserRole === 'admin' && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg shadow-md">
+                     <h2 className="text-xl font-bold text-red-800 mb-2">Zona de Peligro</h2>
+                     <p className="text-sm text-red-700 mb-4">Esta acción es irreversible y borrará permanentemente todos los datos de la congregación.</p>
+                     <div className="flex items-center space-x-4">
+                         <label className="flex items-center space-x-2 cursor-pointer">
+                             <input type="checkbox" checked={enableReset} onChange={e => setEnableReset(e.target.checked)} className="h-5 w-5 rounded" />
+                             <span className="font-medium text-red-800">Habilitar borrado de datos</span>
+                         </label>
+                         <button onClick={onResetData} disabled={!enableReset} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed">
+                            Limpiar Todos los Datos
+                         </button>
+                     </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Publisher, ServiceReport, InvitationContent, MONTHS } from '../App';
 
@@ -11,6 +13,7 @@ interface InformeServicioProps {
     onSaveReport: (report: Omit<ServiceReport, 'id'>) => Promise<void>;
     onApplyForPioneer: () => void;
     invitationContent: InvitationContent[];
+    isPublicForm?: boolean;
 }
 
 interface InvitationDetails {
@@ -74,11 +77,13 @@ const InvitationModal: React.FC<{
 };
 
 
-const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceReports, onSaveReport, onApplyForPioneer, invitationContent }) => {
+const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceReports, onSaveReport, onApplyForPioneer, invitationContent, isPublicForm = false }) => {
     const [anio, setAnio] = useState<number | string>(new Date().getFullYear());
     const [mes, setMes] = useState('');
     const [grupo, setGrupo] = useState('');
     const [idPublicador, setIdPublicador] = useState('');
+    const [nombrePublico, setNombrePublico] = useState('');
+
     const [predico, setPredico] = useState(false);
     const [cursos, setCursos] = useState<number | string>('');
     const [horas, setHoras] = useState<number | string>('');
@@ -114,6 +119,12 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
         ];
         
     useEffect(() => {
+        // Public form should not pre-fill data. It's for new submissions only.
+        if (isPublicForm) {
+            setStatus({ message: '', type: '' });
+            return;
+        }
+
         if (idPublicador && mes && anio && serviceReports) {
             const existingReport = serviceReports.find(r => 
                 r.idPublicador === idPublicador && 
@@ -125,7 +136,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                 setPredico(existingReport.participacion);
                 setCursos(existingReport.cursosBiblicos ?? '');
                 setHoras(existingReport.horas ?? '');
-                // Find the matching service type string for the radio button
                 const pub = publishers.find(p => p.id === idPublicador);
                 let serviceType = '';
                 if (existingReport.precursorAuxiliar === 'PA') {
@@ -141,7 +151,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                 setNotas(existingReport.notas ?? '');
                 setStatus({ message: 'Se cargó un informe existente. Puede editarlo y guardarlo.', type: 'info' });
             } else {
-                // Reset ONLY data fields, not selectors
                 setPredico(false);
                 setCursos('');
                 setHoras('');
@@ -150,7 +159,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                 setStatus({ message: '', type: '' });
             }
         } else {
-            // Reset if selectors are not fully filled
             setPredico(false);
             setCursos('');
             setHoras('');
@@ -158,7 +166,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
             setNotas('');
             setStatus({ message: '', type: '' });
         }
-    }, [idPublicador, mes, anio, serviceReports, publishers]);
+    }, [idPublicador, mes, anio, serviceReports, publishers, isPublicForm]);
 
     const handleGrupoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setGrupo(e.target.value);
@@ -169,6 +177,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
         setMes('');
         setGrupo('');
         setIdPublicador('');
+        setNombrePublico('');
         setPredico(false);
         setCursos('');
         setHoras('');
@@ -182,8 +191,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
         setStatus({ message: 'Guardando...', type: 'info' });
 
         try {
-            const reportData = {
-                idPublicador,
+            const commonData = {
                 anioCalendario: Number(anio),
                 mes,
                 participacion: predico,
@@ -192,25 +200,41 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                 precursorAuxiliar: tipoServicio === 'Precursor Auxiliar' ? 'PA' : '',
                 notas: notas || undefined,
             };
+
+            let reportData;
+            if (isPublicForm) {
+                if (!nombrePublico.trim()) {
+                    setStatus({ message: 'Por favor, ingrese su nombre.', type: 'error' });
+                    setIsSubmitting(false);
+                    return;
+                }
+                reportData = { ...commonData, idPublicador: 'public_submission', nombrePublicador: nombrePublico.trim() };
+            } else {
+                reportData = { ...commonData, idPublicador };
+            }
+
+
             await onSaveReport(reportData as Omit<ServiceReport, 'id'>);
 
             setStatus({ message: '¡Informe guardado con éxito!', type: 'success' });
             
-            const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-            const currentMonthIndex = months.indexOf(mes);
-            const currentYear = Number(anio);
-            let nextMonthIndex = currentMonthIndex + 1;
-            let nextYear = currentYear;
-            if (nextMonthIndex > 11) {
-                nextMonthIndex = 0;
-                nextYear = currentYear + 1;
+            if (!isPublicForm) {
+                const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                const currentMonthIndex = months.indexOf(mes);
+                const currentYear = Number(anio);
+                let nextMonthIndex = currentMonthIndex + 1;
+                let nextYear = currentYear;
+                if (nextMonthIndex > 11) {
+                    nextMonthIndex = 0;
+                    nextYear = currentYear + 1;
+                }
+                
+                setInvitationDetails({ month: months[nextMonthIndex], year: nextYear });
+                setShowInvitationModal(true);
             }
             
-            setInvitationDetails({ month: months[nextMonthIndex], year: nextYear });
-            setShowInvitationModal(true);
-            
             resetForm();
-            setTimeout(() => setStatus({ message: '', type: '' }), 3000);
+            setTimeout(() => setStatus({ message: '', type: '' }), 5000);
 
         } catch (error) {
             setStatus({ message: 'Error al guardar el informe.', type: 'error' });
@@ -239,22 +263,29 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                             </div>
                         </div>
 
-                        
-                        <div className="form-group mb-4">
-                            <label htmlFor="grupo" className="label">Grupo:</label>
-                            <select id="grupo" value={grupo} onChange={handleGrupoChange} required className="input">
-                                <option value="" disabled>Seleccione</option>
-                                {grupos.map(g => <option key={g} value={g}>{g}</option>)}
-                            </select>
-                        </div>
-                        <div className="form-group mb-6">
-                            <label htmlFor="id_publicador" className="label">Nombre:</label>
-                            <select id="id_publicador" value={idPublicador} onChange={e => setIdPublicador(e.target.value)} required disabled={!grupo} className="input">
-                                <option value="" disabled>{grupo ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
-                                {publicadoresEnGrupo.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
-                            </select>
-                        </div>
-                        
+                        {isPublicForm ? (
+                            <div className="form-group mb-6">
+                                <label htmlFor="nombre_publico" className="label">Su Nombre Completo:</label>
+                                <input id="nombre_publico" type="text" value={nombrePublico} onChange={e => setNombrePublico(e.target.value)} required className="input" placeholder="Ej: Juan Pérez" />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="form-group mb-4">
+                                    <label htmlFor="grupo" className="label">Grupo:</label>
+                                    <select id="grupo" value={grupo} onChange={handleGrupoChange} required className="input">
+                                        <option value="" disabled>Seleccione</option>
+                                        {grupos.map(g => <option key={g} value={g}>{g}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group mb-6">
+                                    <label htmlFor="id_publicador" className="label">Nombre:</label>
+                                    <select id="id_publicador" value={idPublicador} onChange={e => setIdPublicador(e.target.value)} required disabled={!grupo} className="input">
+                                        <option value="" disabled>{grupo ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
+                                        {publicadoresEnGrupo.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
+                                    </select>
+                                </div>
+                            </>
+                        )}
 
 
                         <table className="w-full border-collapse mb-6">
