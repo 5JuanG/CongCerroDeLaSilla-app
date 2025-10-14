@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "vite build && firebase deploy --project congcerrodelasilla-app --only hosting:congcerrodelasilla-app"
+    "dev": "npx vite --host",
+    "build": "npx vite build",
+    "preview": "npx vite preview",
+    "deploy": "npx vite build && firebase deploy --project congcerrodelasilla-app --only hosting:congcerrodelasilla-app"
   },
   "dependencies": {
     "react": "^18.2.0",
