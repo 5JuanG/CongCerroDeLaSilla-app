@@ -1,8 +1,5 @@
 
 
-
-
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -26,6 +23,8 @@ import ProgramaServiciosAuxiliares from './components/ProgramaServiciosAuxiliare
 import VidaYMinisterio from './components/VidaYMinisterio';
 import RegistroTransaccion from './components/RegistroTransaccion';
 import ReunionPublica from './components/ReunionPublica';
+import HomeDashboard from './components/HomeDashboard';
+import Vigilancia from './components/Vigilancia';
 
 declare const db: any;
 declare const auth: any;
@@ -36,7 +35,7 @@ export const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "J
 export const SERVICE_YEAR_MONTHS = [...MONTHS.slice(8), ...MONTHS.slice(0, 8)];
 
 export type UserRole = 'admin' | 'overseer' | 'publisher' | 'helper' | 'auxiliary' | 'secretario';
-export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica';
+export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica' | 'vigilancia';
 
 export type GranularPermission = 
     'editAsistenciaReporte' |
@@ -57,7 +56,7 @@ export const ALL_PERMISSIONS: Permission[] = [
     'informeServicio', 'territorios', 'precursorAuxiliar', 'home', 'controlAcceso', 
     'informeMensualGrupo', 'gestionContenidoInvitacion', 'informeMensualConsolidado', 
     'dashboardCursos', 'dashboardPrecursores', 'asignacionesReunion', 
-    'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica',
+    'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica', 'vigilancia',
     // Granular Permissions
     'editAsistenciaReporte', 'managePublicadores', 'editRegistrosServicio', 'manageGrupos',
     'configVidaYMinisterio', 'configAsignacionesReunion', 'managePublicTalks', 'resetData'
@@ -109,6 +108,14 @@ export interface TerritoryRecord {
     assignedDate?: string;
     completedDate?: string;
     observations?: string;
+}
+
+export interface TerritoryMap {
+    id: string;
+    territoryId: string;
+    mapUrl: string;
+    fileName: string;
+    uploadedAt: any;
 }
 
 export interface InvitationContent {
@@ -164,8 +171,17 @@ export interface PioneerApplication {
     status: 'Pendiente' | 'Aprobado';
 }
 
+export interface OutgoingTalkAssignment {
+    id: string;
+    speakerId: string;
+    talkNumber: number;
+    date: string;
+    congregation: string;
+}
+
 export interface PublicTalksSchedule {
-    [talkNumber: string]: (PublicTalkAssignment | null)[];
+    [key: string]: any; // Allows for arbitrary talk numbers
+    outgoingTalks?: OutgoingTalkAssignment[];
 }
 export interface PublicTalkAssignment {
     date: string;
@@ -226,6 +242,7 @@ const App: React.FC = () => {
     const [serviceReports, setServiceReports] = useState<ServiceReport[]>([]);
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
     const [territoryRecords, setTerritoryRecords] = useState<TerritoryRecord[]>([]);
+    const [territoryMaps, setTerritoryMaps] = useState<TerritoryMap[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [committeeMembers, setCommitteeMembers] = useState<string[]>([]);
     const [invitationContent, setInvitationContent] = useState<InvitationContent[]>([]);
@@ -234,6 +251,7 @@ const App: React.FC = () => {
     const [lmSchedules, setLmSchedules] = useState<LMMeetingSchedule[]>([]);
     const [pioneerApplications, setPioneerApplications] = useState<PioneerApplication[]>([]);
     const [publicTalksSchedule, setPublicTalksSchedule] = useState<PublicTalksSchedule>({});
+    const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
     
     // Derived loading state
@@ -256,48 +274,70 @@ const App: React.FC = () => {
         return user.permissions || [];
     }, [user]);
 
-    // Master initialization effect for auth and global config.
+    // Master initialization effect for auth, user profile, and global config.
     useEffect(() => {
         let isMounted = true;
+        let userProfileUnsubscribe: (() => void) | null = null; // To store the snapshot listener
 
-        const authUnsubscribe = auth.onAuthStateChanged(async (firebaseUser: any) => {
+        const authUnsubscribe = auth.onAuthStateChanged((firebaseUser: any) => {
             if (!isMounted) return;
-            if (firebaseUser) {
-                try {
-                    // ATOMIC USER HYDRATION: Wait for all user-related data before setting the user state.
-                    const [userDoc, committeeDoc] = await Promise.all([
-                        db.collection('users').doc(firebaseUser.uid).get(),
-                        db.collection('settings').doc('service_committee').get()
-                    ]);
 
-                    const userData = userDoc.data() || {};
-                    const committeeUIDs = committeeDoc.data()?.members || [];
-                    const isMember = committeeUIDs.includes(firebaseUser.uid);
-
-                    // Construct the complete user object only after all data is fetched.
-                    const currentUser: UserData = {
-                        id: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        role: userData.role || 'publisher',
-                        permissions: userData.permissions || [],
-                        isCommitteeMember: isMember,
-                        authUid: firebaseUser.uid,
-                    };
-                    // Set the user state once with the complete, correct data.
-                    setUser(currentUser);
-                    setIsLoginModalOpen(false);
-                } catch (error) {
-                    console.error("Error fetching user data:", error);
-                    setModalInfo({ type: 'error', title: 'Error de Autenticación', message: 'No se pudieron cargar los datos de su perfil. Intente de nuevo.' });
-                    auth.signOut(); // Log out the user if their data can't be loaded.
-                    setUser(null); // Ensure user state is cleared on error.
-                }
-            } else {
-                // User is logged out.
-                setUser(null);
+            // Clean up previous user listener if a different user logs in/out
+            if (userProfileUnsubscribe) {
+                userProfileUnsubscribe();
+                userProfileUnsubscribe = null;
             }
-            // Mark auth check as complete regardless of outcome.
-            setInitialization(prev => ({ ...prev, authChecked: true }));
+
+            if (firebaseUser) {
+                // User is logged in, set up a real-time listener for their profile
+                const userDocRef = db.collection('users').doc(firebaseUser.uid);
+                
+                userProfileUnsubscribe = userDocRef.onSnapshot(async (userDoc: any) => {
+                    if (!isMounted) return;
+                    try {
+                        const committeeDoc = await db.collection('settings').doc('service_committee').get();
+                        
+                        const userData = userDoc.data() || {};
+                        const committeeUIDs = committeeDoc.data()?.members || [];
+                        const isMember = committeeUIDs.includes(firebaseUser.uid);
+
+                        const currentUser: UserData = {
+                            id: firebaseUser.uid,
+                            email: firebaseUser.email,
+                            role: userData.role || 'publisher',
+                            permissions: userData.permissions || [],
+                            isCommitteeMember: isMember,
+                            authUid: firebaseUser.uid,
+                        };
+                        
+                        setUser(currentUser);
+                        setIsLoginModalOpen(false);
+                        // Mark auth as checked once we have the user profile
+                        if (!initialization.authChecked) {
+                            setInitialization(prev => ({ ...prev, authChecked: true }));
+                        }
+                    } catch (error) {
+                        console.error("Error fetching committee data for user profile:", error);
+                        if (isMounted) {
+                             setModalInfo({ type: 'error', title: 'Error de Perfil', message: 'No se pudieron cargar los datos complementarios de su perfil.' });
+                             auth.signOut();
+                        }
+                    }
+                }, (error: Error) => { // Error callback for onSnapshot
+                    console.error("User profile listener failed:", error);
+                     if (isMounted) {
+                        setModalInfo({ type: 'error', title: 'Error de Conexión', message: 'Se perdió la conexión con los datos de su perfil.' });
+                        auth.signOut();
+                    }
+                });
+            } else {
+                // User is logged out
+                setUser(null);
+                // Mark auth check as complete for logged-out users
+                if (isMounted && !initialization.authChecked) {
+                   setInitialization(prev => ({ ...prev, authChecked: true }));
+                }
+            }
         });
 
         const configUnsubscribe = db.collection('settings').doc('config').onSnapshot((doc: any) => {
@@ -311,7 +351,6 @@ const App: React.FC = () => {
         }, (err: Error) => {
             if (!isMounted) return;
             console.error("Global config listener failed:", err);
-            // Default to false if config can't be loaded (e.g., permissions issue for logged-out users)
             setAppConfig({ is15HourOptionEnabled: false, isPublicReportFormEnabled: false });
             setInitialization(prev => ({ ...prev, configLoaded: true }));
         });
@@ -320,6 +359,9 @@ const App: React.FC = () => {
             isMounted = false;
             authUnsubscribe();
             configUnsubscribe();
+            if (userProfileUnsubscribe) {
+                userProfileUnsubscribe();
+            }
         };
     }, []);
 
@@ -333,6 +375,7 @@ const App: React.FC = () => {
             setServiceReports([]);
             setAttendanceRecords([]);
             setTerritoryRecords([]);
+            setTerritoryMaps([]);
             setUsers([]);
             setCommitteeMembers([]);
             setInvitationContent([]);
@@ -341,6 +384,7 @@ const App: React.FC = () => {
             setLmSchedules([]);
             setPioneerApplications([]);
             setPublicTalksSchedule({});
+            setVigilanciaSchedules([]);
             return;
         }
 
@@ -364,6 +408,11 @@ const App: React.FC = () => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
                 setTerritoryRecords(data);
             }, (err: Error) => console.error("Territory listener failed:", err)),
+
+            db.collection('territory_maps').orderBy('uploadedAt', 'desc').onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setTerritoryMaps(data);
+            }, (err: Error) => console.error("Territory Maps listener failed:", err)),
             
             db.collection('users').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
@@ -400,8 +449,12 @@ const App: React.FC = () => {
             }, (err: Error) => console.error("Pioneer Applications listener failed:", err)),
             
             db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => {
-                setPublicTalksSchedule(doc.data() || {});
+                setPublicTalksSchedule(doc.data() || { outgoingTalks: [] });
             }, (err: Error) => console.error("Public Talks listener failed:", err)),
+            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setVigilanciaSchedules(data);
+            }, (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
         ];
 
         return () => {
@@ -598,6 +651,53 @@ const App: React.FC = () => {
         }
     };
     
+    const handleUploadTerritoryMap = async (territoryId: string, imageFile: File) => {
+        const storageRef = storage.ref(`territory_maps/${territoryId}_${Date.now()}_${imageFile.name}`);
+        const uploadTask = storageRef.put(imageFile);
+        
+        await new Promise<void>((resolve, reject) => {
+            uploadTask.on('state_changed', null,
+                (error: any) => reject(error),
+                async () => {
+                    const mapUrl = await uploadTask.snapshot.ref.getDownloadURL();
+                    const existingMapQuery = await db.collection('territory_maps').where('territoryId', '==', territoryId).get();
+    
+                    if (!existingMapQuery.empty) {
+                        const docId = existingMapQuery.docs[0].id;
+                        const oldMapUrl = existingMapQuery.docs[0].data().mapUrl;
+                        if (oldMapUrl) {
+                            try { await storage.refFromURL(oldMapUrl).delete(); } catch (e) { console.warn("Old map file not found, continuing update."); }
+                        }
+                        await db.collection('territory_maps').doc(docId).update({
+                            mapUrl,
+                            fileName: imageFile.name,
+                            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } else {
+                        await db.collection('territory_maps').add({
+                            territoryId,
+                            mapUrl,
+                            fileName: imageFile.name,
+                            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                    resolve();
+                }
+            );
+        });
+    };
+    
+    const handleDeleteTerritoryMap = async (mapId: string, mapUrl: string) => {
+        if (mapUrl) {
+            try {
+                await storage.refFromURL(mapUrl).delete();
+            } catch (error) {
+                console.error("Error deleting file from storage, might be already deleted:", error);
+            }
+        }
+        await db.collection('territory_maps').doc(mapId).delete();
+    };
+
     // --- Access Control Handlers ---
     const handleUpdateUserPermissions = (userId: string, permissions: Permission[]) => {
         return db.collection('users').doc(userId).update({ permissions });
@@ -622,7 +722,7 @@ const App: React.FC = () => {
         if (!window.confirm("¡ADVERTENCIA! ¿Está absolutamente seguro de que desea borrar TODOS los datos de la congregación? Esta acción es irreversible y eliminará informes, publicadores, asignaciones, etc.")) {
             return;
         }
-         if (!window.confirm("CONFIRMACIÓN FINAL: ¿Está 100% seguro? Todos los datos se perderán para siempre.")) {
+         if (!window.confirm("CONFIRMACIÓN FINAL: ¿Está 100% seguro? Todos los datos se perderrán para siempre.")) {
             return;
         }
 
@@ -713,15 +813,32 @@ const App: React.FC = () => {
         await db.collection('public_talks_schedule').doc('schedule').set(schedule, { merge: true });
     };
 
+    const handleSaveVigilanciaSchedule = async (schedule: any) => {
+        const docId = schedule.id;
+        if (!docId) {
+            console.error("Save failed: schedule is missing an ID.");
+            return;
+        }
+        const { id, ...dataToSave } = schedule;
+        await db.collection('vigilancia_schedules').doc(docId).set(dataToSave, { merge: true });
+    };
+
     const ALL_COMPONENTS: { [key in View]: React.ReactElement } = {
-        home: <div className="text-center p-8"><h1 className="text-4xl font-bold">Bienvenido al Centro de Actividades v2.0</h1><p className="mt-4 text-lg">Seleccione una opción del menú para comenzar.</p></div>,
+        home: <HomeDashboard
+                lmSchedules={lmSchedules}
+                schedules={schedules}
+                publicTalksSchedule={publicTalksSchedule}
+                publishers={publishers}
+                onShowModal={setModalInfo}
+                setActiveView={setActiveView}
+              />,
         asistenciaForm: <AsistenciaForm attendanceRecords={attendanceRecords} onSave={handleSaveAttendance} />,
         asistenciaReporte: <AsistenciaReporte attendanceRecords={attendanceRecords} onBatchUpdateAttendance={handleBatchUpdateAttendance} canEdit={userPermissions.includes('editAsistenciaReporte')} />,
         publicadores: <Publicadores publishers={publishers} onAdd={handleAddPublisher} onUpdate={handleUpdatePublisher} onDelete={handleDeletePublisher} onShowModal={setModalInfo} canManage={userPermissions.includes('managePublicadores')} />,
         registrosServicio: <RegistrosServicio publishers={publishers} serviceReports={serviceReports} onBatchUpdateReports={handleBatchUpdateServiceReports} onDeleteServiceReport={handleDeleteServiceReport} canEdit={userPermissions.includes('editRegistrosServicio')} />,
         grupos: <Grupos publishers={publishers} onUpdateGroup={handleUpdateGroup} canManage={userPermissions.includes('manageGrupos')} />,
         informeServicio: <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => setActiveView('precursorAuxiliar')} invitationContent={invitationContent} />,
-        territorios: <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} />,
+        territorios: <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} territoryMaps={territoryMaps} onUploadMap={handleUploadTerritoryMap} onDeleteMap={handleDeleteTerritoryMap} canManage={canManage} onShowModal={setModalInfo} />,
         precursorAuxiliar: <PrecursorAuxiliar userRole={user?.role || 'publisher'} isCommitteeMember={user?.isCommitteeMember || false} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} />,
         controlAcceso: <ControlAcceso users={users} publishers={publishers} committeeMembers={committeeMembers} onUpdateUserPermissions={handleUpdateUserPermissions} onUpdateServiceCommittee={handleUpdateServiceCommittee} onLinkUserToPublisher={handleLinkUserToPublisher} isPublicReportFormEnabled={appConfig?.isPublicReportFormEnabled || false} onUpdatePublicReportFormEnabled={handleUpdatePublicReportFormEnabled} onResetData={handleResetData} currentUserRole={user?.role || 'publisher'} canManage={canManage} />,
         informeMensualGrupo: <InformeMensualGrupo publishers={publishers} serviceReports={serviceReports} onBatchUpdateReports={handleBatchUpdateServiceReports} />,
@@ -733,7 +850,8 @@ const App: React.FC = () => {
         programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} />,
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
-        reunionPublica: <ReunionPublica schedule={publicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} />,
+        reunionPublica: <ReunionPublica schedule={publicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} />,
+        vigilancia: <Vigilancia schedules={vigilanciaSchedules} onSave={handleSaveVigilanciaSchedule} />,
     };
 
     // FIX: Define NAV_ITEMS to resolve 'Cannot find name' error and get the label for the header.
@@ -755,6 +873,7 @@ const App: React.FC = () => {
         { view: 'informeMensualConsolidado', label: 'Informe a la Sucursal' },
         { view: 'grupos', label: 'Grupos' },
         { view: 'territorios', label: 'Territorios' },
+        { view: 'vigilancia', label: 'Vigilancia' },
         { view: 'gestionContenidoInvitacion', label: 'Contenido Invitación' },
         { view: 'controlAcceso', label: 'Control de Acceso' },
         { view: 'registroTransaccion', label: 'Registro Transacción' },
@@ -814,7 +933,7 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-gray-100">
             <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember}/>
             <div className="flex-1 flex flex-col overflow-hidden">
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6">
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6 pl-20 lg:pl-6">
                      <Header user={userProfileForHeader} activeViewLabel={activeViewLabel} />
                      <div className="mt-6">
                         {userPermissions.includes(activeView) ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}

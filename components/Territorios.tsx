@@ -1,11 +1,18 @@
+
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { TerritoryRecord } from '../App';
+import { TerritoryRecord, TerritoryMap, ModalInfo } from '../App';
 import Tooltip from './Tooltip';
 
 interface TerritoriosProps {
     records: TerritoryRecord[];
     onSave: (record: Omit<TerritoryRecord, 'id'>) => Promise<void>;
     onDelete: (record: Partial<TerritoryRecord>) => Promise<void>;
+    territoryMaps: TerritoryMap[];
+    onUploadMap: (territoryId: string, file: File) => Promise<void>;
+    onDeleteMap: (mapId: string, mapUrl: string) => Promise<void>;
+    canManage: boolean;
+    onShowModal: (info: ModalInfo) => void;
 }
 
 interface TerritoryData {
@@ -15,26 +22,118 @@ interface TerritoryData {
 }
 
 
-// Helper to get the service year for a given date string (YYYY-MM-DD)
-// Service year runs September to August.
-const getServiceYearForDate = (dateString?: string): number => {
-    if (!dateString) return 0;
-    // By creating date as new Date(`${dateString}T00:00:00`), we avoid timezone issues
-    // that could push the date to the previous day.
-    const date = new Date(`${dateString}T00:00:00`);
-    const year = date.getFullYear();
-    const month = date.getMonth(); // 0 = Jan, 8 = Sep
-    // If month is September (8) or later, the service year is the next calendar year.
-    return month >= 8 ? year + 1 : year;
-};
-
 // Helper to get the current service year
 const getCurrentServiceYear = () => {
     const now = new Date();
     return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear();
 };
 
-const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) => {
+const MapManager: React.FC<{
+    maps: TerritoryMap[];
+    onUpload: (territoryId: string, file: File) => Promise<void>;
+    onDelete: (mapId: string, mapUrl: string) => Promise<void>;
+    canManage: boolean;
+    setViewingMapUrl: (url: string | null) => void;
+}> = ({ maps, onUpload, onDelete, canManage, setViewingMapUrl }) => {
+    const [selectedTerritoryId, setSelectedTerritoryId] = useState('global');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [status, setStatus] = useState('');
+
+    const handleUpload = async () => {
+        if (!selectedFile) {
+            setStatus('Por favor, seleccione un archivo de imagen.');
+            return;
+        }
+        setIsUploading(true);
+        setStatus(`Subiendo mapa para territorio ${selectedTerritoryId}...`);
+        try {
+            await onUpload(selectedTerritoryId, selectedFile);
+            setStatus('¡Mapa subido con éxito!');
+            setSelectedFile(null);
+            // Clear file input visually
+            const fileInput = document.getElementById('map-file-input') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
+        } catch (error) {
+            setStatus('Error al subir el mapa.');
+            console.error(error);
+        } finally {
+            setIsUploading(false);
+            setTimeout(() => setStatus(''), 4000);
+        }
+    };
+
+    const handleDelete = async (map: TerritoryMap) => {
+        if(window.confirm(`¿Está seguro de que desea eliminar el mapa del territorio ${map.territoryId}?`)) {
+            try {
+                await onDelete(map.id, map.mapUrl);
+            } catch (error) {
+                console.error("Error deleting map:", error);
+                alert("No se pudo eliminar el mapa.");
+            }
+        }
+    };
+    
+    const sortedMaps = useMemo(() => {
+        return [...maps].sort((a, b) => {
+            if (a.territoryId === 'global') return -1;
+            if (b.territoryId === 'global') return 1;
+            return parseInt(a.territoryId, 10) - parseInt(b.territoryId, 10);
+        });
+    }, [maps]);
+
+    return (
+        <div className="space-y-8">
+            {canManage && (
+                <div className="p-6 bg-white rounded-lg shadow-md border">
+                    <h2 className="text-xl font-bold mb-4">Añadir o Actualizar Mapa</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label htmlFor="territory-select" className="block text-sm font-medium text-gray-700">Territorio</label>
+                            <select id="territory-select" value={selectedTerritoryId} onChange={e => setSelectedTerritoryId(e.target.value)} className="mt-1 w-full p-2 border rounded-md">
+                                <option value="global">Global (Todos)</option>
+                                {Array.from({ length: 40 }, (_, i) => i + 1).map(num => <option key={num} value={num.toString()}>{num}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                             <label htmlFor="map-file-input" className="block text-sm font-medium text-gray-700">Archivo de Imagen</label>
+                            <input id="map-file-input" type="file" onChange={e => setSelectedFile(e.target.files ? e.target.files[0] : null)} accept="image/png, image/jpeg, image/webp" className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                        </div>
+                        <button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                            {isUploading ? 'Subiendo...' : 'Subir Mapa'}
+                        </button>
+                    </div>
+                    {status && <p className="text-center text-sm font-semibold mt-4 text-blue-600">{status}</p>}
+                </div>
+            )}
+            
+            <div>
+                <h2 className="text-xl font-bold mb-4">Galería de Mapas</h2>
+                {sortedMaps.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {sortedMaps.map(map => (
+                             <div key={map.id} className="group relative border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
+                                <img src={map.mapUrl} alt={`Mapa ${map.territoryId}`} onClick={() => setViewingMapUrl(map.mapUrl)} className="w-full h-32 object-cover cursor-pointer"/>
+                                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-center py-1 text-sm font-bold">
+                                    {map.territoryId === 'global' ? 'Global' : `Terr. ${map.territoryId}`}
+                                </div>
+                                {canManage && (
+                                    <button onClick={() => handleDelete(map)} className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-center text-gray-500 bg-gray-50 p-6 rounded-lg">No se han subido mapas de territorio.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, territoryMaps, onUploadMap, onDeleteMap, canManage, onShowModal }) => {
+    const [activeTab, setActiveTab] = useState('registro');
     const [currentServiceYear, setCurrentServiceYear] = useState(getCurrentServiceYear());
     const [vueltaPage, setVueltaPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
@@ -42,6 +141,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
     const [filterTerritory, setFilterTerritory] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRecord, setEditingRecord] = useState<Partial<TerritoryRecord> | null>(null);
+    const [viewingMapUrl, setViewingMapUrl] = useState<string | null>(null);
 
     const serviceYearOptions = useMemo(() => Array.from({ length: 5 }, (_, i) => getCurrentServiceYear() - i), []);
 
@@ -66,8 +166,6 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
             if (record.vueltaNum > maxV) maxV = record.vueltaNum;
         });
         
-        // If the last vuelta on a page is filled (e.g., 4, 8, 12),
-        // we need to make sure the next page is available for pagination.
         let effectiveMaxVueltas = Math.max(4, maxV);
         if (maxV > 0 && maxV % 4 === 0) {
             effectiveMaxVueltas = maxV + 1;
@@ -126,6 +224,32 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
                 console.error("Failed to delete:", error);
                 alert("Hubo un error al eliminar el registro.");
             }
+        }
+    };
+
+    const handleViewTerritoryMap = (terrNum: number) => {
+        const map = territoryMaps.find(m => m.territoryId === terrNum.toString());
+        if (map) {
+            setViewingMapUrl(map.mapUrl);
+        } else {
+            onShowModal({
+                type: 'info',
+                title: 'Mapa no Encontrado',
+                message: `No se ha subido un mapa para el territorio #${terrNum}.`
+            });
+        }
+    };
+
+    const handleViewGlobalMap = () => {
+        const map = territoryMaps.find(m => m.territoryId === 'global');
+        if (map) {
+            setViewingMapUrl(map.mapUrl);
+        } else {
+            onShowModal({
+                type: 'info',
+                title: 'Mapa no Encontrado',
+                message: 'No se ha subido un mapa global de territorios.'
+            });
         }
     };
     
@@ -223,7 +347,14 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
                             return (
                                 <React.Fragment key={terrNum}>
                                     <tr className="border-t-2 border-gray-500 h-8">
-                                        <td rowSpan={2} className="p-1 md:p-2 border border-gray-400 font-bold text-center align-middle">{terrNum}</td>
+                                        <td rowSpan={2} className="p-0 border border-gray-400 font-bold text-center align-middle">
+                                            <button
+                                                onClick={() => handleViewTerritoryMap(terrNum)}
+                                                className="w-full h-full p-1 md:p-2 text-blue-600 hover:bg-blue-100 hover:underline transition-colors"
+                                            >
+                                                {terrNum}
+                                            </button>
+                                        </td>
                                         <td rowSpan={2} className="p-1 md:p-2 border border-gray-400 text-center align-middle">{ultimaFechaCompletado}</td>
                                         {vueltasRange.map(vueltaNum => {
                                             const vueltaData = terrData.vueltas[vueltaNum];
@@ -270,12 +401,18 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
             <div className="space-y-4">
                 {filteredTerritoryNumbers.map(terrNum => (
                     <div key={terrNum} className="bg-white rounded-lg shadow-md p-4">
-                         <h3 className="font-bold text-lg border-b pb-2 mb-3">
-                            Territorio #{terrNum}
-                            <span className="text-sm font-normal text-gray-500 ml-2">
-                                Última fecha en que se completó: {getLastCompletedDate(terrNum)}
-                            </span>
-                        </h3>
+                        <div className="flex justify-between items-center border-b pb-2 mb-3">
+                            <h3 className="font-bold text-lg">Territorio #{terrNum}</h3>
+                            <button
+                                onClick={() => handleViewTerritoryMap(terrNum)}
+                                className="text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+                            >
+                                Ver Mapa
+                            </button>
+                        </div>
+                        <p className="text-sm font-normal text-gray-500 -mt-2 mb-3">
+                            Última fecha en que se completó: {getLastCompletedDate(terrNum)}
+                        </p>
                          <div className="space-y-2">
                             {Array.from({ length: maxVueltas }, (_, i) => i + 1).map(vueltaNum => {
                                 const vueltaData = territoryData[terrNum]?.vueltas[vueltaNum];
@@ -303,37 +440,65 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete }) 
 
     return (
         <div className="p-2 sm:p-4">
-            <CrudModal />
-            <header className="bg-white p-4 rounded-lg shadow-md mb-6">
-                 <h1 className="text-xl sm:text-2xl font-bold text-center mb-4">REGISTRO DE ASIGNACIÓN DE TERRITORIO</h1>
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                    <div>
-                        <label className="font-semibold block mb-1 text-sm">Año de servicio:</label>
-                        <select value={currentServiceYear} onChange={e => setCurrentServiceYear(Number(e.target.value))} className="w-full p-2 border rounded">
-                            {serviceYearOptions.map(year => <option key={year} value={year}>{year}</option>)}
-                        </select>
-                    </div>
-                    <div><label className="font-semibold block mb-1 text-sm">Buscar por publicador:</label><input type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="..." className="w-full p-2 border rounded" /></div>
-                    <div><label className="font-semibold block mb-1 text-sm">Buscar Territorio:</label><input type="number" value={filterTerritory} onChange={e => setFilterTerritory(e.target.value)} placeholder="Núm." className="w-full p-2 border rounded" /></div>
-                    <div><label className="font-semibold block mb-1 text-sm">Estado:</label><select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full p-2 border rounded"><option value="all">Todos</option><option value="assigned">Asignado</option><option value="completed">Completado</option><option value="empty">Sin asignar</option></select></div>
-                 </div>
-            </header>
-
-            {totalPages > 1 && (
-                <div className="hidden md:flex justify-center flex-wrap items-center gap-2 mb-4">
-                    <button onClick={() => setVueltaPage(p => Math.max(1, p - 1))} disabled={vueltaPage === 1} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Anterior (Vueltas)</button>
-                     <span className="font-semibold text-sm">Página de Vueltas: {vueltaPage} de {totalPages}</span>
-                    <button onClick={() => setVueltaPage(p => Math.min(totalPages, p + 1))} disabled={vueltaPage === totalPages} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Siguiente (Vueltas)</button>
+            {viewingMapUrl && (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4" onClick={() => setViewingMapUrl(null)}>
+                    <img src={viewingMapUrl} alt="Mapa de territorio" className="max-w-full max-h-full" />
                 </div>
             )}
+            <CrudModal />
+            <div className="mb-6 border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('registro')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'registro' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Registro de Asignaciones
+                    </button>
+                    <button onClick={() => setActiveTab('mapas')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'mapas' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Mapas de Territorio
+                    </button>
+                </nav>
+            </div>
             
-            <>
-                <div className="md:hidden"><MobileCards /></div>
-                <div className="hidden md:block space-y-6">
-                    <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={1} endTerr={20}/></div>
-                    <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={21} endTerr={40}/></div>
-                </div>
-            </>
+            {activeTab === 'registro' && (
+                <>
+                    <header className="bg-white p-4 rounded-lg shadow-md mb-6">
+                        <h1 className="text-xl sm:text-2xl font-bold text-center mb-4">REGISTRO DE ASIGNACIÓN DE TERRITORIO</h1>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                            <div>
+                                <label className="font-semibold block mb-1 text-sm">Año de servicio:</label>
+                                <select value={currentServiceYear} onChange={e => setCurrentServiceYear(Number(e.target.value))} className="w-full p-2 border rounded">
+                                    {serviceYearOptions.map(year => <option key={year} value={year}>{year}</option>)}
+                                </select>
+                            </div>
+                            <div><label className="font-semibold block mb-1 text-sm">Buscar por publicador:</label><input type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="..." className="w-full p-2 border rounded" /></div>
+                            <div><label className="font-semibold block mb-1 text-sm">Buscar Territorio:</label><input type="number" value={filterTerritory} onChange={e => setFilterTerritory(e.target.value)} placeholder="Núm." className="w-full p-2 border rounded" /></div>
+                            <div><label className="font-semibold block mb-1 text-sm">Estado:</label><select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full p-2 border rounded"><option value="all">Todos</option><option value="assigned">Asignado</option><option value="completed">Completado</option><option value="empty">Sin asignar</option></select></div>
+                            <div>
+                                <button
+                                    onClick={handleViewGlobalMap}
+                                    className="w-full p-2 bg-purple-600 text-white font-semibold rounded-md hover:bg-purple-700"
+                                >
+                                    Ver Mapa Global
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+                    {totalPages > 1 && (
+                        <div className="hidden md:flex justify-center flex-wrap items-center gap-2 mb-4">
+                            <button onClick={() => setVueltaPage(p => Math.max(1, p - 1))} disabled={vueltaPage === 1} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Anterior (Vueltas)</button>
+                            <span className="font-semibold text-sm">Página de Vueltas: {vueltaPage} de {totalPages}</span>
+                            <button onClick={() => setVueltaPage(p => Math.min(totalPages, p + 1))} disabled={vueltaPage === totalPages} className="px-3 py-1 bg-white border rounded disabled:opacity-50">Siguiente (Vueltas)</button>
+                        </div>
+                    )}
+                    <div className="md:hidden"><MobileCards /></div>
+                    <div className="hidden md:block space-y-6">
+                        <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={1} endTerr={20}/></div>
+                        <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={21} endTerr={40}/></div>
+                    </div>
+                </>
+            )}
+
+            {activeTab === 'mapas' && (
+                <MapManager maps={territoryMaps} onUpload={onUploadMap} onDelete={onDeleteMap} canManage={canManage} setViewingMapUrl={setViewingMapUrl} />
+            )}
         </div>
     );
 };

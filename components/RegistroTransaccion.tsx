@@ -355,8 +355,8 @@ const RegistroTransaccion: React.FC = () => {
                     display: none !important;
                 }
             `}</style>
-            <div className="w-full">
-                <div ref={formRef} className="max-w-2xl mx-auto bg-white p-6 sm:p-8 shadow-lg font-serif">
+            <div className="w-full overflow-x-auto pb-2">
+                <div ref={formRef} className="max-w-2xl min-w-[700px] mx-auto bg-white p-6 sm:p-8 shadow-lg font-serif">
                     <h1 className="text-2xl font-bold text-center mb-6 tracking-widest">REGISTRO DE TRANSACCIÓN</h1>
                     
                     <div className="flex justify-between items-start mb-6 transaction-types-section">
@@ -426,7 +426,7 @@ const RegistroTransaccion: React.FC = () => {
                     <p className="text-xs text-gray-500 mt-12 footer-text">S-24-S 5/21</p>
                 </div>
 
-                <div className="max-w-2xl mx-auto form-buttons-container">
+                <div className="max-w-2xl min-w-[700px] mx-auto form-buttons-container">
                     <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4">
                         <button onClick={handleGeneratePdf} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Generar PDF</button>
                         <button onClick={handleClear} className="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300">Limpiar</button>

@@ -10,6 +10,106 @@ interface InformeMensualGrupoProps {
     onBatchUpdateReports: (reports: EditableReport[]) => Promise<void>;
 }
 
+const ChartModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    data: { publisher: Publisher; report?: ServiceReport }[];
+    group: string;
+    month: string;
+    year: number;
+    totalCourses: number;
+    publishersWithoutCourses: number;
+}> = ({ isOpen, onClose, data, group, month, year, totalCourses, publishersWithoutCourses }) => {
+    if (!isOpen) return null;
+
+    const chartData = useMemo(() => {
+        return data
+            .filter(item => item.report && (item.report.cursosBiblicos || 0) > 0)
+            .map(item => ({
+                name: `${item.publisher.Nombre} ${item.publisher.Apellido}`,
+                courses: item.report!.cursosBiblicos || 0,
+                isAux: item.report!.precursorAuxiliar === 'PA',
+                isReg: item.publisher['Priv Adicional'] === 'Precursor Regular',
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [data]);
+
+    const maxCourses = useMemo(() => {
+        if (chartData.length === 0) return 0;
+        return Math.max(...chartData.map(d => d.courses), 1); // Use 1 as minimum to avoid division by zero
+    }, [chartData]);
+
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-800">Análisis de Cursos Bíblicos</h2>
+                        <p className="text-gray-600">Grupo: {group} | {month} {year}</p>
+                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                            <div className="font-semibold text-gray-700">
+                                Total de Cursos del Grupo: <span className="text-blue-600 text-base font-bold">{totalCourses}</span>
+                            </div>
+                            <div className="font-semibold text-gray-700">
+                                Publicadores sin cursos: <span className="text-red-600 text-base font-bold">{publishersWithoutCourses}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-3xl font-light">&times;</button>
+                </div>
+                
+                {chartData.length > 0 ? (
+                    <div className="h-96 bg-gray-50 p-4 rounded-lg border">
+                        <div className="flex items-end h-full w-full gap-2 px-2">
+                            {chartData.map((d, index) => (
+                                <div key={index} className="flex-grow flex flex-col items-center justify-end h-full relative group">
+                                    <div 
+                                        className={`w-full rounded-t-md transition-all ${
+                                            d.isAux
+                                                ? 'bg-green-500 hover:bg-green-600'
+                                                : d.isReg
+                                                    ? 'bg-yellow-400 hover:bg-yellow-500'
+                                                    : 'bg-blue-500 hover:bg-blue-600'
+                                        }`}
+                                        style={{ height: `${(d.courses / maxCourses) * 90}%` }} /* 90% to leave space for value */
+                                    >
+                                        <span className="absolute top-0 left-1/2 -translate-x-1/2 text-white font-bold text-sm bg-black px-1 rounded-sm">{d.courses}</span>
+                                    </div>
+                                    <Tooltip text={`${d.name}: ${d.courses} curso${d.courses > 1 ? 's' : ''}`} position="top" />
+                                    <p className="text-xs text-gray-600 mt-1 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center" title={d.name}>
+                                        {d.name.split(' ')[0]}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="h-96 flex items-center justify-center bg-gray-50 rounded-lg border">
+                        <p className="text-gray-500">Nadie en este grupo informó cursos bíblicos este mes.</p>
+                    </div>
+                )}
+
+
+                <div className="flex justify-center items-center gap-6 mt-4 text-sm flex-wrap">
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded bg-green-500"></div>
+                        <span>Precursor Auxiliar</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded bg-yellow-400"></div>
+                        <span>Precursor Regular</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded bg-blue-500"></div>
+                        <span>Publicador</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, serviceReports, onBatchUpdateReports }) => {
     const currentMonthName = MONTHS[new Date().getMonth()];
     const currentYear = new Date().getFullYear();
@@ -20,6 +120,7 @@ const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, s
     const [isEditing, setIsEditing] = useState(false);
     const [editableData, setEditableData] = useState<any[]>([]);
     const [status, setStatus] = useState('');
+    const [isChartModalOpen, setIsChartModalOpen] = useState(false);
 
     const years = useMemo(() => Array.from({ length: 5 }, (_, i) => currentYear - i), [currentYear]);
     const groups = useMemo(() => [...new Set(publishers.map(p => p.Grupo).filter(Boolean) as string[])].sort(), [publishers]);
@@ -32,7 +133,10 @@ const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, s
 
     const filteredPublishers = useMemo(() => {
         if (!selectedGroup) return [];
-        return publishers.filter(p => p.Grupo === selectedGroup).sort((a, b) => a.Nombre.localeCompare(b.Nombre));
+        // Only show active publishers in this report.
+        return publishers
+            .filter(p => p.Grupo === selectedGroup && p.Estatus === 'Activo')
+            .sort((a, b) => a.Nombre.localeCompare(b.Nombre));
     }, [publishers, selectedGroup]);
 
     const reportData = useMemo(() => {
@@ -47,7 +151,20 @@ const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, s
     }, [filteredPublishers, serviceReports, selectedYear, selectedMonth]);
     
     const informedCount = useMemo(() => reportData.filter(d => d.report && d.report.participacion).length, [reportData]);
-    const pendingCount = reportData.length - informedCount;
+    const pendingCount = filteredPublishers.length - informedCount;
+
+    const chartHeaderStats = useMemo(() => {
+        const totalCourses = reportData.reduce((sum, item) => sum + (item.report?.cursosBiblicos || 0), 0);
+    
+        const publishersWithCourses = new Set(
+            reportData.filter(item => (item.report?.cursosBiblicos || 0) > 0).map(item => item.publisher.id)
+        ).size;
+        
+        // filteredPublishers are already the active ones for the group.
+        const publishersWithoutCourses = filteredPublishers.length - publishersWithCourses;
+    
+        return { totalCourses, publishersWithoutCourses };
+    }, [reportData, filteredPublishers]);
 
     const handleEdit = () => {
         setEditableData(JSON.parse(JSON.stringify(reportData)));
@@ -121,6 +238,16 @@ const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, s
 
     return (
         <div className="container mx-auto max-w-6xl bg-white p-6 rounded-lg shadow-md">
+            <ChartModal 
+                isOpen={isChartModalOpen}
+                onClose={() => setIsChartModalOpen(false)}
+                data={reportData}
+                group={selectedGroup}
+                month={selectedMonth}
+                year={selectedYear}
+                totalCourses={chartHeaderStats.totalCourses}
+                publishersWithoutCourses={chartHeaderStats.publishersWithoutCourses}
+            />
             <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Informe Mensual por Grupo de Servicio</h1>
     
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
@@ -173,16 +300,23 @@ const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, s
                 <div className="flex gap-4 text-sm font-semibold">
                     <span className="text-green-600">Informaron: {informedCount}</span>
                     <span className="text-yellow-600">Pendientes: {pendingCount}</span>
-                    <span className="text-gray-700">Total: {reportData.length}</span>
+                    <span className="text-gray-700">Total: {filteredPublishers.length}</span>
                 </div>
-                <div>
+                <div className="flex items-center gap-2 flex-wrap justify-center">
                     {isEditing ? (
                         <div className="flex gap-2">
                             <button onClick={handleSave} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Guardar Cambios</button>
                             <button onClick={handleCancel} className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600">Cancelar</button>
                         </div>
                     ) : (
-                        <button onClick={handleEdit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" disabled={reportData.length === 0}>Editar Informes</button>
+                        <>
+                            <button onClick={() => setIsChartModalOpen(true)} className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700" disabled={reportData.length === 0}>
+                                Ver Gráfica Mensual
+                            </button>
+                            <button onClick={handleEdit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" disabled={reportData.length === 0}>
+                                Editar Informes
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

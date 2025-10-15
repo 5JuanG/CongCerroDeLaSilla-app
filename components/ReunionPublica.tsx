@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DISCURSOS_PUBLICOS } from './discursos';
-import { PublicTalksSchedule, PublicTalkAssignment } from '../App';
+import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment } from '../App';
 
 interface ReunionPublicaProps {
     schedule: PublicTalksSchedule;
     onSave: (schedule: PublicTalksSchedule) => Promise<void>;
     canManage: boolean;
+    publishers: Publisher[];
+    onShowModal: (info: ModalInfo) => void;
 }
 
 const TALK_CATEGORIES: Record<string, number[]> = {
@@ -22,7 +24,7 @@ const TALK_CATEGORIES: Record<string, number[]> = {
 };
 const CATEGORY_NAMES = Object.keys(TALK_CATEGORIES);
 
-const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canManage }) => {
+const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canManage, publishers, onShowModal }) => {
     const [localSchedule, setLocalSchedule] = useState<PublicTalksSchedule>({});
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSlot, setEditingSlot] = useState<{ talkNumber: number; slotIndex: number; data: Partial<PublicTalkAssignment> } | null>(null);
@@ -39,6 +41,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [dateFilter, setDateFilter] = useState('');
 
+    const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
+    const [localOutgoingSchedule, setLocalOutgoingSchedule] = useState<OutgoingTalkAssignment[]>([]);
+    const [isOutgoingModalOpen, setIsOutgoingModalOpen] = useState(false);
+    const [editingOutgoingTalk, setEditingOutgoingTalk] = useState<Partial<OutgoingTalkAssignment> | null>(null);
+
     useEffect(() => {
         const fullSchedule: PublicTalksSchedule = {};
 
@@ -47,6 +54,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
 
         DISCURSOS_PUBLICOS.forEach(talk => {
             const talkKey = talk.number.toString();
+            if (talkKey === 'outgoingTalks') return;
             const existingAssignments = schedule[talkKey] || [];
             
             const newAssignments = Array(requiredLength).fill(null);
@@ -58,6 +66,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             fullSchedule[talkKey] = newAssignments;
         });
         setLocalSchedule(fullSchedule);
+        setLocalOutgoingSchedule(schedule.outgoingTalks || []);
     }, [schedule, yearPage]);
 
     const filteredDiscursos = useMemo(() => {
@@ -133,7 +142,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         setIsSaving(true);
         setStatus('Guardando...');
         try {
-            await onSave(localSchedule);
+            const scheduleToSave: PublicTalksSchedule = {
+                ...localSchedule,
+                outgoingTalks: localOutgoingSchedule
+            };
+            await onSave(scheduleToSave);
             setStatus('¡Cambios guardados con éxito!');
         } catch (error) {
             setStatus('Error al guardar los cambios.');
@@ -273,10 +286,193 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     };
 
     const displayedYears = Array.from({ length: YEARS_PER_PAGE }, (_, i) => START_YEAR + yearPage * YEARS_PER_PAGE + i);
+    
+    const OutgoingSpeakersView = () => {
+        const speakers = useMemo(() => 
+            publishers.filter(p => p.Sexo === 'Hombre' && (p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial'))
+            .sort((a,b) => a.Nombre.localeCompare(b.Nombre)), 
+        [publishers]);
+    
+        const getSpeakerName = (id: string) => {
+            const speaker = speakers.find(s => s.id === id);
+            return speaker ? `${speaker.Nombre} ${speaker.Apellido}` : 'Desconocido';
+        };
+    
+        const sortedAssignments = useMemo(() => 
+            [...localOutgoingSchedule].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        [localOutgoingSchedule]);
+    
+        const handleAddClick = () => {
+            setEditingOutgoingTalk({ id: crypto.randomUUID() });
+            setIsOutgoingModalOpen(true);
+        };
+    
+        const handleEditClick = (talk: OutgoingTalkAssignment) => {
+            setEditingOutgoingTalk(talk);
+            setIsOutgoingModalOpen(true);
+        };
+    
+        const handleDeleteClick = (talkId: string) => {
+            if (window.confirm("¿Está seguro de que desea eliminar esta asignación?")) {
+                setLocalOutgoingSchedule(prev => prev.filter(t => t.id !== talkId));
+            }
+        };
+        
+        return (
+            <div>
+                <div className="flex justify-end mb-4">
+                    <button onClick={handleAddClick} disabled={!canManage} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                        Añadir Asignación
+                    </button>
+                </div>
+                
+                <div className="space-y-4">
+                    {sortedAssignments.length > 0 ? sortedAssignments.map(talk => {
+                        const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talk.talkNumber);
+                        return (
+                            <div key={talk.id} className="bg-gray-50 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4">
+                                <div>
+                                    <p className="font-bold text-lg">{getSpeakerName(talk.speakerId)}</p>
+                                    <p className="text-sm text-gray-600">
+                                        <span className="font-semibold text-blue-700">{talk.date}</span> a {talk.congregation}
+                                    </p>
+                                    <p className="text-sm text-gray-800 mt-1">
+                                        Discurso: {talkInfo?.number}. {talkInfo?.title}
+                                    </p>
+                                </div>
+                                {canManage && (
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleEditClick(talk)} className="text-sm px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">Editar</button>
+                                        <button onClick={() => handleDeleteClick(talk.id)} className="text-sm px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">Eliminar</button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }) : (
+                        <p className="text-center text-gray-500 py-8">No hay asignaciones de oradores salientes programadas.</p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const OutgoingAssignmentModal = () => {
+        if (!isOutgoingModalOpen || !editingOutgoingTalk) return null;
+    
+        const [formData, setFormData] = useState<Partial<OutgoingTalkAssignment>>(editingOutgoingTalk);
+    
+        const speakers = useMemo(() => 
+            publishers.filter(p => p.Sexo === 'Hombre' && (p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial'))
+            .sort((a,b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`)), 
+        [publishers]);
+    
+        const getSpeakerName = (id: string) => {
+            const speaker = speakers.find(s => s.id === id);
+            return speaker ? `${speaker.Nombre} ${speaker.Apellido}` : 'Desconocido';
+        };
+
+        const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+            setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        };
+    
+        const handleSave = (e: React.FormEvent) => {
+            e.preventDefault();
+            
+            const { speakerId, date, talkNumber, congregation, id } = formData;
+    
+            if (!speakerId || !date || !talkNumber || !congregation || !id) {
+                onShowModal({ type: 'error', title: 'Campos Incompletos', message: 'Por favor, complete todos los campos.' });
+                return;
+            }
+    
+            const newDate = new Date(date + "T00:00:00");
+            const newMonth = newDate.getMonth();
+            const newYear = newDate.getFullYear();
+    
+            const conflict = localOutgoingSchedule.find(assignment => {
+                if (assignment.id === id) return false;
+                if (assignment.speakerId !== speakerId) return false;
+    
+                const existingDate = new Date(assignment.date + "T00:00:00");
+                return existingDate.getMonth() === newMonth && existingDate.getFullYear() === newYear;
+            });
+    
+            const proceed = () => {
+                const finalData: OutgoingTalkAssignment = {
+                    id,
+                    speakerId,
+                    talkNumber: Number(talkNumber),
+                    date,
+                    congregation
+                };
+                setLocalOutgoingSchedule(prev => {
+                    const existingIndex = prev.findIndex(t => t.id === finalData.id);
+                    if (existingIndex > -1) {
+                        const updated = [...prev];
+                        updated[existingIndex] = finalData;
+                        return updated;
+                    }
+                    return [...prev, finalData];
+                });
+                setIsOutgoingModalOpen(false);
+                setEditingOutgoingTalk(null);
+            };
+            
+            if (conflict) {
+                const speakerName = getSpeakerName(speakerId);
+                if (window.confirm(`¡Alerta! ${speakerName} ya tiene una asignación para este mes (${conflict.date} en ${conflict.congregation}). ¿Desea programar esta asignación de todos modos?`)) {
+                    proceed();
+                }
+            } else {
+                proceed();
+            }
+        };
+        
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 border-b">
+                        <h3 className="text-xl font-bold">{editingOutgoingTalk.date ? 'Editar' : 'Añadir'} Asignación Saliente</h3>
+                    </div>
+                    <form onSubmit={handleSave}>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Orador</label>
+                                <select name="speakerId" value={formData.speakerId || ''} onChange={handleChange} required className="mt-1 w-full p-2 border rounded-md">
+                                    <option value="" disabled>-- Seleccione un orador --</option>
+                                    {speakers.map(s => <option key={s.id} value={s.id}>{s.Nombre} {s.Apellido}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Discurso</label>
+                                <select name="talkNumber" value={formData.talkNumber || ''} onChange={handleChange} required className="mt-1 w-full p-2 border rounded-md">
+                                    <option value="" disabled>-- Seleccione un discurso --</option>
+                                    {DISCURSOS_PUBLICOS.map(t => <option key={t.number} value={t.number}>{t.number}. {t.title}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Fecha</label>
+                                <input type="date" name="date" value={formData.date || ''} onChange={handleChange} required className="mt-1 w-full p-2 border rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Congregación a visitar</label>
+                                <input type="text" name="congregation" value={formData.congregation || ''} onChange={handleChange} required className="mt-1 w-full p-2 border rounded-md" placeholder="Nombre de la congregación" />
+                            </div>
+                        </div>
+                        <div className="p-4 bg-gray-50 flex justify-end gap-4">
+                            <button type="button" onClick={() => setIsOutgoingModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md">Cancelar</button>
+                            <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="container mx-auto p-4 bg-white rounded-lg shadow-md">
             <AssignmentModal />
+            {isOutgoingModalOpen && <OutgoingAssignmentModal />}
             {whatsAppModalData && (
                 <WhatsAppShareModal 
                     talkNumber={whatsAppModalData.talkNumber} 
@@ -293,90 +489,106 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                     </button>
                 </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
-                <div>
-                    <label htmlFor="search-query" className="block text-sm font-medium text-gray-700">Buscar por Título o Número:</label>
-                    <input type="search" id="search-query" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ej: Jehová, el 'Gran Creador' o 101" className="mt-1 w-full p-2 border rounded-md"/>
-                </div>
-                <div>
-                    <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700">Filtrar por Categoría:</label>
-                    <select id="category-filter" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md">
-                        <option value="all">Todas las categorías</option>
-                        {CATEGORY_NAMES.map(cat => <option key={cat} value={cat}>{cat.replace('/', ' / ')}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label htmlFor="date-filter" className="block text-sm font-medium text-gray-700">Filtrar por Fecha:</label>
-                    <input type="date" id="date-filter" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md"/>
-                </div>
-            </div>
-
-            <div className="flex justify-center items-center gap-4 my-4">
-                <button
-                    onClick={() => setYearPage(p => Math.max(0, p - 1))}
-                    disabled={yearPage === 0}
-                    className="px-4 py-2 bg-gray-200 rounded-md disabled:opacity-50"
-                >
-                    Anterior
-                </button>
-                <span className="font-semibold text-gray-700">
-                    Años: {displayedYears[0]} – {displayedYears[YEARS_PER_PAGE - 1]}
-                </span>
-                <button
-                    onClick={() => setYearPage(p => p + 1)}
-                    className="px-4 py-2 bg-gray-200 rounded-md"
-                >
-                    Siguiente
-                </button>
+            
+            <div className="mb-6 border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('incoming')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'incoming' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Programa de la Congregación
+                    </button>
+                    <button onClick={() => setActiveTab('outgoing')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'outgoing' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Oradores Salientes
+                    </button>
+                </nav>
             </div>
             
-            <div className="overflow-x-auto">
-                <div className="min-w-[800px]">
-                    {/* Header */}
-                    <div className="flex items-center bg-gray-100 p-2 font-bold border-b-2 border-gray-300 sticky top-0 z-10">
-                        <div className="flex-1">Título del Discurso</div>
-                        <div className="grid grid-cols-6 gap-2 w-1/2 text-center text-sm">
-                            {displayedYears.map(year => <span key={year}>{year}</span>)}
+            {activeTab === 'incoming' && (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
+                        <div>
+                            <label htmlFor="search-query" className="block text-sm font-medium text-gray-700">Buscar por Título o Número:</label>
+                            <input type="search" id="search-query" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ej: Jehová, el 'Gran Creador' o 101" className="mt-1 w-full p-2 border rounded-md"/>
+                        </div>
+                        <div>
+                            <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700">Filtrar por Categoría:</label>
+                            <select id="category-filter" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md">
+                                <option value="all">Todas las categorías</option>
+                                {CATEGORY_NAMES.map(cat => <option key={cat} value={cat}>{cat.replace('/', ' / ')}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="date-filter" className="block text-sm font-medium text-gray-700">Filtrar por Fecha:</label>
+                            <input type="date" id="date-filter" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md"/>
                         </div>
                     </div>
-                    {/* Body */}
-                    <div className="max-h-[70vh] overflow-y-auto">
-                    {filteredDiscursos.length > 0 ? filteredDiscursos.map(talk => {
-                        const isNoUsar = talk.title.toLowerCase().includes('(no usar)');
-                        return (
-                        <div key={talk.number} className={`flex items-center p-2 border-b ${isNoUsar ? 'bg-gray-200 text-gray-500' : 'hover:bg-blue-50'}`}>
-                            <div className="flex-1 text-sm">
-                                <span className="font-semibold">{talk.number}.</span> {talk.title}
-                            </div>
-                            <div className="grid grid-cols-6 gap-2 w-1/2">
-                                {displayedYears.map((year, localSlotIndex) => {
-                                    const globalSlotIndex = yearPage * YEARS_PER_PAGE + localSlotIndex;
-                                    const assignment = localSchedule[talk.number]?.[globalSlotIndex];
-                                    return (
-                                        <button
-                                            key={globalSlotIndex}
-                                            disabled={isNoUsar || !canManage}
-                                            onClick={() => handleSlotClick(talk.number, globalSlotIndex)}
-                                            title={assignment ? `${assignment.date}\n${assignment.speakerName}` : 'Asignar discurso'}
-                                            className={`h-8 text-xs border rounded-md transition-colors disabled:cursor-not-allowed ${
-                                                assignment?.date ? (new Date(assignment.date + 'T00:00:00') < new Date() ? 'bg-gray-300' : 'bg-blue-200 hover:bg-blue-300') : 'bg-white hover:bg-gray-200'
-                                            } disabled:bg-gray-300 truncate px-1`}
-                                        >
-                                            {assignment?.date || ''}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}) : (
-                        <div className="text-center p-6 text-gray-500">
-                            No se encontraron discursos que coincidan con los filtros aplicados.
-                        </div>
-                    )}
+
+                    <div className="flex justify-center items-center gap-4 my-4">
+                        <button
+                            onClick={() => setYearPage(p => Math.max(0, p - 1))}
+                            disabled={yearPage === 0}
+                            className="px-4 py-2 bg-gray-200 rounded-md disabled:opacity-50"
+                        >
+                            Anterior
+                        </button>
+                        <span className="font-semibold text-gray-700">
+                            Años: {displayedYears[0]} – {displayedYears[YEARS_PER_PAGE - 1]}
+                        </span>
+                        <button
+                            onClick={() => setYearPage(p => p + 1)}
+                            className="px-4 py-2 bg-gray-200 rounded-md"
+                        >
+                            Siguiente
+                        </button>
                     </div>
-                </div>
-            </div>
+                    
+                    <div className="overflow-x-auto">
+                        <div className="min-w-[800px]">
+                            {/* Header */}
+                            <div className="flex items-center bg-gray-100 p-2 font-bold border-b-2 border-gray-300 sticky top-0 z-10">
+                                <div className="flex-1">Título del Discurso</div>
+                                <div className="grid grid-cols-6 gap-2 w-1/2 text-center text-sm">
+                                    {displayedYears.map(year => <span key={year}>{year}</span>)}
+                                </div>
+                            </div>
+                            {/* Body */}
+                            <div className="max-h-[70vh] overflow-y-auto">
+                            {filteredDiscursos.length > 0 ? filteredDiscursos.map(talk => {
+                                const isNoUsar = talk.title.toLowerCase().includes('(no usar)');
+                                return (
+                                <div key={talk.number} className={`flex items-center p-2 border-b ${isNoUsar ? 'bg-gray-200 text-gray-500' : 'hover:bg-blue-50'}`}>
+                                    <div className="flex-1 text-sm">
+                                        <span className="font-semibold">{talk.number}.</span> {talk.title}
+                                    </div>
+                                    <div className="grid grid-cols-6 gap-2 w-1/2">
+                                        {displayedYears.map((year, localSlotIndex) => {
+                                            const globalSlotIndex = yearPage * YEARS_PER_PAGE + localSlotIndex;
+                                            const assignment = localSchedule[talk.number]?.[globalSlotIndex];
+                                            return (
+                                                <button
+                                                    key={globalSlotIndex}
+                                                    disabled={isNoUsar || !canManage}
+                                                    onClick={() => handleSlotClick(talk.number, globalSlotIndex)}
+                                                    title={assignment ? `${assignment.date}\n${assignment.speakerName}` : 'Asignar discurso'}
+                                                    className={`h-8 text-xs border rounded-md transition-colors disabled:cursor-not-allowed ${
+                                                        assignment?.date ? (new Date(assignment.date + 'T00:00:00') < new Date() ? 'bg-gray-300' : 'bg-blue-200 hover:bg-blue-300') : 'bg-white hover:bg-gray-200'
+                                                    } disabled:bg-gray-300 truncate px-1`}
+                                                >
+                                                    {assignment?.date || ''}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}) : (
+                                <div className="text-center p-6 text-gray-500">
+                                    No se encontraron discursos que coincidan con los filtros aplicados.
+                                </div>
+                            )}
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+            {activeTab === 'outgoing' && <OutgoingSpeakersView />}
         </div>
     );
 };

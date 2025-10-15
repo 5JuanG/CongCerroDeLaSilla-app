@@ -6,19 +6,37 @@ interface StatCardProps {
     value: string | number;
     icon: React.ReactElement;
     color: string;
+    isAlertCard?: boolean;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => (
-    <div className={`bg-white p-6 rounded-xl shadow-lg flex items-center space-x-4 border-l-4 ${color}`}>
-        <div className={`p-3 rounded-full ${color.replace('border-', 'bg-').replace('-500', '-100')}`}>
-            {icon}
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, isAlertCard = false }) => {
+    const isZeroAndAlert = isAlertCard && value === 0;
+
+    const displayColor = isZeroAndAlert ? 'border-green-500' : color;
+    const iconBgColor = isZeroAndAlert
+        ? 'bg-green-100'
+        : color.replace('border-', 'bg-').replace('-500', '-100');
+
+    return (
+        <div className={`bg-white p-6 rounded-xl shadow-lg flex items-start space-x-4 border-l-4 ${displayColor}`}>
+            <div className={`p-3 rounded-full ${iconBgColor} flex-shrink-0 mt-1`}>
+                {icon}
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-500">{title}</p>
+                {isZeroAndAlert ? (
+                    <div className="mt-1 flex items-center text-green-500">
+                       <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                ) : (
+                    <p className="mt-1 text-3xl font-semibold text-gray-900">{value}</p>
+                )}
+            </div>
         </div>
-        <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-500 truncate">{title}</p>
-            <p className="mt-1 text-3xl font-semibold text-gray-900">{value}</p>
-        </div>
-    </div>
-);
+    );
+};
 
 
 const DashboardCursos: React.FC<{ publishers: Publisher[], serviceReports: ServiceReport[] }> = ({ publishers, serviceReports }) => {
@@ -188,12 +206,14 @@ const DashboardCursos: React.FC<{ publishers: Publisher[], serviceReports: Servi
                     value={allStats.regularPioneersWithoutCourses} 
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                     color="border-orange-500"
+                    isAlertCard={true}
                 />
                 <StatCard 
                     title={`Publicadores sin Cursos (${selectedMonth})`} 
                     value={allStats.publishersWithoutCourses} 
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
                     color="border-red-500"
+                    isAlertCard={true}
                 />
             </div>
             

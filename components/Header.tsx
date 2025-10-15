@@ -12,11 +12,11 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ user, activeViewLabel }) => {
     return (
         <header className="flex-shrink-0 flex justify-between items-center pb-4 border-b border-gray-200">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">{activeViewLabel}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800 truncate pr-2">{activeViewLabel}</h1>
             <div className="flex items-center gap-3 sm:gap-4">
-                <div className="text-right hidden sm:block">
-                    <div className="font-semibold text-gray-700 truncate max-w-[200px]">{user.displayName}</div>
-                    <div className="text-sm text-gray-500 truncate max-w-[200px]">{user.email}</div>
+                <div className="text-right">
+                    <div className="font-semibold text-gray-700 truncate max-w-[120px] sm:max-w-[200px]">{user.displayName}</div>
+                    <div className="text-sm text-gray-500 truncate max-w-[120px] sm:max-w-[200px]">{user.email}</div>
                 </div>
                 <img 
                     src={user.photoURL} 
