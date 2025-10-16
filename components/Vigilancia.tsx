@@ -42,6 +42,7 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editableTuesday, setEditableTuesday] = useState<VigilanciaSchedule | null>(null);
     const [editableSaturday, setEditableSaturday] = useState<VigilanciaSchedule | null>(null);
+    const [status, setStatus] = useState('');
     
     const [newEventDate, setNewEventDate] = useState('');
     const [newEventDesc, setNewEventDesc] = useState('');
@@ -118,8 +119,16 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
 
     const handleSave = async () => {
         if (editableTuesday && editableSaturday) {
-            await Promise.all([onSave(editableTuesday), onSave(editableSaturday)]);
-            setIsEditing(false);
+            setStatus('Guardando...');
+            try {
+                await Promise.all([onSave(editableTuesday), onSave(editableSaturday)]);
+                setStatus('¡Guardado con éxito!');
+                setIsEditing(false);
+                setTimeout(() => setStatus(''), 3000);
+            } catch (error) {
+                console.error(error);
+                setStatus(`Error al guardar: ${(error as Error).message}`);
+            }
         }
     };
     
@@ -139,8 +148,8 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
                                 <tr className="bg-gray-100">
                                     <th className="p-2 border font-semibold w-32">Horario</th>
                                     {trimester.map(month => {
-                                        const events = scheduleData?.specialEvents?.filter(e => new Date(e.date).getMonth() === MONTHS.indexOf(month)) || [];
-                                        const tooltipText = events.map(e => `${e.date} (${e.congregation}): ${e.description}`).join('\n');
+                                        const events = scheduleData?.specialEvents?.filter(e => new Date(e.date + 'T00:00:00').getMonth() === MONTHS.indexOf(month)) || [];
+                                        const tooltipText = events.map(e => `${new Date(e.date + 'T00:00:00').toLocaleDateString()} (${e.congregation}): ${e.description}`).join('\n');
                                         return (
                                             <th key={month} className="p-2 border font-semibold relative">
                                                 {month}
@@ -208,6 +217,7 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
                     )}
                 </div>
             </div>
+            {status && <div className="text-center font-semibold text-blue-600">{status}</div>}
 
             {renderScheduleTable(
                 "Programa de Vigilancia de Los martes",

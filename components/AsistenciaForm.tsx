@@ -16,6 +16,7 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
     });
     const [totals, setTotals] = useState({ es_total: '', es_promedio: '', fs_total: '', fs_promedio: '' });
     const [status, setStatus] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -91,13 +92,16 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
             setStatus("Por favor, seleccione un mes y un año.");
             return;
         }
-        setStatus("Guardando...");
+        setIsSaving(true);
+        setStatus('');
         try {
             await onSave(Number(ano), mes, attendance);
-            setStatus("¡Datos guardados con éxito!");
-            setTimeout(() => setStatus(''), 3000);
+            // The success modal is now handled by the parent component (App.tsx)
         } catch (error) {
-            setStatus("Error al guardar los datos.");
+            // The error modal is now handled by the parent component (App.tsx)
+            console.error("Save failed:", error);
+        } finally {
+            setIsSaving(false);
         }
     };
     
@@ -157,8 +161,8 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
                 </div>
                 
                 <div className="text-center mt-8">
-                    <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300">
-                        Guardar / Actualizar
+                    <button type="submit" disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 disabled:bg-gray-400">
+                        {isSaving ? 'Guardando...' : 'Guardar / Actualizar'}
                     </button>
                 </div>
             </form>

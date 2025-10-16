@@ -48,6 +48,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                 date: `${dayOfWeek}\n${dayNum} de ${selectedMonth.toLowerCase()}`,
                 isSaturday,
                 presidirSabado: isSaturday ? getPublisherName(typedDayAssignment.presidente) : '',
+                lector: isSaturday ? getPublisherName(typedDayAssignment.lectorAtalaya) : '',
                 acomodadores,
                 microfonos,
                 vigilanciaHorario: typedDayAssignment.vigilanciaHorario || (isSaturday ? '4:15-4:50 p. m.' : '8:20-8:50 p. m.'),
@@ -95,7 +96,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
             // Draw Main Header
             pdf.setFontSize(13).setFont(undefined, 'bold');
             pdf.setTextColor('#1A237E');
-            pdf.text('PROGRAMA DE ACOMODADORES, MICRÓFONOS, VIGILANCIA, HOSPITALIDAD Y ASEO', PAGE_WIDTH / 2, yPos, { align: 'center' });
+            pdf.text('Programa De Acomodadores, Lectores, vigilancia, Aseo y Hospitalidad de las Reuniones. Cong Cerro de la Silla', PAGE_WIDTH / 2, yPos, { align: 'center' });
             yPos += 6;
             pdf.setFontSize(12).setFont(undefined, 'normal');
             pdf.setTextColor('#333333');
@@ -103,12 +104,13 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
             yPos += 10;
 
             const colWidths = [
-                (PAGE_WIDTH - MARGIN * 2) * 0.15, // Fecha
-                (PAGE_WIDTH - MARGIN * 2) * 0.15, // Presidir
-                (PAGE_WIDTH - MARGIN * 2) * 0.18, // Acomodadores
-                (PAGE_WIDTH - MARGIN * 2) * 0.15, // Microfonos
-                (PAGE_WIDTH - MARGIN * 2) * 0.18, // Vigilancia
-                (PAGE_WIDTH - MARGIN * 2) * 0.09, // Aseo
+                (PAGE_WIDTH - MARGIN * 2) * 0.12, // Fecha
+                (PAGE_WIDTH - MARGIN * 2) * 0.12, // Presidir
+                (PAGE_WIDTH - MARGIN * 2) * 0.12, // Lector
+                (PAGE_WIDTH - MARGIN * 2) * 0.16, // Acomodadores
+                (PAGE_WIDTH - MARGIN * 2) * 0.12, // Microfonos
+                (PAGE_WIDTH - MARGIN * 2) * 0.16, // Vigilancia
+                (PAGE_WIDTH - MARGIN * 2) * 0.10, // Aseo
                 (PAGE_WIDTH - MARGIN * 2) * 0.10, // Hospitalidad
             ];
             
@@ -118,7 +120,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                 pdf.setFontSize(9).setFont(undefined, 'bold');
                 pdf.rect(MARGIN, yPos, PAGE_WIDTH - MARGIN * 2, 10, 'F');
                 let xPos = MARGIN;
-                const headers = ['Fecha', 'Presidir Sábados', 'Acomodadores', 'Micrófonos', 'Vigilancia', 'Aseo', 'Hospitalidad'];
+                const headers = ['Fecha', 'Presidir Sábados', 'Lector Atalaya', 'Acomodadores', 'Micrófonos', 'Vigilancia', 'Aseo', 'Hospitalidad'];
                 headers.forEach((header, i) => {
                     pdf.text(header, xPos + colWidths[i] / 2, yPos + 6, { align: 'center', maxWidth: colWidths[i] - 2 });
                     xPos += colWidths[i];
@@ -135,6 +137,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                 const cellContents = [
                     day.date,
                     day.presidirSabado,
+                    day.lector,
                     day.acomodadores,
                     day.microfonos,
                     `${day.vigilanciaHorario}\n${day.vigilanciaNombres}`,
@@ -166,7 +169,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                     }
                     
                     // Vigilancia cell styling
-                    if(i === 4) {
+                    if(i === 5) { // Index 5 is Vigilancia now
                         const horarioLines = pdf.splitTextToSize(day.vigilanciaHorario, colWidths[i] - 4);
                         const horarioHeight = horarioLines.length * LINE_HEIGHT + 2;
                         pdf.setFillColor(VIGILANCIA_BG);
@@ -202,7 +205,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
     return (
         <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
             <header className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-                <h1 className="text-2xl font-bold text-gray-800 text-center md:text-left">Programa de Servicios Auxiliares</h1>
+                <h1 className="text-xl font-bold text-gray-800 text-center md:text-left">Programa De Acomodadores, Lectores, vigilancia, Aseo y Hospitalidad de las Reuniones. Cong Cerro de la Silla</h1>
                 <div className="flex flex-wrap justify-center gap-2">
                     <button onClick={handleExportPdf} disabled={displayData.length === 0} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                         Exportar a PDF
@@ -220,16 +223,17 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
             
             {displayData.length > 0 ? (
                 <div className="overflow-x-auto">
-                    <table className="w-full border-collapse min-w-[1000px]">
+                    <table className="w-full border-collapse min-w-[1200px]">
                         <thead className="text-white text-sm" style={{ backgroundColor: '#283593' }}>
                             <tr>
-                                <th className="p-2 border border-white w-1/6">Fecha</th>
-                                <th className="p-2 border border-white w-1/6">Presidir Sábados</th>
-                                <th className="p-2 border border-white w-1/6">Acomodadores</th>
-                                <th className="p-2 border border-white w-1/6">Micrófonos</th>
-                                <th className="p-2 border border-white w-1/6">Vigilancia</th>
-                                <th className="p-2 border border-white w-1/12">Aseo</th>
-                                <th className="p-2 border border-white w-1/12">Hospitalidad</th>
+                                <th className="p-2 border border-white">Fecha</th>
+                                <th className="p-2 border border-white">Presidir Sábados</th>
+                                <th className="p-2 border border-white">Lector Atalaya</th>
+                                <th className="p-2 border border-white">Acomodadores</th>
+                                <th className="p-2 border border-white">Micrófonos</th>
+                                <th className="p-2 border border-white">Vigilancia</th>
+                                <th className="p-2 border border-white">Aseo</th>
+                                <th className="p-2 border border-white">Hospitalidad</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -237,6 +241,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                                 <tr key={day.dayKey} className="text-sm text-center align-top even:bg-gray-50">
                                     <td className="p-2 border font-semibold bg-indigo-50 text-indigo-800 whitespace-pre-line">{day.date}</td>
                                     <td className="p-2 border whitespace-pre-line">{day.presidirSabado || ''}</td>
+                                    <td className="p-2 border whitespace-pre-line">{day.lector || ''}</td>
                                     <td className="p-2 border whitespace-pre-line text-left">{day.acomodadores}</td>
                                     <td className="p-2 border whitespace-pre-line">{day.microfonos}</td>
                                     <td className="p-2 border whitespace-pre-line">

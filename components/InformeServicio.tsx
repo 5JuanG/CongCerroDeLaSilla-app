@@ -82,7 +82,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
     const [mes, setMes] = useState('');
     const [grupo, setGrupo] = useState('');
     const [idPublicador, setIdPublicador] = useState('');
-    const [nombrePublico, setNombrePublico] = useState('');
 
     const [predico, setPredico] = useState(false);
     const [cursos, setCursos] = useState<number | string>('');
@@ -119,12 +118,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
         ];
         
     useEffect(() => {
-        // Public form should not pre-fill data. It's for new submissions only.
-        if (isPublicForm) {
-            setStatus({ message: '', type: '' });
-            return;
-        }
-
         if (idPublicador && mes && anio && serviceReports) {
             const existingReport = serviceReports.find(r => 
                 r.idPublicador === idPublicador && 
@@ -166,7 +159,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
             setNotas('');
             setStatus({ message: '', type: '' });
         }
-    }, [idPublicador, mes, anio, serviceReports, publishers, isPublicForm]);
+    }, [idPublicador, mes, anio, serviceReports, publishers]);
 
     const handleGrupoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setGrupo(e.target.value);
@@ -177,7 +170,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
         setMes('');
         setGrupo('');
         setIdPublicador('');
-        setNombrePublico('');
         setPredico(false);
         setCursos('');
         setHoras('');
@@ -187,11 +179,18 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!idPublicador) {
+            setStatus({ message: 'Por favor, seleccione su nombre.', type: 'error' });
+            return;
+        }
+
         setIsSubmitting(true);
         setStatus({ message: 'Guardando...', type: 'info' });
 
         try {
-            const commonData = {
+            const reportData = {
+                idPublicador,
                 anioCalendario: Number(anio),
                 mes,
                 participacion: predico,
@@ -200,19 +199,6 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                 precursorAuxiliar: tipoServicio === 'Precursor Auxiliar' ? 'PA' : '',
                 notas: notas || undefined,
             };
-
-            let reportData;
-            if (isPublicForm) {
-                if (!nombrePublico.trim()) {
-                    setStatus({ message: 'Por favor, ingrese su nombre.', type: 'error' });
-                    setIsSubmitting(false);
-                    return;
-                }
-                reportData = { ...commonData, idPublicador: 'public_submission', nombrePublicador: nombrePublico.trim() };
-            } else {
-                reportData = { ...commonData, idPublicador };
-            }
-
 
             await onSaveReport(reportData as Omit<ServiceReport, 'id'>);
 
@@ -263,29 +249,22 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                             </div>
                         </div>
 
-                        {isPublicForm ? (
-                            <div className="form-group mb-6">
-                                <label htmlFor="nombre_publico" className="label">Su Nombre Completo:</label>
-                                <input id="nombre_publico" type="text" value={nombrePublico} onChange={e => setNombrePublico(e.target.value)} required className="input" placeholder="Ej: Juan Pérez" />
+                        <>
+                            <div className="form-group mb-4">
+                                <label htmlFor="grupo" className="label">Grupo:</label>
+                                <select id="grupo" value={grupo} onChange={handleGrupoChange} required className="input">
+                                    <option value="" disabled>Seleccione</option>
+                                    {grupos.map(g => <option key={g} value={g}>{g}</option>)}
+                                </select>
                             </div>
-                        ) : (
-                            <>
-                                <div className="form-group mb-4">
-                                    <label htmlFor="grupo" className="label">Grupo:</label>
-                                    <select id="grupo" value={grupo} onChange={handleGrupoChange} required className="input">
-                                        <option value="" disabled>Seleccione</option>
-                                        {grupos.map(g => <option key={g} value={g}>{g}</option>)}
-                                    </select>
-                                </div>
-                                <div className="form-group mb-6">
-                                    <label htmlFor="id_publicador" className="label">Nombre:</label>
-                                    <select id="id_publicador" value={idPublicador} onChange={e => setIdPublicador(e.target.value)} required disabled={!grupo} className="input">
-                                        <option value="" disabled>{grupo ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
-                                        {publicadoresEnGrupo.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
-                                    </select>
-                                </div>
-                            </>
-                        )}
+                            <div className="form-group mb-6">
+                                <label htmlFor="id_publicador" className="label">Nombre:</label>
+                                <select id="id_publicador" value={idPublicador} onChange={e => setIdPublicador(e.target.value)} required disabled={!grupo} className="input">
+                                    <option value="" disabled>{grupo ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
+                                    {publicadoresEnGrupo.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
+                                </select>
+                            </div>
+                        </>
 
 
                         <table className="w-full border-collapse mb-6">

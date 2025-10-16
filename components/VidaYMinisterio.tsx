@@ -469,19 +469,23 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
 
         return (
             <div className="mt-6">
-                 <div className="bg-gray-50 p-4 rounded-lg border mb-6">
-                    <label htmlFor="pastedContent" className="block text-sm font-medium text-gray-700 mb-2">Pegue aquí el texto de la Guía de Actividades:</label>
-                    <textarea id="pastedContent" value={pastedContent} onChange={(e) => setPastedContent(e.target.value)} rows={6} className="w-full p-2 border border-gray-300 rounded-md shadow-sm" placeholder="Copie y pegue el contenido completo de la Guía de Actividades del mes aquí..."/>
-                </div>
+                {canConfig && (
+                    <div className="bg-gray-50 p-4 rounded-lg border mb-6">
+                        <label htmlFor="pastedContent" className="block text-sm font-medium text-gray-700 mb-2">Pegue aquí el texto de la Guía de Actividades:</label>
+                        <textarea id="pastedContent" value={pastedContent} onChange={(e) => setPastedContent(e.target.value)} rows={6} className="w-full p-2 border border-gray-300 rounded-md shadow-sm" placeholder="Copie y pegue el contenido completo de la Guía de Actividades del mes aquí..."/>
+                    </div>
+                )}
                 <div className="text-center mb-6 flex flex-wrap justify-center gap-4">
-                    <button
-                        onClick={handleGenerateSchedule}
-                        disabled={isLoading || !pastedContent || !isAiAvailable}
-                        className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        title={!isAiAvailable ? "Función no disponible. Pida al administrador que configure la clave de API." : ""}
-                    >
-                        {isLoading ? 'Generando...' : 'Generar Programa con IA'}
-                    </button>
+                    {canConfig && (
+                        <button
+                            onClick={handleGenerateSchedule}
+                            disabled={isLoading || !pastedContent || !isAiAvailable}
+                            className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            title={!isAiAvailable ? "Función no disponible. Pida al administrador que configure la clave de API." : ""}
+                        >
+                            {isLoading ? 'Generando...' : 'Generar Programa con IA'}
+                        </button>
+                    )}
                     {isEditing ? (
                         <>
                             <button onClick={handleSaveChanges} disabled={isLoading} className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">Guardar Cambios</button>
@@ -489,7 +493,11 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                         </>
                     ) : (
                         <>
-                            <button onClick={() => { setIsEditing(true); setEditableSchedule(JSON.parse(JSON.stringify(scheduleForSelectedMonth))); }} disabled={!scheduleForSelectedMonth} className="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 disabled:bg-gray-400">Editar Programa</button>
+                            {canConfig && (
+                                <button onClick={() => { setIsEditing(true); setEditableSchedule(JSON.parse(JSON.stringify(scheduleForSelectedMonth))); }} disabled={!scheduleForSelectedMonth} className="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 disabled:bg-gray-400">
+                                    Editar Programa
+                                </button>
+                            )}
                             <button onClick={handleExportPdf} disabled={!scheduleForSelectedMonth || isEditing} className="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:bg-gray-400">Exportar a PDF</button>
                         </>
                     )}
@@ -531,7 +539,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <p className="text-center text-gray-500 mt-6">No hay programa para este mes. Puede generarlo usando IA.</p>
+                    <p className="text-center text-gray-500 mt-6">No hay programa para este mes. {canConfig && 'Puede generarlo usando IA.'}</p>
                 )}
             </div>
         )

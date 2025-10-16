@@ -58,6 +58,33 @@
       // Aumentar el tiempo de espera para subidas a 10 minutos (600,000 ms)
       // para prevenir errores en conexiones de red extremadamente lentas.
       window.storage.setMaxUploadRetryTime(600000);
+
+      // ===============================================================
+      // *** ¡IMPORTANTE! SOLUCIÓN AL ERROR DE PERMISOS AL GUARDAR ***
+      // ===============================================================
+      // El error "Missing or insufficient permissions" que estás viendo
+      // se debe a las reglas de seguridad de Firestore. Por defecto,
+      // nadie puede escribir en la base de datos.
+      //
+      // Para solucionar esto y poder probar la aplicación, ve a tu
+      // Consola de Firebase -> Firestore Database -> Pestaña "Reglas" (Rules)
+      // y reemplaza todo el contenido con lo siguiente:
+      //
+      // rules_version = '2';
+      // service cloud.firestore {
+      //   match /databases/{database}/documents {
+      //     match /{document=**} {
+      //       // Permite leer y escribir a cualquier usuario,
+      //       // ideal para desarrollo y pruebas.
+      //       allow read, write: if true;
+      //     }
+      //   }
+      // }
+      //
+      // Luego, haz clic en el botón "Publicar" para guardar los cambios. 
+      // Después de hacer esto, los formularios guardarán los datos
+      // correctamente en la vista previa.
+      // ===============================================================
     </script>
 
     <script type="module" src="/index.tsx"></script>

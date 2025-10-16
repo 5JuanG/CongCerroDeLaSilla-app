@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DISCURSOS_PUBLICOS } from './discursos';
-import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment } from '../App';
+import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment, MONTHS } from '../App';
 
 interface ReunionPublicaProps {
     schedule: PublicTalksSchedule;
@@ -45,6 +45,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     const [localOutgoingSchedule, setLocalOutgoingSchedule] = useState<OutgoingTalkAssignment[]>([]);
     const [isOutgoingModalOpen, setIsOutgoingModalOpen] = useState(false);
     const [editingOutgoingTalk, setEditingOutgoingTalk] = useState<Partial<OutgoingTalkAssignment> | null>(null);
+
+    // --- State for Public View ---
+    const [publicViewYear, setPublicViewYear] = useState(new Date().getFullYear());
+    const [publicViewMonth, setPublicViewMonth] = useState(MONTHS[new Date().getMonth()]);
+
 
     useEffect(() => {
         const fullSchedule: PublicTalksSchedule = {};
@@ -155,6 +160,107 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             setTimeout(() => setStatus(''), 3000);
         }
     };
+    
+    if (!canManage) {
+        // This is the new public-facing view.
+        const monthlyTalks = useMemo(() => {
+            const talks: ({ talkInfo: typeof DISCURSOS_PUBLICOS[0] } & PublicTalkAssignment)[] = [];
+            const monthIndex = MONTHS.indexOf(publicViewMonth);
+    
+            for (const talkNumStr in schedule) {
+                const assignments = schedule[talkNumStr];
+                if (Array.isArray(assignments)) {
+                    for (const assignment of assignments) {
+                        if (assignment && assignment.date) {
+                            const assignmentDate = new Date(assignment.date + 'T00:00:00');
+                            if (assignmentDate.getFullYear() === publicViewYear && assignmentDate.getMonth() === monthIndex) {
+                                const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === parseInt(talkNumStr, 10));
+                                if (talkInfo) {
+                                    talks.push({ ...assignment, talkInfo });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return talks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        }, [schedule, publicViewYear, publicViewMonth]);
+    
+        return (
+            <div className="container mx-auto p-4 bg-white rounded-lg shadow-md">
+                <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Programa Mensual de Discursos Públicos</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
+                    <div>
+                        <label htmlFor="year-select" className="block text-sm font-medium text-gray-700">Año:</label>
+                        <select id="year-select" value={publicViewYear} onChange={e => setPublicViewYear(Number(e.target.value))} className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="month-select" className="block text-sm font-medium text-gray-700">Mes:</label>
+                        <select id="month-select" value={publicViewMonth} onChange={e => setPublicViewMonth(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+                </div>
+    
+                {monthlyTalks.length > 0 ? (
+                    <div>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                            {monthlyTalks.map((talk, index) => (
+                                <div key={index} className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+                                    <h3 className="font-bold text-blue-700 text-lg">
+                                        {new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                                    </h3>
+                                    <div className="mt-2">
+                                        <p className="font-semibold text-gray-800">
+                                            {talk.talkInfo.number}. {talk.talkInfo.title}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            Orador: {talk.speakerName}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Fecha</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Tema del Discurso</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Orador</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {monthlyTalks.map((talk, index) => (
+                                        <tr key={index} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                {new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">
+                                                {talk.talkInfo.number}. {talk.talkInfo.title}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                                {talk.speakerName}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center text-gray-500 py-8 bg-gray-50 rounded-lg">
+                        <p>No hay discursos públicos programados para {publicViewMonth} de {publicViewYear}.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
     
     const WhatsAppShareModal: React.FC<{ talkNumber: number; data: PublicTalkAssignment; onClose: () => void; }> = ({ talkNumber, data, onClose }) => {
         const [hospitality, setHospitality] = useState('no_ha_confirmado');

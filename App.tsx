@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -25,6 +23,8 @@ import RegistroTransaccion from './components/RegistroTransaccion';
 import ReunionPublica from './components/ReunionPublica';
 import HomeDashboard from './components/HomeDashboard';
 import Vigilancia from './components/Vigilancia';
+import { DISCURSOS_PUBLICOS } from './components/discursos';
+
 
 declare const db: any;
 declare const auth: any;
@@ -238,19 +238,24 @@ const App: React.FC = () => {
     const [initialization, setInitialization] = useState({ authChecked: false, configLoaded: false });
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [activeView, setActiveView] = useState<View>('home');
+    const [publicView, setPublicView] = useState<string>('home');
+
+    // Data states
     const [publishers, setPublishers] = useState<Publisher[]>([]);
     const [serviceReports, setServiceReports] = useState<ServiceReport[]>([]);
-    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
     const [territoryRecords, setTerritoryRecords] = useState<TerritoryRecord[]>([]);
     const [territoryMaps, setTerritoryMaps] = useState<TerritoryMap[]>([]);
+    const [schedules, setSchedules] = useState<MeetingAssignmentSchedule[]>([]);
+    const [lmSchedules, setLmSchedules] = useState<LMMeetingSchedule[]>([]);
+    const [publicTalksSchedule, setPublicTalksSchedule] = useState<PublicTalksSchedule>({});
+    
+    // Private data states
+    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [committeeMembers, setCommitteeMembers] = useState<string[]>([]);
     const [invitationContent, setInvitationContent] = useState<InvitationContent[]>([]);
     const [homepageContent, setHomepageContent] = useState<HomepageContent[]>([]);
-    const [schedules, setSchedules] = useState<MeetingAssignmentSchedule[]>([]);
-    const [lmSchedules, setLmSchedules] = useState<LMMeetingSchedule[]>([]);
     const [pioneerApplications, setPioneerApplications] = useState<PioneerApplication[]>([]);
-    const [publicTalksSchedule, setPublicTalksSchedule] = useState<PublicTalksSchedule>({});
     const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
     
@@ -365,29 +370,8 @@ const App: React.FC = () => {
         };
     }, []);
 
-    // Effect for fetching user-specific data when user logs in, and cleaning up on logout
+    // Effect for fetching PUBLIC data (runs once on mount)
     useEffect(() => {
-        if (loading) return; // Wait for initial auth/config load
-
-        if (!user) {
-            // Clear all user-specific data states on logout
-            setPublishers([]);
-            setServiceReports([]);
-            setAttendanceRecords([]);
-            setTerritoryRecords([]);
-            setTerritoryMaps([]);
-            setUsers([]);
-            setCommitteeMembers([]);
-            setInvitationContent([]);
-            setHomepageContent([]);
-            setSchedules([]);
-            setLmSchedules([]);
-            setPioneerApplications([]);
-            setPublicTalksSchedule({});
-            setVigilanciaSchedules([]);
-            return;
-        }
-
         const unsubscribers = [
             db.collection('publishers').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
@@ -398,11 +382,6 @@ const App: React.FC = () => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
                 setServiceReports(data);
             }, (err: Error) => console.error("Service Reports listener failed:", err)),
-
-            db.collection('attendance').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setAttendanceRecords(data);
-            }, (err: Error) => console.error("Attendance listener failed:", err)),
             
             db.collection('territory_records').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
@@ -413,6 +392,46 @@ const App: React.FC = () => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
                 setTerritoryMaps(data);
             }, (err: Error) => console.error("Territory Maps listener failed:", err)),
+            
+            db.collection('meeting_schedules').orderBy('year', 'desc').orderBy('month', 'desc').onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setSchedules(data);
+            }, (err: Error) => console.error("Meeting Schedules listener failed:", err)),
+
+            db.collection('lm_schedules').orderBy('year', 'desc').onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setLmSchedules(data);
+            }, (err: Error) => console.error("LM Schedules listener failed:", err)),
+            
+            db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => {
+                setPublicTalksSchedule(doc.data() || { outgoingTalks: [] });
+            }, (err: Error) => console.error("Public Talks listener failed:", err)),
+        ];
+
+        return () => {
+            unsubscribers.forEach(unsub => unsub());
+        };
+    }, []);
+
+    // Effect for fetching PRIVATE data when user logs in, and cleaning up on logout
+    useEffect(() => {
+        if (loading || !user) {
+            // Clear only private data on logout
+            setAttendanceRecords([]);
+            setUsers([]);
+            setCommitteeMembers([]);
+            setInvitationContent([]);
+            setHomepageContent([]);
+            setPioneerApplications([]);
+            setVigilanciaSchedules([]);
+            return;
+        }
+
+        const unsubscribers = [
+            db.collection('attendance').onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setAttendanceRecords(data);
+            }, (err: Error) => console.error("Attendance listener failed:", err)),
             
             db.collection('users').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
@@ -433,24 +452,11 @@ const App: React.FC = () => {
                 setHomepageContent(data);
             }, (err: Error) => console.error("Homepage Content listener failed:", err)),
 
-            db.collection('meeting_schedules').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setSchedules(data);
-            }, (err: Error) => console.error("Meeting Schedules listener failed:", err)),
-
-            db.collection('lm_schedules').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setLmSchedules(data);
-            }, (err: Error) => console.error("LM Schedules listener failed:", err)),
-
             db.collection('pioneer_applications').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
                 setPioneerApplications(data);
             }, (err: Error) => console.error("Pioneer Applications listener failed:", err)),
             
-            db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => {
-                setPublicTalksSchedule(doc.data() || { outgoingTalks: [] });
-            }, (err: Error) => console.error("Public Talks listener failed:", err)),
             db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
                 setVigilanciaSchedules(data);
@@ -470,7 +476,13 @@ const App: React.FC = () => {
     
     const handleSaveAttendance = async (year: number, month: string, data: AsistenciaData) => {
         const docId = `${year}_${month}`;
-        await db.collection('attendance').doc(docId).set({ ano: year, mes: month, ...data }, { merge: true });
+        try {
+            await db.collection('attendance').doc(docId).set({ ano: year, mes: month, ...data }, { merge: true });
+            setModalInfo({ type: 'success', title: 'Éxito', message: 'El informe de asistencia se ha guardado correctamente.' });
+        } catch (error) {
+            setModalInfo({ type: 'error', title: 'Error al Guardar', message: `No se pudo guardar el informe: ${(error as Error).message}` });
+            throw error;
+        }
     };
 
     const handleBatchUpdateAttendance = async (records: AttendanceRecord[]) => {
@@ -480,7 +492,13 @@ const App: React.FC = () => {
             const docRef = db.collection('attendance').doc(id);
             batch.set(docRef, data, { merge: true });
         });
-        await batch.commit();
+        try {
+            await batch.commit();
+            setModalInfo({ type: 'success', title: 'Éxito', message: 'Los registros de asistencia se han actualizado correctamente.' });
+        } catch (error) {
+            setModalInfo({ type: 'error', title: 'Error al Actualizar', message: `No se pudieron actualizar los registros: ${(error as Error).message}` });
+            throw error;
+        }
     };
     
     const handleAddPublisher = async (publisher: Omit<Publisher, 'id'>, onProgress?: (p: number) => void) => {
@@ -802,7 +820,7 @@ const App: React.FC = () => {
     const handleUpdatePublisherAssignments = async (publisherId: string, assignments: string[]) => {
         await db.collection('publishers').doc(publisherId).update({ asignacionesDisponibles: assignments });
     };
-    const handleSaveLMSchedule = (schedule: Omit<LMMeetingSchedule, 'id'>) => {
+    const handleSaveLMSchedule = (schedule: Omit<LMMeetingSchedule, 'id'> & { month: string; year: number }) => {
         const docId = `${schedule.year}-${schedule.month}`;
         return db.collection('lm_schedules').doc(docId).set(schedule, { merge: true });
     };
@@ -817,7 +835,7 @@ const App: React.FC = () => {
         const docId = schedule.id;
         if (!docId) {
             console.error("Save failed: schedule is missing an ID.");
-            return;
+            throw new Error("El programa a guardar no tiene ID.");
         }
         const { id, ...dataToSave } = schedule;
         await db.collection('vigilancia_schedules').doc(docId).set(dataToSave, { merge: true });
@@ -859,10 +877,10 @@ const App: React.FC = () => {
         { view: 'home', label: 'Inicio' },
         { view: 'informeServicio', label: 'Informar Servicio' },
         { view: 'precursorAuxiliar', label: 'Prec. Auxiliar' },
-        { view: 'vidaYMinisterio', label: 'Vida y Ministerio' },
+        { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
         { view: 'asignacionesReunion', label: 'Asignaciones Reunión' },
         { view: 'reunionPublica', label: 'Reunión Pública' },
-        { view: 'programaServiciosAuxiliares', label: 'Programa Serv. Aux.' },
+        { view: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
         { view: 'asistenciaForm', label: 'Form. Asistencia' },
         { view: 'asistenciaReporte', label: 'Reporte Anual Asistencia' },
         { view: 'publicadores', label: 'Publicadores' },
@@ -894,29 +912,128 @@ const App: React.FC = () => {
     }
 
     if (!user) {
-        return (
-            <div className="h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-                 <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold text-blue-800">Congregación Cerro de la Silla</h1>
-                    <p className="text-xl text-gray-600">Portal de Actividades</p>
+        const PUBLIC_NAV_ITEMS: { view: string; label: string }[] = [
+            { view: 'home', label: 'Inicio' },
+            { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
+            { view: 'reunionPublica', label: 'Reunión Pública' },
+            { view: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
+            { view: 'dashboardCursos', label: 'Dashboard Cursos' },
+            { view: 'territorios', label: 'Territorios' },
+            { view: 'informeServicio', label: 'Informar Servicio' },
+        ];
+        
+        const PublicHome = () => {
+            const upcomingTalk = useMemo(() => {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                let nextTalk: (PublicTalkAssignment & { talkNumber: number }) | null = null;
+                let nextDate = new Date('9999-12-31');
+    
+                Object.entries(publicTalksSchedule).forEach(([talkNumStr, assignments]) => {
+                    if(Array.isArray(assignments)) {
+                        assignments.forEach(a => {
+                            if (a && a.date) {
+                                const talkDate = new Date(a.date + 'T00:00:00');
+                                if (talkDate >= today && talkDate < nextDate) {
+                                    nextDate = talkDate;
+                                    nextTalk = { ...a, talkNumber: parseInt(talkNumStr, 10) };
+                                }
+                            }
+                        });
+                    }
+                });
+                return nextTalk;
+            }, [publicTalksSchedule]);
+    
+            return (
+                <div className="text-center p-4 sm:p-8 bg-white rounded-lg shadow-md max-w-4xl mx-auto">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-blue-800">Bienvenido al Portal Público</h2>
+                    <p className="mt-4 text-md sm:text-lg text-gray-600">Aquí puede ver los programas de las reuniones, consultar territorios y más.</p>
+                    <p className="mt-2 text-gray-500">Para acceder a todas las funciones, por favor inicie sesión.</p>
+                    {upcomingTalk && (
+                        <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h3 className="text-xl font-semibold text-blue-700">Próximo Discurso Público</h3>
+                            <p className="mt-2 text-gray-800"><strong>Fecha:</strong> {new Date(upcomingTalk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            <p><strong>Orador:</strong> {upcomingTalk.speakerName}</p>
+                            <p><strong>Discurso:</strong> {upcomingTalk.talkNumber}. {DISCURSOS_PUBLICOS.find(t => t.number === upcomingTalk.talkNumber)?.title}</p>
+                        </div>
+                    )}
                 </div>
-                 {appConfig?.isPublicReportFormEnabled ? (
-                    <div className="w-full max-w-4xl">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                             <div className="bg-white p-6 rounded-lg shadow-md">
-                                <h2 className="text-2xl font-bold text-center mb-4">Informar Servicio</h2>
-                                <InformeServicio publishers={[]} serviceReports={[]} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => {}} invitationContent={[]} isPublicForm={true} />
-                            </div>
-                             <div className="bg-white p-6 rounded-lg shadow-md">
-                                 <h2 className="text-2xl font-bold text-center mb-4">Solicitar Precursorado</h2>
-                                 <PrecursorAuxiliar userRole="publisher" isCommitteeMember={false} forceFormView={true} is15HourOptionEnabled={appConfig.is15HourOptionEnabled}/>
+            );
+        };
+
+        let publicContent;
+        switch(publicView) {
+            case 'vidaYMinisterio':
+                publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
+                break;
+            case 'asignacionesReunion':
+                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
+                break;
+            case 'reunionPublica':
+                publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => {}} canManage={false} publishers={publishers} onShowModal={setModalInfo} />;
+                break;
+            case 'programaServiciosAuxiliares':
+                publicContent = <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} />;
+                break;
+            case 'dashboardCursos':
+                publicContent = <DashboardCursos publishers={publishers} serviceReports={serviceReports} />;
+                break;
+            case 'territorios':
+                publicContent = <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} territoryMaps={territoryMaps} onUploadMap={handleUploadTerritoryMap} onDeleteMap={handleDeleteTerritoryMap} canManage={true} onShowModal={setModalInfo} />;
+                break;
+            case 'informeServicio':
+                publicContent = <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => {}} invitationContent={invitationContent} isPublicForm={true} />;
+                break;
+            case 'home':
+            default:
+                publicContent = <PublicHome />;
+        }
+
+        return (
+            <div className="h-screen bg-gray-100 flex flex-col">
+                <header className="bg-white shadow-md p-4 flex justify-between items-center">
+                    <h1 className="text-xl font-bold text-blue-800">Congregación Cerro de la Silla</h1>
+                    <button onClick={() => setIsLoginModalOpen(true)} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+                        Iniciar Sesión
+                    </button>
+                </header>
+                <nav className="bg-white border-b overflow-x-auto">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex space-x-4">
+                            {PUBLIC_NAV_ITEMS.map(item => (
+                                <button
+                                    key={item.view}
+                                    onClick={() => setPublicView(item.view)}
+                                    className={`py-3 px-3 text-sm font-medium whitespace-nowrap ${
+                                        publicView === item.view
+                                            ? 'border-b-2 border-blue-500 text-blue-600'
+                                            : 'border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    }`}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </nav>
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+                    {publicContent}
+                </main>
+                {isLoginModalOpen && <Login onClose={() => setIsLoginModalOpen(false)} />}
+                {modalInfo && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={() => setModalInfo(null)}>
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                            <div className={`p-6 text-center border-t-8 rounded-lg ${
+                                modalInfo.type === 'success' ? 'border-green-500' :
+                                modalInfo.type === 'error' ? 'border-red-500' : 'border-blue-500'
+                            }`}>
+                                <h3 className="text-xl font-bold mb-4">{modalInfo.title}</h3>
+                                <p className="text-gray-600 whitespace-pre-wrap">{modalInfo.message}</p>
+                                <button onClick={() => setModalInfo(null)} className="mt-6 px-6 py-2 bg-gray-200 rounded-md">Cerrar</button>
                             </div>
                         </div>
-                         <p className="text-center mt-8 text-gray-600">¿Eres un usuario registrado? <button onClick={() => setIsLoginModalOpen(true)} className="text-blue-600 hover:underline font-semibold">Inicia sesión aquí</button>.</p>
-                         {isLoginModalOpen && <Login onClose={() => setIsLoginModalOpen(false)} />}
                     </div>
-                ) : (
-                     <Login onClose={() => { /* This won't be called, but the component expects it */ }} />
                 )}
             </div>
         );

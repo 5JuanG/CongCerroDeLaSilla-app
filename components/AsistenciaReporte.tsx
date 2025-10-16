@@ -34,6 +34,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
     const pdfContentRef = useRef<HTMLDivElement>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editableData, setEditableData] = useState<ReportData | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
 
     useEffect(() => {
@@ -124,7 +125,8 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
 
     const handleSave = async () => {
         if (!editableData) return;
-        setStatus("Guardando cambios...");
+        setIsSaving(true);
+        setStatus('');
 
         try {
             const recordsToUpdate: AttendanceRecord[] = [];
@@ -210,14 +212,14 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
             if (recordsToUpdate.length > 0) {
                await onBatchUpdateAttendance(recordsToUpdate);
             }
-            setStatus("¡Cambios guardados con éxito!");
+            // Success modal handled by parent
             setIsEditing(false);
             setEditableData(null);
         } catch (error) {
-            setStatus("Error al guardar los cambios.");
+            // Error modal handled by parent
             console.error(error);
         } finally {
-            setTimeout(() => setStatus(''), 3000);
+            setIsSaving(false);
         }
     };
 
@@ -419,8 +421,10 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
             <div className="text-center mt-8 space-x-4">
                 {isEditing ? (
                     <>
-                        <button onClick={handleSave} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300">Guardar Cambios</button>
-                        <button onClick={handleCancel} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300">Cancelar</button>
+                        <button onClick={handleSave} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300 disabled:bg-gray-400">
+                           {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                        </button>
+                        <button onClick={handleCancel} disabled={isSaving} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300">Cancelar</button>
                     </>
                 ) : (
                     <>

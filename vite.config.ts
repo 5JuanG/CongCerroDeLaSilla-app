@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   // Carga las variables de entorno del proceso
   // El tercer parámetro '' permite cargar todas las variables sin el prefijo VITE_.
-  const env = loadEnv(mode, process.cwd(), '');
+  // FIX: Cast `process` to `any` to access `cwd` since full Node.js types are unavailable.
+  const env = loadEnv(mode, (process as any).cwd(), '');
 
   return {
     define: {
