@@ -136,6 +136,7 @@ export interface MeetingAssignmentSchedule {
     year: number;
     month: string;
     schedule: { [dateKey: string]: DayAssignment };
+    isPublic?: boolean;
 }
 
 export interface DayAssignment {
@@ -159,6 +160,7 @@ export interface LMMeetingSchedule {
     year: number;
     month: string;
     weeks: LMWeekAssignment[];
+    isPublic?: boolean;
 }
 export interface LMWeekAssignment {
     [key: string]: any;
@@ -182,6 +184,7 @@ export interface OutgoingTalkAssignment {
 export interface PublicTalksSchedule {
     [key: string]: any; // Allows for arbitrary talk numbers
     outgoingTalks?: OutgoingTalkAssignment[];
+    publicVisibility?: { [yearMonth: string]: boolean };
 }
 export interface PublicTalkAssignment {
     date: string;
@@ -248,6 +251,7 @@ const App: React.FC = () => {
     const [schedules, setSchedules] = useState<MeetingAssignmentSchedule[]>([]);
     const [lmSchedules, setLmSchedules] = useState<LMMeetingSchedule[]>([]);
     const [publicTalksSchedule, setPublicTalksSchedule] = useState<PublicTalksSchedule>({});
+    const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
     
     // Private data states
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -256,7 +260,6 @@ const App: React.FC = () => {
     const [invitationContent, setInvitationContent] = useState<InvitationContent[]>([]);
     const [homepageContent, setHomepageContent] = useState<HomepageContent[]>([]);
     const [pioneerApplications, setPioneerApplications] = useState<PioneerApplication[]>([]);
-    const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
     
     // Derived loading state
@@ -393,8 +396,15 @@ const App: React.FC = () => {
                 setTerritoryMaps(data);
             }, (err: Error) => console.error("Territory Maps listener failed:", err)),
             
-            db.collection('meeting_schedules').orderBy('year', 'desc').orderBy('month', 'desc').onSnapshot((snapshot: any) => {
+            db.collection('meeting_schedules').onSnapshot((snapshot: any) => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                // Sort client-side to avoid Firestore index requirements.
+                data.sort((a: MeetingAssignmentSchedule, b: MeetingAssignmentSchedule) => {
+                    if (a.year !== b.year) {
+                        return b.year - a.year;
+                    }
+                    return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
+                });
                 setSchedules(data);
             }, (err: Error) => console.error("Meeting Schedules listener failed:", err)),
 
@@ -406,6 +416,11 @@ const App: React.FC = () => {
             db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => {
                 setPublicTalksSchedule(doc.data() || { outgoingTalks: [] });
             }, (err: Error) => console.error("Public Talks listener failed:", err)),
+
+            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => {
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                setVigilanciaSchedules(data);
+            }, (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
         ];
 
         return () => {
@@ -423,7 +438,6 @@ const App: React.FC = () => {
             setInvitationContent([]);
             setHomepageContent([]);
             setPioneerApplications([]);
-            setVigilanciaSchedules([]);
             return;
         }
 
@@ -456,11 +470,6 @@ const App: React.FC = () => {
                 const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
                 setPioneerApplications(data);
             }, (err: Error) => console.error("Pioneer Applications listener failed:", err)),
-            
-            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setVigilanciaSchedules(data);
-            }, (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
         ];
 
         return () => {
@@ -878,7 +887,7 @@ const App: React.FC = () => {
         { view: 'informeServicio', label: 'Informar Servicio' },
         { view: 'precursorAuxiliar', label: 'Prec. Auxiliar' },
         { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
-        { view: 'asignacionesReunion', label: 'Asignaciones Reunión' },
+        { view: 'asignacionesReunion', label: 'Generar Prog. Acomodadores' },
         { view: 'reunionPublica', label: 'Reunión Pública' },
         { view: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
         { view: 'asistenciaForm', label: 'Form. Asistencia' },
@@ -929,12 +938,16 @@ const App: React.FC = () => {
                 let nextTalk: (PublicTalkAssignment & { talkNumber: number }) | null = null;
                 let nextDate = new Date('9999-12-31');
     
+                const visibilityMap = publicTalksSchedule.publicVisibility || {};
+
                 Object.entries(publicTalksSchedule).forEach(([talkNumStr, assignments]) => {
                     if(Array.isArray(assignments)) {
                         assignments.forEach(a => {
                             if (a && a.date) {
                                 const talkDate = new Date(a.date + 'T00:00:00');
-                                if (talkDate >= today && talkDate < nextDate) {
+                                const yearMonthKey = `${talkDate.getFullYear()}-${MONTHS[talkDate.getMonth()]}`;
+                                
+                                if (visibilityMap[yearMonthKey] && talkDate >= today && talkDate < nextDate) {
                                     nextDate = talkDate;
                                     nextTalk = { ...a, talkNumber: parseInt(talkNumStr, 10) };
                                 }
@@ -965,16 +978,16 @@ const App: React.FC = () => {
         let publicContent;
         switch(publicView) {
             case 'vidaYMinisterio':
-                publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
+                publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
                 break;
             case 'asignacionesReunion':
-                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
+                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
                 break;
             case 'reunionPublica':
                 publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => {}} canManage={false} publishers={publishers} onShowModal={setModalInfo} />;
                 break;
             case 'programaServiciosAuxiliares':
-                publicContent = <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} />;
+                publicContent = <ProgramaServiciosAuxiliares schedules={schedules.filter(s => s.isPublic)} publishers={publishers} onShowModal={setModalInfo} />;
                 break;
             case 'dashboardCursos':
                 publicContent = <DashboardCursos publishers={publishers} serviceReports={serviceReports} />;

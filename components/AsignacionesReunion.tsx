@@ -25,6 +25,7 @@ const ROLE_KEY_TO_NAME: Record<string, string> = {
 };
 const MALE_ONLY_ROLES = ['Presidente', 'Acomodador en la puerta Principal', 'Acomodador de la puerta del Auditorio', 'Acomodador de los Asistentes', 'Micrófono', 'Vigilante', 'Conductor de la Atalaya', 'Lector de la Atalaya'];
 
+
 type AssignmentKey = keyof DayAssignment;
 
 const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
@@ -42,18 +43,26 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
     const [isEditing, setIsEditing] = useState(false);
     const [editableSchedule, setEditableSchedule] = useState<MeetingAssignmentSchedule | null>(null);
     const [shareModalContent, setShareModalContent] = useState<{ title: string; text: string; } | null>(null);
+    const [newlyGeneratedSchedule, setNewlyGeneratedSchedule] = useState<MeetingAssignmentSchedule | null>(null);
+    const [isPublic, setIsPublic] = useState(false);
 
     const activePublishers = useMemo(() => publishers.filter(p => p.Estatus === 'Activo'), [publishers]);
     const malePublishers = useMemo(() => activePublishers.filter(p => p.Sexo === 'Hombre'), [activePublishers]);
 
     const scheduleForSelectedMonth = useMemo(() => {
+        // Prioritize showing the newly generated schedule for immediate feedback.
+        if (newlyGeneratedSchedule && newlyGeneratedSchedule.year === selectedYear && newlyGeneratedSchedule.month === selectedMonth) {
+            return newlyGeneratedSchedule;
+        }
         return schedules.find(s => s.year === selectedYear && s.month === selectedMonth);
-    }, [schedules, selectedYear, selectedMonth]);
+    }, [schedules, selectedYear, selectedMonth, newlyGeneratedSchedule]);
 
     useEffect(() => {
         setIsEditing(false);
         setEditableSchedule(null);
-    }, [selectedMonth, selectedYear, activeTab]);
+        setNewlyGeneratedSchedule(null);
+        setIsPublic(scheduleForSelectedMonth?.isPublic || false);
+    }, [selectedMonth, selectedYear, activeTab, scheduleForSelectedMonth]);
     
     const getEligiblePublishers = useCallback((role: string) => {
         // Start with male publishers who are configured for the role
@@ -71,140 +80,197 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
 
     const handleGenerateSchedule = async () => {
         setIsLoading(true);
-
-        const eligible: { [role: string]: Publisher[] } = {};
-        ALL_ASSIGNMENT_ROLES.forEach(role => {
-            eligible[role] = getEligiblePublishers(role);
-        });
-
-        const errors = [];
-        if (eligible['Presidente'].length === 0) {
-            errors.push("• No hay Ancianos o Siervos Ministeriales elegibles para 'Presidente'.");
-        }
-        if (eligible['Conductor de la Atalaya'].length === 0) {
-            errors.push("• No hay Ancianos elegibles para 'Conductor de la Atalaya'.");
-        }
-
-        const groups = [...new Set(activePublishers.map(p => p.Grupo).filter(Boolean) as string[])];
-        if (groups.length === 0) {
-            errors.push("• No hay grupos de servicio configurados para las asignaciones de Aseo y Hospitalidad.");
-        }
-
-
-        if (errors.length > 0) {
-            onShowModal({
-                type: 'error',
-                title: 'Faltan Participantes Elegibles',
-                message: 'No se pudo generar el programa. Faltan participantes clave:\n\n' + errors.join('\n') + '\n\n**Solución:**\n1. Vaya a la pestaña "Publicadores" y asegúrese de que los hermanos tengan asignado su privilegio (Anciano, Siervo Ministerial).\n2. Vaya a "Configuración de Participantes" y active las casillas de las asignaciones que pueden atender.'
-            });
-            setIsLoading(false);
-            return;
-        }
-
         onShowModal({ type: 'info', title: 'Generando Programa', message: 'Calculando asignaciones equitativas, por favor espere...' });
-
-        const getDatesForWeekday = (month: number, year: number, day: number) => {
-            const dates = [];
-            const date = new Date(year, month, 1);
-            while (date.getMonth() === month) {
-                if (date.getDay() === day) { // 0=Sun, 1=Mon, ..., 6=Sat
-                    dates.push(new Date(date));
-                }
-                date.setDate(date.getDate() + 1);
-            }
-            return dates;
-        };
-
-        const monthIndex = MONTHS.indexOf(selectedMonth);
-        const tuesdays = getDatesForWeekday(monthIndex, selectedYear, 2);
-        const saturdays = getDatesForWeekday(monthIndex, selectedYear, 6);
-        const allMeetingDates = [...tuesdays, ...saturdays].sort((a,b) => a.getTime() - b.getTime());
-
-        // Queues for rotation
-        const queues: { [key: string]: any[] } = {
-            ...Object.fromEntries(ALL_ASSIGNMENT_ROLES.map(role => [role, [...eligible[role]]])),
-            tuesdayAseo: [...groups],
-            saturdayAseo: [...groups],
-            saturdayHospitality: [...groups]
-        };
-        
-        const newScheduleData: MeetingAssignmentSchedule['schedule'] = {};
-
-        for (const meetingDate of allMeetingDates) {
-            const isTuesday = meetingDate.getDay() === 2;
-            const dateKey = `${isTuesday ? 'tuesday' : 'saturday'}-${meetingDate.toISOString().slice(0, 10)}`;
-            const assignmentsForDay: DayAssignment = {};
-            let assignedThisDay = new Set<string>();
-
-            const getNextAvailable = (role: string, count: number, excludeIds: Set<string> = new Set()) => {
-                const queue = queues[role];
-                if (!queue || queue.length === 0) return Array(count).fill(null);
-                
-                const result: (string|null)[] = [];
-                let attempts = 0;
-                while(result.length < count && attempts < queue.length * 2) {
-                    let person = queue.shift();
-                    queue.push(person);
-                    if (person && !assignedThisDay.has(person.id) && !excludeIds.has(person.id)) {
-                        result.push(person.id);
-                        assignedThisDay.add(person.id);
-                    }
-                    attempts++;
-                }
-                // Fill with null if not enough people found
-                while(result.length < count) result.push(null);
-                return result;
-            };
-
-            const getNextGroup = (queueName: string) => {
-                const queue = queues[queueName];
-                if (!queue || queue.length === 0) return null;
-                const group = queue.shift();
-                queue.push(group);
-                return group;
-            };
-
-            if (isTuesday) {
-                assignmentsForDay.fechaReunion = `Martes ${meetingDate.getDate()}`;
-                assignmentsForDay.reunionHorario = '7:30 p. m.';
-                assignmentsForDay.vigilanciaHorario = '8:20-8:50 p. m.';
-                assignmentsForDay.acomodadoresPrincipal = getNextAvailable('Acomodador en la puerta Principal', 1);
-                assignmentsForDay.acomodadoresAuditorio = getNextAvailable('Acomodador de la puerta del Auditorio', 1);
-                assignmentsForDay.acomodadoresSala = getNextAvailable('Acomodador de los Asistentes', 2);
-                assignmentsForDay.microfonos = getNextAvailable('Micrófono', 2);
-                assignmentsForDay.vigilantes = getNextAvailable('Vigilante', 3);
-                assignmentsForDay.aseo = getNextGroup('tuesdayAseo');
-            } else { // Saturday
-                assignmentsForDay.fechaReunion = `Sábado ${meetingDate.getDate()}`;
-                assignmentsForDay.reunionHorario = '4:30 p. m.';
-                assignmentsForDay.vigilanciaHorario = '4:15-4:50 p. m.';
-                
-                const conductorId = getNextAvailable('Conductor de la Atalaya', 1)[0];
-                assignmentsForDay.conductorAtalaya = conductorId || undefined;
-                
-                const exclusionSet = new Set<string>();
-                if(conductorId) exclusionSet.add(conductorId);
-                
-                const presidenteId = getNextAvailable('Presidente', 1, exclusionSet)[0];
-                assignmentsForDay.presidente = presidenteId || undefined;
-                if(presidenteId) exclusionSet.add(presidenteId);
-                
-                const lectorId = getNextAvailable('Lector de la Atalaya', 1, exclusionSet)[0];
-                assignmentsForDay.lectorAtalaya = lectorId || undefined;
-
-                assignmentsForDay.acomodadoresPrincipal = getNextAvailable('Acomodador en la puerta Principal', 1, exclusionSet);
-                assignmentsForDay.acomodadoresAuditorio = getNextAvailable('Acomodador de la puerta del Auditorio', 1, exclusionSet);
-                assignmentsForDay.acomodadoresSala = getNextAvailable('Acomodador de los Asistentes', 2, exclusionSet);
-                assignmentsForDay.microfonos = getNextAvailable('Micrófono', 2, exclusionSet);
-                assignmentsForDay.vigilantes = getNextAvailable('Vigilante', 3, exclusionSet);
-                assignmentsForDay.aseo = getNextGroup('saturdayAseo');
-                assignmentsForDay.hospitalidad = getNextGroup('saturdayHospitality');
-            }
-            newScheduleData[dateKey] = assignmentsForDay;
-        }
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
-            await onSaveSchedule({ year: selectedYear, month: selectedMonth, schedule: newScheduleData });
+            const eligible: { [role: string]: Publisher[] } = {};
+            ALL_ASSIGNMENT_ROLES.forEach(role => {
+                eligible[role] = getEligiblePublishers(role);
+            });
+
+            const errors = [];
+            const rolesToCheck: { [key: string]: { description: string, min: number } } = {
+                'Presidente': { description: "Ancianos o Siervos Ministeriales", min: 1 },
+                'Conductor de la Atalaya': { description: "Ancianos", min: 1 },
+                'Lector de la Atalaya': { description: "hermanos", min: 1 },
+                'Acomodador en la puerta Principal': { description: "hermanos", min: 1 },
+                'Acomodador de la puerta del Auditorio': { description: "hermanos", min: 1 },
+                'Acomodador de los Asistentes': { description: "hermanos", min: 2 },
+                'Micrófono': { description: "hermanos", min: 2 },
+                'Vigilante': { description: "hermanos", min: 3 }
+            };
+
+            for (const [role, criteria] of Object.entries(rolesToCheck)) {
+                if (eligible[role].length < criteria.min) {
+                    if (criteria.min === 1) {
+                        errors.push(`• No hay ${criteria.description} elegibles para '${role}'.`);
+                    } else {
+                        errors.push(`• Se necesitan al menos ${criteria.min} ${criteria.description} para '${role}'. Se encontraron ${eligible[role].length}.`);
+                    }
+                }
+            }
+
+            const groups = [...new Set(activePublishers.map(p => p.Grupo).filter(Boolean) as string[])];
+            if (groups.length === 0) {
+                errors.push("• No hay grupos de servicio configurados para las asignaciones de Aseo y Hospitalidad.");
+            }
+
+            if (errors.length > 0) {
+                onShowModal({
+                    type: 'error',
+                    title: 'Faltan Participantes Elegibles',
+                    message: 'No se pudo generar el programa. Faltan participantes clave:\n\n' + errors.join('\n') + '\n\n**Solución:**\n1. Vaya a la pestaña "Publicadores" y asegúrese de que los hermanos tengan asignado su privilegio (Anciano, Siervo Ministerial).\n2. Vaya a "Configuración de Participantes" y active las casillas de las asignaciones que pueden atender.'
+                });
+                return;
+            }
+
+            const getDatesForWeekday = (month: number, year: number, day: number) => {
+                const dates = [];
+                const date = new Date(year, month, 1);
+                while (date.getMonth() === month) {
+                    if (date.getDay() === day) { // 0=Sun, 1=Mon, ..., 6=Sat
+                        dates.push(new Date(date));
+                    }
+                    date.setDate(date.getDate() + 1);
+                }
+                return dates;
+            };
+
+            const monthIndex = MONTHS.indexOf(selectedMonth);
+            const tuesdays = getDatesForWeekday(monthIndex, selectedYear, 2);
+            const saturdays = getDatesForWeekday(monthIndex, selectedYear, 6);
+            const allMeetingDates = [...tuesdays, ...saturdays].sort((a,b) => a.getTime() - b.getTime());
+
+            const queues: { [key: string]: any[] } = {
+                ...Object.fromEntries(ALL_ASSIGNMENT_ROLES.map(role => [role, [...eligible[role]]])),
+                tuesdayAseo: [...groups],
+                saturdayAseo: [...groups],
+                saturdayHospitality: [...groups]
+            };
+            
+            const newScheduleData: MeetingAssignmentSchedule['schedule'] = {};
+
+            for (const meetingDate of allMeetingDates) {
+                const isTuesday = meetingDate.getDay() === 2;
+                const dateKey = `${isTuesday ? 'tuesday' : 'saturday'}-${meetingDate.toISOString().slice(0, 10)}`;
+                const assignmentsForDay: DayAssignment = {};
+                const assignedThisDay = new Set<string>();
+
+                const getNextAvailable = (role: string, count: number) => {
+                    const queue = queues[role];
+                    if (!queue || queue.length === 0) return Array(count).fill(null);
+                    
+                    const result: (string|null)[] = [];
+                    let attempts = 0;
+                    while(result.length < count && attempts < queue.length * 2) {
+                        let person = queue.shift();
+                        queue.push(person);
+                        if (person && !assignedThisDay.has(person.id)) {
+                            result.push(person.id);
+                            assignedThisDay.add(person.id);
+                        }
+                        attempts++;
+                    }
+                    while(result.length < count) result.push(null);
+                    return result;
+                };
+
+                const getNextGroup = (queueName: string) => {
+                    const queue = queues[queueName];
+                    if (!queue || queue.length === 0) return null;
+                    const group = queue.shift();
+                    queue.push(group);
+                    return group;
+                };
+
+                if (isTuesday) {
+                    assignmentsForDay.fechaReunion = `Martes ${meetingDate.getDate()}`;
+                    assignmentsForDay.reunionHorario = '7:30 p. m.';
+                    assignmentsForDay.vigilanciaHorario = '8:20-8:50 p. m.';
+                    assignmentsForDay.acomodadoresPrincipal = getNextAvailable('Acomodador en la puerta Principal', 1);
+                    assignmentsForDay.acomodadoresAuditorio = getNextAvailable('Acomodador de la puerta del Auditorio', 1);
+                    assignmentsForDay.acomodadoresSala = getNextAvailable('Acomodador de los Asistentes', 2);
+                    assignmentsForDay.microfonos = getNextAvailable('Micrófono', 2);
+                    assignmentsForDay.vigilantes = getNextAvailable('Vigilante', 3);
+                    assignmentsForDay.aseo = getNextGroup('tuesdayAseo');
+                } else { // Saturday
+                    assignmentsForDay.fechaReunion = `Sábado ${meetingDate.getDate()}`;
+                    assignmentsForDay.reunionHorario = '4:30 p. m.';
+                    assignmentsForDay.vigilanciaHorario = '4:15-4:50 p. m.';
+                    
+                    assignmentsForDay.conductorAtalaya = getNextAvailable('Conductor de la Atalaya', 1)[0] || undefined;
+                    assignmentsForDay.presidente = getNextAvailable('Presidente', 1)[0] || undefined;
+                    assignmentsForDay.lectorAtalaya = getNextAvailable('Lector de la Atalaya', 1)[0] || undefined;
+
+                    assignmentsForDay.acomodadoresPrincipal = getNextAvailable('Acomodador en la puerta Principal', 1);
+                    assignmentsForDay.acomodadoresAuditorio = getNextAvailable('Acomodador de la puerta del Auditorio', 1);
+                    assignmentsForDay.acomodadoresSala = getNextAvailable('Acomodador de los Asistentes', 2);
+                    assignmentsForDay.microfonos = getNextAvailable('Micrófono', 2);
+                    assignmentsForDay.vigilantes = getNextAvailable('Vigilante', 3);
+                    assignmentsForDay.aseo = getNextGroup('saturdayAseo');
+                    assignmentsForDay.hospitalidad = getNextGroup('saturdayHospitality');
+                }
+                newScheduleData[dateKey] = assignmentsForDay;
+            }
+
+            const generatedScheduleObject: MeetingAssignmentSchedule = {
+                id: `${selectedYear}-${selectedMonth}`,
+                year: selectedYear,
+                month: selectedMonth,
+                schedule: newScheduleData,
+                isPublic: false,
+            };
+            setNewlyGeneratedSchedule(generatedScheduleObject);
+            setIsPublic(false);
+            onShowModal({ type: 'success', title: 'Programa Generado', message: 'El borrador del programa se ha generado como "Oculto". Revíselo, guárdelo y luego publíquelo.' });
+
+        } catch (error) {
+            console.error("Error al generar el programa:", error);
+            onShowModal({
+                type: 'error',
+                title: 'Error Inesperado',
+                message: `Ocurrió un error al generar el programa. Esto puede deberse a una configuración compleja o un problema temporal. Por favor, inténtelo de nuevo.\n\nDetalles: ${(error as Error).message}`
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveGeneratedSchedule = async () => {
+        if (!newlyGeneratedSchedule) return;
+        setIsLoading(true);
+        try {
+            const { id, ...dataToSave } = newlyGeneratedSchedule;
+            await onSaveSchedule(dataToSave);
+            setNewlyGeneratedSchedule(null);
+            onShowModal({ type: 'success', title: 'Guardado', message: 'El nuevo programa se ha guardado correctamente. Ahora puede hacerlo público.' });
+        } catch (error) {
+            onShowModal({ type: 'error', title: 'Error', message: `No se pudo guardar el programa: ${(error as Error).message}` });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDiscardGeneratedSchedule = () => {
+        setNewlyGeneratedSchedule(null);
+    };
+
+    const handleToggleVisibility = async () => {
+        const scheduleToUpdate = scheduleForSelectedMonth;
+        if (!scheduleToUpdate) {
+            onShowModal({ type: 'error', title: 'Error', message: 'No hay un programa guardado para este mes para poder cambiar su visibilidad.' });
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const newVisibility = !isPublic;
+            const { id, ...dataToSave } = scheduleToUpdate;
+            await onSaveSchedule({ ...dataToSave, isPublic: newVisibility });
+            setIsPublic(newVisibility);
+            onShowModal({ type: 'success', title: 'Visibilidad Actualizada', message: `El programa ahora está ${newVisibility ? 'público' : 'oculto'}.` });
+        } catch (error) {
+            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo actualizar la visibilidad.' });
         } finally {
             setIsLoading(false);
         }
@@ -213,69 +279,53 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
     const getPublisherName = useCallback((id: string | null) => {
         if (!id) return '';
         const pub = activePublishers.find(p => p.id === id);
-        return pub ? [pub.Nombre, pub.Apellido, pub['2do Apellido'], pub['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ') : 'N/A';
+        return pub ? [pub.Nombre, pub.Apellido].filter(Boolean).join(' ') : 'N/A';
     }, [activePublishers]);
     
-    const checkForConflicts = useCallback((schedule: MeetingAssignmentSchedule, currentDateKey: string, publisherId: string) => {
+    const checkForConflicts = useCallback((schedule: MeetingAssignmentSchedule, dateKey: string, role: string, publisherId: string) => {
         if (!publisherId) return;
 
         const conflictMessages: string[] = [];
         const pubName = getPublisherName(publisherId);
         if (!pubName || pubName === 'N/A') return;
 
+        const dayAssignments = schedule.schedule[dateKey];
+        if (!dayAssignments) return;
+
+        let assignmentsThisDay = 0;
+        for (const [roleKey, assigned] of Object.entries(dayAssignments)) {
+             const publisherIds = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
+             assignmentsThisDay += publisherIds.filter(id => id === publisherId).length;
+        }
+
+        if (assignmentsThisDay > 1) {
+            conflictMessages.push(`Tiene más de una asignación en la misma reunión.`);
+        }
+        
         const sortedDateKeys = Object.keys(schedule.schedule).sort((a, b) => 
             new Date(a.substring(a.indexOf('-') + 1)).getTime() - new Date(b.substring(b.indexOf('-') + 1)).getTime()
         );
-        const currentIndex = sortedDateKeys.indexOf(currentDateKey);
+        const currentIndex = sortedDateKeys.indexOf(dateKey);
 
-        const findConflictsInDay = (dateKey: string): { role: string; count: number }[] => {
-            const dayAssignments = schedule.schedule[dateKey];
-            const assignmentsFound: { role: string; count: number }[] = [];
-            if (!dayAssignments) return [];
-
-            for (const [roleKey, assigned] of Object.entries(dayAssignments)) {
-                const roleName = ROLE_KEY_TO_NAME[roleKey];
-                if (!roleName) continue;
-
-                const publisherIds = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
-                const count = publisherIds.filter(id => id === publisherId).length;
-                if (count > 0) {
-                    assignmentsFound.push({ role: roleName, count });
+        const checkAdjacentMeeting = (adjacentIndex: number, meetingLabel: string) => {
+            if (adjacentIndex >= 0 && adjacentIndex < sortedDateKeys.length) {
+                const adjacentDateKey = sortedDateKeys[adjacentIndex];
+                const adjacentDayAssignments = schedule.schedule[adjacentDateKey];
+                if (!adjacentDayAssignments) return;
+                
+                for (const [roleKey, assigned] of Object.entries(adjacentDayAssignments)) {
+                    const publisherIds = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
+                    if(publisherIds.includes(publisherId)) {
+                        conflictMessages.push(`Tiene una asignación en la reunión ${meetingLabel} (${adjacentDayAssignments.fechaReunion}).`);
+                        return; // Found a conflict, no need to check other roles
+                    }
                 }
             }
-            return assignmentsFound;
         };
 
-        // 1. Same Day Conflicts
-        const sameDayAssignments = findConflictsInDay(currentDateKey);
-        const totalSameDayCount = sameDayAssignments.reduce((sum, a) => sum + a.count, 0);
-        if (totalSameDayCount > 1) {
-            const conflictingRoles = sameDayAssignments.map(a => a.role).join(', ');
-            conflictMessages.push(`En la misma reunión tiene otras asignaciones: ${conflictingRoles}.`);
-        }
-
-        // 2. Previous Meeting Conflicts
-        if (currentIndex > 0) {
-            const prevDateKey = sortedDateKeys[currentIndex - 1];
-            const prevDayAssignments = findConflictsInDay(prevDateKey);
-            if (prevDayAssignments.length > 0) {
-                const conflictingRoles = prevDayAssignments.map(a => a.role).join(', ');
-                const prevMeetingDate = schedule.schedule[prevDateKey].fechaReunion;
-                conflictMessages.push(`En la reunión anterior (${prevMeetingDate}), tiene asignado: ${conflictingRoles}.`);
-            }
-        }
-
-        // 3. Next Meeting Conflicts
-        if (currentIndex < sortedDateKeys.length - 1) {
-            const nextDateKey = sortedDateKeys[currentIndex + 1];
-            const nextDayAssignments = findConflictsInDay(nextDateKey);
-            if (nextDayAssignments.length > 0) {
-                const conflictingRoles = nextDayAssignments.map(a => a.role).join(', ');
-                const nextMeetingDate = schedule.schedule[nextDateKey].fechaReunion;
-                conflictMessages.push(`En la reunión siguiente (${nextMeetingDate}), tiene asignado: ${conflictingRoles}.`);
-            }
-        }
-
+        checkAdjacentMeeting(currentIndex - 1, 'anterior');
+        checkAdjacentMeeting(currentIndex + 1, 'siguiente');
+        
         if (conflictMessages.length > 0) {
             onShowModal({
                 type: 'info',
@@ -285,25 +335,22 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
         }
     }, [getPublisherName, onShowModal]);
 
-    const handleEditChange = (dateKey: string, role: AssignmentKey, value: string | string[], index?: number) => {
+    const handleEditChange = (dateKey: string, role: AssignmentKey, value: string, index: number = 0) => {
         if (!editableSchedule) return;
 
         const newSchedule = JSON.parse(JSON.stringify(editableSchedule));
         const dayAssignments = newSchedule.schedule[dateKey] || {};
 
-        let newPublisherId = '';
-        if (Array.isArray(dayAssignments[role]) && typeof index === 'number') {
-            (dayAssignments[role] as string[])[index] = value as string;
-            newPublisherId = value as string;
+        if (Array.isArray(dayAssignments[role])) {
+            (dayAssignments[role] as string[])[index] = value;
         } else {
             (dayAssignments as any)[role] = value;
-            newPublisherId = value as string;
         }
         newSchedule.schedule[dateKey] = dayAssignments;
         setEditableSchedule(newSchedule);
         
         // Check for conflicts after state update
-        checkForConflicts(newSchedule, dateKey, newPublisherId);
+        checkForConflicts(newSchedule, dateKey, role, value);
     };
     
     const handleSaveChanges = async () => {
@@ -311,228 +358,141 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
         setIsLoading(true);
         try {
             const { id, ...dataToSave } = editableSchedule;
-            await onSaveSchedule(dataToSave);
+            await onSaveSchedule({...dataToSave, isPublic});
             setIsEditing(false);
             setEditableSchedule(null);
+            onShowModal({ type: 'success', title: 'Guardado', message: 'Los cambios se han guardado correctamente.' });
+        } catch(error) {
+            onShowModal({ type: 'error', title: 'Error', message: `No se pudo guardar: ${(error as Error).message}` });
         } finally {
             setIsLoading(false);
         }
     };
     
-    const handleCopyToClipboard = (dateKey: string) => {
-        const schedule = scheduleForSelectedMonth?.schedule[dateKey];
-        if (!schedule) return;
-
-        const getNames = (ids: string[] | string | null | undefined) => {
-            if (!ids) return 'N/A';
-            const idArray = Array.isArray(ids) ? ids : [ids];
-            return idArray.map(id => {
-                if (!id) return 'N/A';
-                const pub = publishers.find(p => p.id === id);
-                return pub ? [pub.Nombre, pub.Apellido, pub['2do Apellido'], pub['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ') : 'No encontrado';
-            }).join(', ');
-        };
-        
-        const [day, ...dateParts] = dateKey.split('-');
-        const date = new Date(dateParts.join('-') + 'T00:00:00');
-        const isTuesday = day === 'tuesday';
-        const formattedDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-
-        let text = `*Asignaciones para el ${formattedDate}* 🗓️\n\n`;
-        if (isTuesday) {
-            text += `*Acomodador en la puerta Principal:* ${getNames(schedule.acomodadoresPrincipal)}\n` +
-                    `*Acomodador de la puerta del Auditorio:* ${getNames(schedule.acomodadoresAuditorio)}\n` +
-                    `*Acomodador de los Asistentes:* ${getNames(schedule.acomodadoresSala)}\n` +
-                    `*Micrófonos:* ${getNames(schedule.microfonos)}\n` +
-                    `*Vigilancia (${schedule.vigilanciaHorario || '8:20-8:50 p. m.'}):* ${getNames(schedule.vigilantes)}\n\n` +
-                    `🧹 *Aseo:* Grupo ${schedule.aseo}`;
-        } else {
-             text += `*Presidente:* ${getNames(schedule.presidente)}\n` +
-                    `*Conductor Atalaya:* ${getNames(schedule.conductorAtalaya)}\n` +
-                    `*Lector Atalaya:* ${getNames(schedule.lectorAtalaya)}\n` +
-                    `*Acomodador en la puerta Principal:* ${getNames(schedule.acomodadoresPrincipal)}\n` +
-                    `*Acomodador de la puerta del Auditorio:* ${getNames(schedule.acomodadoresAuditorio)}\n` +
-                    `*Acomodador de los Asistentes:* ${getNames(schedule.acomodadoresSala)}\n` +
-                    `*Micrófonos:* ${getNames(schedule.microfonos)}\n` +
-                    `*Vigilancia (${schedule.vigilanciaHorario || '4:15-4:50 p. m.'}):* ${getNames(schedule.vigilantes)}\n\n` +
-                    `🧹 *Aseo:* Grupo ${schedule.aseo}\n` +
-                    `🤝 *Hospitalidad:* Grupo ${schedule.hospitalidad}`;
-        }
-            
-        setShareModalContent({
-            title: `Asignaciones para el ${formattedDate}`,
-            text
-        });
-    };
-    
     const ScheduleView = () => {
-        const currentSchedule = isEditing && editableSchedule ? editableSchedule : scheduleForSelectedMonth;
-        
-        const weeks = useMemo(() => {
-            if (!currentSchedule) return [];
-            const weekMap: { [weekStart: string]: { tuesday?: string, saturday?: string } } = {};
-            
-            Object.keys(currentSchedule.schedule).forEach(dateKey => {
-                const date = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
-                const day = date.getDay(); // 0-6
-                const weekStartDate = new Date(date);
-                weekStartDate.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
-                const weekStartKey = weekStartDate.toISOString().slice(0, 10);
+        const currentSchedule = isEditing ? editableSchedule : (newlyGeneratedSchedule || scheduleForSelectedMonth);
 
-                if (!weekMap[weekStartKey]) weekMap[weekStartKey] = {};
+        const displayData = useMemo(() => {
+            if (!currentSchedule?.schedule) return [];
 
-                if(date.getDay() === 2) weekMap[weekStartKey].tuesday = dateKey;
-                if(date.getDay() === 6) weekMap[weekStartKey].saturday = dateKey;
+            const saturdayMeetings = Object.entries(currentSchedule.schedule)
+                .filter(([key]) => key.startsWith('saturday'))
+                .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+
+            return saturdayMeetings.map(([dateKey, assignment]) => {
+                const satDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
+                const tueDate = new Date(satDate);
+                tueDate.setDate(satDate.getDate() - 4);
+                const sunDate = new Date(satDate);
+                sunDate.setDate(satDate.getDate() + 1);
+                const tueDateKey = `tuesday-${tueDate.toISOString().slice(0, 10)}`;
+
+                const getAssignmentsWithRole = (roleKey: keyof DayAssignment, roleAbbr: string) => {
+                    const ids = (assignment as any)[roleKey] as string[] | undefined;
+                    return (ids || []).map((id, index) => ({ id, name: getPublisherName(id), role: roleAbbr, originalRoleKey: roleKey, originalIndex: index, dateKey }));
+                };
+
+                const acomodadoresYMicrofonos = [
+                    ...getAssignmentsWithRole('acomodadoresPrincipal', 'AP'),
+                    ...getAssignmentsWithRole('acomodadoresAuditorio', 'APA'),
+                    ...getAssignmentsWithRole('acomodadoresSala', 'AA'),
+                    ...getAssignmentsWithRole('microfonos', 'AM'),
+                    ...getAssignmentsWithRole('vigilantes', 'V'),
+                ];
+
+                return {
+                    weekDateRange: `Martes ${tueDate.getDate()} de ${MONTHS[tueDate.getMonth()].toLowerCase()}\nDomingo ${sunDate.getDate()} de ${MONTHS[sunDate.getMonth()].toLowerCase()}`,
+                    presidente: { id: assignment.presidente, name: getPublisherName(assignment.presidente) },
+                    lectorAtalaya: { id: assignment.lectorAtalaya, name: getPublisherName(assignment.lectorAtalaya) },
+                    acomodadoresYMicrofonos,
+                    aseo: { id: assignment.aseo, name: assignment.aseo ? `Grupo ${assignment.aseo}` : '' },
+                    hospitalidad: { id: assignment.hospitalidad, name: assignment.hospitalidad ? `Grupo ${assignment.hospitalidad}` : '' },
+                    tuesdayDateKey: tueDateKey,
+                    saturdayDateKey: dateKey,
+                };
             });
-            return Object.entries(weekMap).sort((a,b) => a[0].localeCompare(b[0]));
-        }, [currentSchedule]);
+        }, [currentSchedule, getPublisherName]);
 
         if (!currentSchedule) {
             return <p className="text-center text-gray-500 py-8">No hay programa generado para este mes. Haga clic en "Generar Programa".</p>;
         }
 
         const groups = [...new Set(activePublishers.map(p => p.Grupo).filter(Boolean) as string[])].sort();
-        
-        const renderCellContent = (dateKey: string | undefined, role: AssignmentKey, size: number = 1) => {
-            if (!dateKey) return Array(size).fill(<div className="p-2 min-h-[3rem] bg-gray-100/50"></div>);
-            
-            const daySchedule = currentSchedule.schedule[dateKey] || {};
-            const assignment = daySchedule[role];
 
-            if (role === 'aseo' || role === 'hospitalidad') {
-                if (isEditing) {
-                    return [<select
-                                value={assignment as string || ''}
-                                onChange={(e) => handleEditChange(dateKey, role, e.target.value)}
-                                className="w-full p-1 border rounded text-xs"
-                            >
-                                <option value="">N/A</option>
-                                {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
-                            </select>];
-                }
-                return [<div className="font-semibold">{assignment ? `Grupo ${assignment}` : 'N/A'}</div>];
-            }
-
-            const ids = Array.isArray(assignment) ? assignment : [assignment];
-            while (ids.length < size) ids.push(null);
-            
-            const eligible = getEligiblePublishers(ROLE_KEY_TO_NAME[role]);
-
-            return ids.map((id, index) => {
-                if(isEditing) {
-                    return <select 
-                                key={index} 
-                                value={id || ''} 
-                                onChange={(e) => handleEditChange(dateKey, role, e.target.value, index)}
-                                className="w-full p-1 border rounded text-xs"
-                            >
-                                <option value="">N/A</option>
-                                {eligible.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
-                            </select>
-                }
-                return <div key={index}>{getPublisherName(id)}</div>;
-            });
-        };
-
-        const assignmentsLayout = [
-            { label: 'Presidente', key: 'presidente', tueSize: 0, satSize: 1 },
-            { label: 'Cond. Atalaya', key: 'conductorAtalaya', tueSize: 0, satSize: 1 },
-            { label: 'Lector Atalaya', key: 'lectorAtalaya', tueSize: 0, satSize: 1 },
-            { label: 'Acom. Puerta Principal', key: 'acomodadoresPrincipal', tueSize: 1, satSize: 1 },
-            { label: 'Acom. Puerta Auditorio', key: 'acomodadoresAuditorio', tueSize: 1, satSize: 1 },
-            { label: 'Acom. Asistentes', key: 'acomodadoresSala', tueSize: 2, satSize: 2 },
-            { label: 'Micrófonos', key: 'microfonos', tueSize: 2, satSize: 2 },
-            { label: 'Vigilancia', key: 'vigilantes', tueSize: 3, satSize: 3 },
-            { label: 'Aseo', key: 'aseo', tueSize: 1, satSize: 1 },
-            { label: 'Hospitalidad', key: 'hospitalidad', tueSize: 0, satSize: 1 },
-        ];
-
-        const renderVigilanciaCell = (dateKey: string | undefined, size: number) => {
-            if (!dateKey || size === 0) return null;
-            const daySchedule = currentSchedule.schedule[dateKey];
-            if (!daySchedule) return null;
-        
-            return (
-                <>
-                    {isEditing ? (
-                        <input
-                            type="text"
-                            value={daySchedule.vigilanciaHorario || ''}
-                            onChange={(e) => handleEditChange(dateKey, 'vigilanciaHorario', e.target.value)}
-                            className="w-full bg-yellow-200 text-black text-center font-bold p-1 rounded-sm text-xs mb-1"
-                        />
-                    ) : (
-                         daySchedule.vigilanciaHorario && (
-                            <div className="bg-yellow-300 text-black text-center font-bold p-1 rounded-sm text-xs mb-1">
-                                {daySchedule.vigilanciaHorario}
-                            </div>
-                         )
-                    )}
-                    {renderCellContent(dateKey, 'vigilantes', size).map((c, i) => <div key={i}>{c}</div>)}
-                </>
-            );
-        };
-        
         return (
-             <div className="space-y-6">
-                 <div className="p-4 bg-white">
-                    <h1 className="text-3xl font-bold text-center text-blue-800 mb-2">PROGRAMA DE PRIVILEGIOS</h1>
-                    <h2 className="text-xl font-semibold text-center text-blue-700 mb-6">CONG. CERRO DE LA SILLA-GPE - {selectedMonth} {selectedYear}</h2>
-
-                    <div className="space-y-4 text-xs overflow-x-auto">
-                        {weeks.map(([weekStart, weekMeetings]) => {
-                            const tueDateKey = weekMeetings.tuesday;
-                            const satDateKey = weekMeetings.saturday;
-                            const tueSchedule = tueDateKey ? currentSchedule.schedule[tueDateKey] : null;
-                            const satSchedule = satDateKey ? currentSchedule.schedule[satDateKey] : null;
-
-                            return (
-                                <div key={weekStart} className="border rounded-lg overflow-hidden min-w-[800px]">
-                                    <div className="grid grid-cols-[120px_1fr_1fr] bg-gray-100 font-bold text-center">
-                                        <div className="p-2 border-b border-r">Privilegio</div>
-                                        <div className="p-2 border-b border-r">
-                                            {isEditing && tueSchedule ? (
-                                                <input type="text" value={tueSchedule.fechaReunion || ''} onChange={(e) => handleEditChange(tueDateKey!, 'fechaReunion', e.target.value)} className="w-full bg-inherit text-center font-bold p-0 border-0"/>
-                                            ) : ( <span>{tueSchedule?.fechaReunion || ''}</span> )}
-                                            {isEditing && tueSchedule ? (
-                                                 <input type="text" value={tueSchedule.reunionHorario || ''} onChange={(e) => handleEditChange(tueDateKey!, 'reunionHorario', e.target.value)} className="w-full bg-inherit text-center font-normal p-0 border-0"/>
-                                            ) : ( <span className="font-normal block">{tueSchedule?.reunionHorario || '7:30 p. m.'}</span> )}
-                                        </div>
-                                        <div className="p-2 border-b">
-                                             {isEditing && satSchedule ? (
-                                                <input type="text" value={satSchedule.fechaReunion || ''} onChange={(e) => handleEditChange(satDateKey!, 'fechaReunion', e.target.value)} className="w-full bg-inherit text-center font-bold p-0 border-0"/>
-                                            ) : ( <span>{satSchedule?.fechaReunion || ''}</span> )}
-                                            {isEditing && satSchedule ? (
-                                                 <input type="text" value={satSchedule.reunionHorario || ''} onChange={(e) => handleEditChange(satDateKey!, 'reunionHorario', e.target.value)} className="w-full bg-inherit text-center font-normal p-0 border-0"/>
-                                            ) : ( <span className="font-normal block">{satSchedule?.reunionHorario || '4:30 p. m.'}</span> )}
-                                        </div>
-                                    </div>
-                                    
-                                    {assignmentsLayout.map(({ label, key, tueSize, satSize }) => (
-                                        <div className="grid grid-cols-[120px_1fr_1fr] border-b last:border-b-0" key={key}>
-                                            <div className="p-2 border-r bg-gray-50 font-semibold flex items-center justify-center text-center">{label}</div>
-                                            <div className="p-2 border-r flex flex-col justify-center gap-1">
-                                                {key === 'vigilantes' 
-                                                    ? renderVigilanciaCell(weekMeetings.tuesday, tueSize)
-                                                    : tueSize > 0 && renderCellContent(weekMeetings.tuesday, key as AssignmentKey, tueSize).map((c, i) => <div key={i}>{c}</div>)}
+            <div className="space-y-6">
+                <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800 flex flex-wrap justify-center gap-x-4 gap-y-1">
+                    <span className="font-semibold">Leyenda:</span>
+                    <span><strong>(AP)</strong>: Acomodador Puerta Principal</span>
+                    <span><strong>(APA)</strong>: Acomodador Puerta Auditorio</span>
+                    <span><strong>(AA)</strong>: Acomodador de Asistentes (Sala)</span>
+                    <span><strong>(AM)</strong>: Micrófonos</span>
+                    <span><strong>(V)</strong>: Vigilantes</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full border-collapse min-w-[1000px] text-sm">
+                        <thead className="bg-blue-900 text-white">
+                            <tr>
+                                <th className="p-2 border-2 border-white w-1/5"></th>
+                                <th className="p-2 border-2 border-white">Presidente Reunión fin de semana</th>
+                                <th className="p-2 border-2 border-white">Acomodadores, micrófonos y vigilantes (ambos días)</th>
+                                <th className="p-2 border-2 border-white">Lector de La Atalaya</th>
+                                <th className="p-2 border-2 border-white">Aseo Y Hospitalidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {displayData.map((week) => (
+                                <tr key={week.weekDateRange} className="align-top">
+                                    <td className="p-3 border-2 border-gray-300 font-bold text-white bg-blue-700 whitespace-pre-line text-center">{week.weekDateRange}</td>
+                                    <td className="p-3 border-2 border-gray-300 text-center">
+                                        {isEditing ? (
+                                            <select value={week.presidente.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'presidente', e.target.value)} className="w-full p-1 border rounded text-xs">
+                                                <option value="">N/A</option>
+                                                {getEligiblePublishers('Presidente').map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
+                                            </select>
+                                        ) : week.presidente.name}
+                                    </td>
+                                    <td className="p-3 border-2 border-gray-300">
+                                        {week.acomodadoresYMicrofonos.map(item => (
+                                            <div key={`${item.originalRoleKey}-${item.originalIndex}`}>
+                                                {isEditing ? (
+                                                    <select value={item.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs mb-1">
+                                                        <option value="">N/A</option>
+                                                        {getEligiblePublishers(ROLE_KEY_TO_NAME[item.originalRoleKey]).map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
+                                                    </select>
+                                                ) : <p>{item.name} ({item.role})</p>}
                                             </div>
-                                            <div className="p-2 flex flex-col justify-center gap-1">
-                                                {key === 'vigilantes'
-                                                    ? renderVigilanciaCell(weekMeetings.saturday, satSize)
-                                                    : satSize > 0 && renderCellContent(weekMeetings.saturday, key as AssignmentKey, satSize).map((c, i) => <div key={i}>{c}</div>)}
+                                        ))}
+                                    </td>
+                                    <td className="p-3 border-2 border-gray-300 text-center">
+                                         {isEditing ? (
+                                            <select value={week.lectorAtalaya.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'lectorAtalaya', e.target.value)} className="w-full p-1 border rounded text-xs">
+                                                <option value="">N/A</option>
+                                                {getEligiblePublishers('Lector de la Atalaya').map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
+                                            </select>
+                                        ) : week.lectorAtalaya.name}
+                                    </td>
+                                    <td className="p-3 border-2 border-gray-300 text-center">
+                                        {isEditing ? (
+                                            <>
+                                                <select value={week.aseo.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'aseo', e.target.value)} className="w-full p-1 border rounded text-xs mb-1">
+                                                    <option value="">N/A</option>{groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+                                                </select>
+                                                <select value={week.hospitalidad.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'hospitalidad', e.target.value)} className="w-full p-1 border rounded text-xs">
+                                                    <option value="">N/A</option>{groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+                                                </select>
+                                            </>
+                                        ) : (
+                                            <div className="whitespace-pre-line">
+                                                {week.aseo.name ? <div>Aseo: {week.aseo.name}</div> : null}
+                                                {week.hospitalidad.name ? <div>Hospitalidad: {week.hospitalidad.name}</div> : null}
                                             </div>
-                                        </div>
-                                    ))}
-
-                                    <div className="grid grid-cols-[120px_1fr_1fr]">
-                                        <div className="p-2 border-r bg-gray-50 font-semibold flex items-center justify-center">Recordatorio WA</div>
-                                        <div className="p-2 border-r flex items-center justify-center">{weekMeetings.tuesday && !isEditing && <button onClick={() => handleCopyToClipboard(weekMeetings.tuesday!)} className="text-blue-600 hover:underline">Copiar</button>}</div>
-                                        <div className="p-2 flex items-center justify-center">{weekMeetings.saturday && !isEditing && <button onClick={() => handleCopyToClipboard(weekMeetings.saturday!)} className="text-blue-600 hover:underline">Copiar</button>}</div>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         );
@@ -581,7 +541,7 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         <tbody className="bg-white divide-y divide-gray-200">
                             {malePublishers.map(pub => (
                                 <tr key={pub.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{[pub.Nombre, pub.Apellido, pub['2do Apellido'], pub['Apellido de casada']].filter(Boolean).join(' ')}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{[pub.Nombre, pub.Apellido].filter(Boolean).join(' ')}</td>
                                     {ALL_ASSIGNMENT_ROLES.map(role => (
                                         <td key={role} className="px-6 py-4 text-center">
                                             <input
@@ -611,9 +571,18 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             {shareModalContent && <ShareModal title={shareModalContent.title} textContent={shareModalContent.text} onClose={() => setShareModalContent(null)} />}
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800">Asignaciones de Reunión</h1>
+                    <h1 className="text-3xl font-bold text-gray-800">Generar Programa de Acomodadores</h1>
                     <div className="flex flex-wrap justify-center gap-2">
-                         {isEditing ? (
+                        {newlyGeneratedSchedule ? (
+                            <>
+                                <button onClick={handleSaveGeneratedSchedule} disabled={isLoading} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
+                                    {isLoading ? 'Guardando...' : 'Guardar Programa'}
+                                </button>
+                                <button onClick={handleDiscardGeneratedSchedule} disabled={isLoading} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 disabled:bg-gray-400">
+                                    Descartar
+                                </button>
+                            </>
+                        ) : isEditing ? (
                              <>
                                 <button onClick={handleSaveChanges} disabled={isLoading} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                                     {isLoading ? 'Guardando...' : 'Guardar Cambios'}
@@ -624,10 +593,10 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                              </>
                          ) : (
                             <>
-                                <button onClick={handleGenerateSchedule} disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                                <button onClick={handleGenerateSchedule} disabled={isLoading || !canConfig} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
                                     {isLoading ? 'Generando...' : 'Generar Programa'}
                                 </button>
-                                <button onClick={() => { setIsEditing(true); setEditableSchedule(JSON.parse(JSON.stringify(scheduleForSelectedMonth))); }} disabled={!scheduleForSelectedMonth} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 disabled:bg-gray-400">
+                                <button onClick={() => { setIsEditing(true); setEditableSchedule(JSON.parse(JSON.stringify(scheduleForSelectedMonth))); }} disabled={!scheduleForSelectedMonth || isLoading || !canConfig} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 disabled:bg-gray-400">
                                     Editar Programa
                                 </button>
                             </>
@@ -643,6 +612,18 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                 </div>
+                
+                {canConfig && !newlyGeneratedSchedule && (
+                     <div className="flex justify-center items-center gap-4 mb-6 p-3 bg-gray-100 rounded-lg">
+                        <span className="font-semibold">Estado del Programa:</span>
+                        <span className={`px-3 py-1 text-sm font-bold rounded-full ${isPublic ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {isPublic ? 'Visible' : 'Oculto'}
+                        </span>
+                        <button onClick={handleToggleVisibility} disabled={isLoading || !scheduleForSelectedMonth} className="px-4 py-2 text-sm bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-gray-400">
+                            {isPublic ? 'Ocultar Programa' : 'Hacer Público'}
+                        </button>
+                    </div>
+                )}
                 
                 <div className="border-b border-gray-200">
                     <nav className="-mb-px flex space-x-8">
