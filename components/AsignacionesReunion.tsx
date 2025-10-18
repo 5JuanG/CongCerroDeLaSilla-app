@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Publisher, MeetingAssignmentSchedule, ModalInfo, DayAssignment } from '../App';
+import { Publisher, MeetingAssignmentSchedule, ModalInfo, DayAssignment, MeetingConfig } from '../App';
 import ShareModal from './ShareModal';
 
 interface AsignacionesReunionProps {
@@ -9,6 +9,7 @@ interface AsignacionesReunionProps {
     onUpdatePublisherAssignments: (publisherId: string, assignments: string[]) => Promise<void>;
     onShowModal: (info: ModalInfo) => void;
     canConfig: boolean;
+    meetingConfig: MeetingConfig;
 }
 
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -28,13 +29,24 @@ const MALE_ONLY_ROLES = ['Presidente', 'Acomodador en la puerta Principal', 'Aco
 
 type AssignmentKey = keyof DayAssignment;
 
+// Helper to format HH:mm to h:mm a.m./p.m.
+const formatTime = (time: string): string => {
+    if (!time) return '';
+    const [hours, minutes] = time.split(':').map(Number);
+    const ampm = hours >= 12 ? 'p. m.' : 'a. m.';
+    const formattedHours = hours % 12 || 12;
+    return `${formattedHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+};
+
+
 const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
     publishers,
     schedules,
     onSaveSchedule,
     onUpdatePublisherAssignments,
     onShowModal,
-    canConfig
+    canConfig,
+    meetingConfig
 }) => {
     const [activeTab, setActiveTab] = useState<'schedule' | 'config'>('schedule');
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -57,13 +69,29 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
         return schedules.find(s => s.year === selectedYear && s.month === selectedMonth);
     }, [schedules, selectedYear, selectedMonth, newlyGeneratedSchedule]);
 
+    // This effect handles resetting ephemeral state (like drafts or edit mode)
+    // ONLY when the user navigates to a new month, year, or tab.
     useEffect(() => {
         setIsEditing(false);
         setEditableSchedule(null);
         setNewlyGeneratedSchedule(null);
-        setIsPublic(scheduleForSelectedMonth?.isPublic || false);
-    }, [selectedMonth, selectedYear, activeTab, scheduleForSelectedMonth]);
+    }, [selectedMonth, selectedYear, activeTab]);
+
+    // This separate effect ensures the UI's visibility toggle (`isPublic`)
+    // is always synchronized with whatever schedule is currently being displayed,
+    // whether it's from the database or a newly generated draft.
+    useEffect(() => {
+        // Use the most current schedule data available to set the public toggle state.
+        const currentSchedule = newlyGeneratedSchedule || scheduleForSelectedMonth;
+        setIsPublic(currentSchedule?.isPublic || false);
+    }, [newlyGeneratedSchedule, scheduleForSelectedMonth]);
     
+    const getPublisherName = useCallback((id: string | null) => {
+        if (!id) return '';
+        const pub = activePublishers.find(p => p.id === id);
+        return pub ? [pub.Nombre, pub.Apellido].filter(Boolean).join(' ') : 'N/A';
+    }, [activePublishers]);
+
     const getEligiblePublishers = useCallback((role: string) => {
         // Start with male publishers who are configured for the role
         let eligible = malePublishers.filter(p => p.asignacionesDisponibles?.includes(role));
@@ -137,23 +165,31 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 return dates;
             };
 
+            const specialEventDates = new Set(meetingConfig.specialEvents.map(e => e.date));
             const monthIndex = MONTHS.indexOf(selectedMonth);
-            const tuesdays = getDatesForWeekday(monthIndex, selectedYear, 2);
-            const saturdays = getDatesForWeekday(monthIndex, selectedYear, 6);
-            const allMeetingDates = [...tuesdays, ...saturdays].sort((a,b) => a.getTime() - b.getTime());
+            
+            const midweekMeetings = getDatesForWeekday(monthIndex, selectedYear, meetingConfig.midweekDay);
+            const weekendMeetings = getDatesForWeekday(monthIndex, selectedYear, meetingConfig.weekendDay);
+
+            const allMeetingDates = [...midweekMeetings, ...weekendMeetings]
+                .filter(date => !specialEventDates.has(date.toISOString().slice(0, 10)))
+                .sort((a,b) => a.getTime() - b.getTime());
+
 
             const queues: { [key: string]: any[] } = {
                 ...Object.fromEntries(ALL_ASSIGNMENT_ROLES.map(role => [role, [...eligible[role]]])),
-                tuesdayAseo: [...groups],
-                saturdayAseo: [...groups],
-                saturdayHospitality: [...groups]
+                midweekAseo: [...groups],
+                weekendAseo: [...groups],
+                weekendHospitality: [...groups]
             };
             
             const newScheduleData: MeetingAssignmentSchedule['schedule'] = {};
 
+            const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
             for (const meetingDate of allMeetingDates) {
-                const isTuesday = meetingDate.getDay() === 2;
-                const dateKey = `${isTuesday ? 'tuesday' : 'saturday'}-${meetingDate.toISOString().slice(0, 10)}`;
+                const isMidweek = meetingDate.getDay() === meetingConfig.midweekDay;
+                const dateKey = `${isMidweek ? 'midweek' : 'weekend'}-${meetingDate.toISOString().slice(0, 10)}`;
                 const assignmentsForDay: DayAssignment = {};
                 const assignedThisDay = new Set<string>();
 
@@ -184,20 +220,20 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                     return group;
                 };
 
-                if (isTuesday) {
-                    assignmentsForDay.fechaReunion = `Martes ${meetingDate.getDate()}`;
-                    assignmentsForDay.reunionHorario = '7:30 p. m.';
-                    assignmentsForDay.vigilanciaHorario = '8:20-8:50 p. m.';
+                if (isMidweek) {
+                    assignmentsForDay.fechaReunion = `${dayNames[meetingConfig.midweekDay]} ${meetingDate.getDate()}`;
+                    assignmentsForDay.reunionHorario = formatTime(meetingConfig.midweekTime);
+                    assignmentsForDay.vigilanciaHorario = '8:20-8:50 p. m.'; // This could also be made configurable
                     assignmentsForDay.acomodadoresPrincipal = getNextAvailable('Acomodador en la puerta Principal', 1);
                     assignmentsForDay.acomodadoresAuditorio = getNextAvailable('Acomodador de la puerta del Auditorio', 1);
                     assignmentsForDay.acomodadoresSala = getNextAvailable('Acomodador de los Asistentes', 2);
                     assignmentsForDay.microfonos = getNextAvailable('Micrófono', 2);
                     assignmentsForDay.vigilantes = getNextAvailable('Vigilante', 3);
-                    assignmentsForDay.aseo = getNextGroup('tuesdayAseo');
-                } else { // Saturday
-                    assignmentsForDay.fechaReunion = `Sábado ${meetingDate.getDate()}`;
-                    assignmentsForDay.reunionHorario = '4:30 p. m.';
-                    assignmentsForDay.vigilanciaHorario = '4:15-4:50 p. m.';
+                    assignmentsForDay.aseo = getNextGroup('midweekAseo');
+                } else { // Weekend
+                    assignmentsForDay.fechaReunion = `${dayNames[meetingConfig.weekendDay]} ${meetingDate.getDate()}`;
+                    assignmentsForDay.reunionHorario = formatTime(meetingConfig.weekendTime);
+                    assignmentsForDay.vigilanciaHorario = '4:15-4:50 p. m.'; // This could also be made configurable
                     
                     assignmentsForDay.conductorAtalaya = getNextAvailable('Conductor de la Atalaya', 1)[0] || undefined;
                     assignmentsForDay.presidente = getNextAvailable('Presidente', 1)[0] || undefined;
@@ -208,8 +244,8 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                     assignmentsForDay.acomodadoresSala = getNextAvailable('Acomodador de los Asistentes', 2);
                     assignmentsForDay.microfonos = getNextAvailable('Micrófono', 2);
                     assignmentsForDay.vigilantes = getNextAvailable('Vigilante', 3);
-                    assignmentsForDay.aseo = getNextGroup('saturdayAseo');
-                    assignmentsForDay.hospitalidad = getNextGroup('saturdayHospitality');
+                    assignmentsForDay.aseo = getNextGroup('weekendAseo');
+                    assignmentsForDay.hospitalidad = getNextGroup('weekendHospitality');
                 }
                 newScheduleData[dateKey] = assignmentsForDay;
             }
@@ -275,12 +311,6 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             setIsLoading(false);
         }
     };
-    
-    const getPublisherName = useCallback((id: string | null) => {
-        if (!id) return '';
-        const pub = activePublishers.find(p => p.id === id);
-        return pub ? [pub.Nombre, pub.Apellido].filter(Boolean).join(' ') : 'N/A';
-    }, [activePublishers]);
     
     const checkForConflicts = useCallback((schedule: MeetingAssignmentSchedule, dateKey: string, role: string, publisherId: string) => {
         if (!publisherId) return;
@@ -369,23 +399,73 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
         }
     };
     
+    const generateShareText = useCallback((assignment: DayAssignment) => {
+        const parts: string[] = [];
+        const isMidweek = !assignment.conductorAtalaya;
+
+        parts.push(`*Programa de Acomodadores y Vigilancia*`);
+        parts.push(`*${assignment.fechaReunion || ''} de ${selectedMonth}*`);
+        parts.push(`*Horario:* ${assignment.reunionHorario || ''}`);
+
+        const addAssignment = (label: string, id: string | string[] | undefined) => {
+            if (!id) return;
+            const names = Array.isArray(id) ? id.map(getPublisherName).join(', ') : getPublisherName(id);
+            if (names) parts.push(`*${label}:* ${names}`);
+        };
+
+        if (isMidweek) {
+            parts.push('\n*ASIGNACIONES ENTRE SEMANA:*');
+        } else {
+            parts.push('\n*ASIGNACIONES FIN DE SEMANA:*');
+            addAssignment('Presidente', assignment.presidente);
+            addAssignment('Conductor de La Atalaya', assignment.conductorAtalaya);
+            addAssignment('Lector de La Atalaya', assignment.lectorAtalaya);
+        }
+        
+        addAssignment('Acomodador (P. Principal)', assignment.acomodadoresPrincipal);
+        addAssignment('Acomodador (P. Auditorio)', assignment.acomodadoresAuditorio);
+        addAssignment('Acomodadores (Asistentes)', assignment.acomodadoresSala);
+        addAssignment('Micrófonos', assignment.microfonos);
+        addAssignment('Vigilantes', assignment.vigilantes);
+        
+        if (assignment.aseo) parts.push(`*Aseo:* Grupo ${assignment.aseo}`);
+        if (!isMidweek && assignment.hospitalidad) {
+            parts.push(`*Hospitalidad:* Grupo ${assignment.hospitalidad}`);
+        }
+
+        return parts.join('\n');
+    }, [selectedMonth, getPublisherName]);
+
+    const handleShareClick = (assignment: DayAssignment) => {
+        const text = generateShareText(assignment);
+        setShareModalContent({
+            title: `Compartir Asignaciones - ${assignment.fechaReunion}`,
+            text: text
+        });
+    };
+    
     const ScheduleView = () => {
         const currentSchedule = isEditing ? editableSchedule : (newlyGeneratedSchedule || scheduleForSelectedMonth);
 
         const displayData = useMemo(() => {
-            if (!currentSchedule?.schedule) return [];
+            if (!currentSchedule?.schedule || !meetingConfig) return [];
+            
+            const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+            const weekendDayName = dayNames[meetingConfig.weekendDay];
+            const midweekDayName = dayNames[meetingConfig.midweekDay];
 
-            const saturdayMeetings = Object.entries(currentSchedule.schedule)
-                .filter(([key]) => key.startsWith('saturday'))
+            const weekendMeetings = Object.entries(currentSchedule.schedule)
+                .filter(([key]) => key.startsWith('weekend'))
                 .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
 
-            return saturdayMeetings.map(([dateKey, assignment]) => {
-                const satDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
-                const tueDate = new Date(satDate);
-                tueDate.setDate(satDate.getDate() - 4);
-                const sunDate = new Date(satDate);
-                sunDate.setDate(satDate.getDate() + 1);
-                const tueDateKey = `tuesday-${tueDate.toISOString().slice(0, 10)}`;
+            return weekendMeetings.map(([dateKey, assignment]) => {
+                const weekendMeetDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
+                
+                const dayDiff = meetingConfig.weekendDay - meetingConfig.midweekDay;
+                const midweekMeetDate = new Date(weekendMeetDate);
+                midweekMeetDate.setDate(weekendMeetDate.getDate() - (dayDiff > 0 ? dayDiff : dayDiff + 7));
+                
+                const midweekDateKey = `midweek-${midweekMeetDate.toISOString().slice(0, 10)}`;
 
                 const getAssignmentsWithRole = (roleKey: keyof DayAssignment, roleAbbr: string) => {
                     const ids = (assignment as any)[roleKey] as string[] | undefined;
@@ -401,23 +481,31 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 ];
 
                 return {
-                    weekDateRange: `Martes ${tueDate.getDate()} de ${MONTHS[tueDate.getMonth()].toLowerCase()}\nDomingo ${sunDate.getDate()} de ${MONTHS[sunDate.getMonth()].toLowerCase()}`,
+                    weekDateRange: `${midweekDayName} ${midweekMeetDate.getDate()} de ${MONTHS[midweekMeetDate.getMonth()].toLowerCase()}\n${weekendDayName} ${weekendMeetDate.getDate()} de ${MONTHS[weekendMeetDate.getMonth()].toLowerCase()}`,
                     presidente: { id: assignment.presidente, name: getPublisherName(assignment.presidente) },
                     lectorAtalaya: { id: assignment.lectorAtalaya, name: getPublisherName(assignment.lectorAtalaya) },
                     acomodadoresYMicrofonos,
                     aseo: { id: assignment.aseo, name: assignment.aseo ? `Grupo ${assignment.aseo}` : '' },
                     hospitalidad: { id: assignment.hospitalidad, name: assignment.hospitalidad ? `Grupo ${assignment.hospitalidad}` : '' },
-                    tuesdayDateKey: tueDateKey,
-                    saturdayDateKey: dateKey,
+                    midweekDateKey: midweekDateKey,
+                    weekendDateKey: dateKey,
+                    midweekAssignment: currentSchedule.schedule[midweekDateKey],
+                    weekendAssignment: assignment
                 };
             });
-        }, [currentSchedule, getPublisherName]);
+        }, [currentSchedule, getPublisherName, meetingConfig]);
 
         if (!currentSchedule) {
             return <p className="text-center text-gray-500 py-8">No hay programa generado para este mes. Haga clic en "Generar Programa".</p>;
         }
 
         const groups = [...new Set(activePublishers.map(p => p.Grupo).filter(Boolean) as string[])].sort();
+
+        const WhatsAppIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 hover:text-green-700" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.315 1.731 6.086l.287.468-1.125 4.089 4.16-1.087.436.26z"/>
+            </svg>
+        );
 
         return (
             <div className="space-y-6">
@@ -443,10 +531,20 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         <tbody>
                             {displayData.map((week) => (
                                 <tr key={week.weekDateRange} className="align-top">
-                                    <td className="p-3 border-2 border-gray-300 font-bold text-white bg-blue-700 whitespace-pre-line text-center">{week.weekDateRange}</td>
+                                    <td className="p-3 border-2 border-gray-300 font-bold text-white bg-blue-700 whitespace-pre-line text-center">
+                                        <div className="flex justify-center items-center gap-2">
+                                            {week.midweekAssignment && (
+                                                <button onClick={() => handleShareClick(week.midweekAssignment!)} title={`Compartir asignaciones para ${week.midweekAssignment.fechaReunion}`} className="p-1 bg-white/20 rounded-full"><WhatsAppIcon/></button>
+                                            )}
+                                            <span className="flex-grow">{week.weekDateRange}</span>
+                                            {week.weekendAssignment && (
+                                                <button onClick={() => handleShareClick(week.weekendAssignment!)} title={`Compartir asignaciones para ${week.weekendAssignment.fechaReunion}`} className="p-1 bg-white/20 rounded-full"><WhatsAppIcon/></button>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="p-3 border-2 border-gray-300 text-center">
                                         {isEditing ? (
-                                            <select value={week.presidente.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'presidente', e.target.value)} className="w-full p-1 border rounded text-xs">
+                                            <select value={week.presidente.id || ''} onChange={e => handleEditChange(week.weekendDateKey, 'presidente', e.target.value)} className="w-full p-1 border rounded text-xs">
                                                 <option value="">N/A</option>
                                                 {getEligiblePublishers('Presidente').map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
                                             </select>
@@ -456,7 +554,7 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                         {week.acomodadoresYMicrofonos.map(item => (
                                             <div key={`${item.originalRoleKey}-${item.originalIndex}`}>
                                                 {isEditing ? (
-                                                    <select value={item.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs mb-1">
+                                                    <select value={item.id || ''} onChange={e => handleEditChange(week.weekendDateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs mb-1">
                                                         <option value="">N/A</option>
                                                         {getEligiblePublishers(ROLE_KEY_TO_NAME[item.originalRoleKey]).map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
                                                     </select>
@@ -466,7 +564,7 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                     </td>
                                     <td className="p-3 border-2 border-gray-300 text-center">
                                          {isEditing ? (
-                                            <select value={week.lectorAtalaya.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'lectorAtalaya', e.target.value)} className="w-full p-1 border rounded text-xs">
+                                            <select value={week.lectorAtalaya.id || ''} onChange={e => handleEditChange(week.weekendDateKey, 'lectorAtalaya', e.target.value)} className="w-full p-1 border rounded text-xs">
                                                 <option value="">N/A</option>
                                                 {getEligiblePublishers('Lector de la Atalaya').map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
                                             </select>
@@ -475,10 +573,10 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                     <td className="p-3 border-2 border-gray-300 text-center">
                                         {isEditing ? (
                                             <>
-                                                <select value={week.aseo.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'aseo', e.target.value)} className="w-full p-1 border rounded text-xs mb-1">
+                                                <select value={week.aseo.id || ''} onChange={e => handleEditChange(week.weekendDateKey, 'aseo', e.target.value)} className="w-full p-1 border rounded text-xs mb-1">
                                                     <option value="">N/A</option>{groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
                                                 </select>
-                                                <select value={week.hospitalidad.id || ''} onChange={e => handleEditChange(week.saturdayDateKey, 'hospitalidad', e.target.value)} className="w-full p-1 border rounded text-xs">
+                                                <select value={week.hospitalidad.id || ''} onChange={e => handleEditChange(week.weekendDateKey, 'hospitalidad', e.target.value)} className="w-full p-1 border rounded text-xs">
                                                     <option value="">N/A</option>{groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
                                                 </select>
                                             </>

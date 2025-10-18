@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { UserRole, View, Publisher, UserData, Permission, ALL_PERMISSIONS } from '../App';
+import { UserRole, View, Publisher, UserData, Permission, ALL_PERMISSIONS, MeetingConfig, SpecialEvent } from '../App';
 
 declare const db: any;
 declare const firebase: any;
@@ -13,6 +13,8 @@ interface ControlAccesoProps {
     onLinkUserToPublisher: (userId: string, publisherId: string) => Promise<void>;
     isPublicReportFormEnabled: boolean;
     onUpdatePublicReportFormEnabled: (isEnabled: boolean) => Promise<void>;
+    meetingConfig: MeetingConfig | null;
+    onSaveMeetingConfig: (config: MeetingConfig) => Promise<void>;
     onResetData: () => Promise<void>;
     currentUserRole: UserRole;
     canManage: boolean;
@@ -179,6 +181,8 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
     onLinkUserToPublisher,
     isPublicReportFormEnabled,
     onUpdatePublicReportFormEnabled,
+    meetingConfig,
+    onSaveMeetingConfig,
     onResetData,
     currentUserRole,
     canManage
@@ -190,6 +194,10 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
     const [linkingUser, setLinkingUser] = useState<UserData | null>(null);
     const [enableReset, setEnableReset] = useState(false);
+
+    // State for meeting config form
+    const [localMeetingConfig, setLocalMeetingConfig] = useState<MeetingConfig | null>(null);
+    const [newEvent, setNewEvent] = useState({ date: '', description: '' });
 
     const { uidToPublisherMap, unlinkedPublishers } = useMemo(() => {
         const map = new Map<string, Publisher>();
@@ -207,6 +215,42 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
         const candidates = users.filter((u: UserData) => ['admin', 'overseer', 'secretario'].includes(u.role));
         setCommitteeCandidates(candidates);
     }, [users, initialCommitteeMembers]);
+
+    useEffect(() => {
+        if (meetingConfig) {
+            setLocalMeetingConfig(JSON.parse(JSON.stringify(meetingConfig)));
+        }
+    }, [meetingConfig]);
+    
+    const handleMeetingConfigChange = (field: keyof MeetingConfig, value: any) => {
+        if (!localMeetingConfig) return;
+        setLocalMeetingConfig(prev => prev ? { ...prev, [field]: value } : null);
+    };
+
+    const handleAddEvent = () => {
+        if (!localMeetingConfig || !newEvent.date || !newEvent.description) return;
+        const newSpecialEvent: SpecialEvent = { ...newEvent, id: crypto.randomUUID() };
+        handleMeetingConfigChange('specialEvents', [...localMeetingConfig.specialEvents, newSpecialEvent]);
+        setNewEvent({ date: '', description: '' });
+    };
+
+    const handleRemoveEvent = (id: string) => {
+        if (!localMeetingConfig) return;
+        handleMeetingConfigChange('specialEvents', localMeetingConfig.specialEvents.filter(e => e.id !== id));
+    };
+
+    const handleSaveMeetingConfig = async () => {
+        if (!localMeetingConfig) return;
+        setStatus('Guardando configuración de reuniones...');
+        try {
+            await onSaveMeetingConfig(localMeetingConfig);
+            setStatus('¡Configuración de reuniones guardada!');
+        } catch(e) {
+            setStatus('Error al guardar la configuración.');
+        } finally {
+            setTimeout(() => setStatus(''), 3000);
+        }
+    };
 
     const handleRoleChange = async (userId: string, newRole: UserRole) => {
         setStatus('Actualizando rol...');
@@ -286,13 +330,68 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
         }
     };
 
+    const dayOptions = [
+        { label: 'Domingo', value: 0 }, { label: 'Lunes', value: 1 }, { label: 'Martes', value: 2 },
+        { label: 'Miércoles', value: 3 }, { label: 'Jueves', value: 4 }, { label: 'Viernes', value: 5 },
+        { label: 'Sábado', value: 6 }
+    ];
+
     return (
         <div className="container mx-auto max-w-6xl space-y-12">
             {editingUser && <PermissionsModal user={editingUser} onClose={() => setEditingUser(null)} onSave={handleSavePermissions} />}
             {linkingUser && <LinkPublisherModal user={linkingUser} unlinkedPublishers={unlinkedPublishers} onClose={() => setLinkingUser(null)} onLink={handleLink} />}
 
-            <h1 className="text-3xl font-bold text-center text-gray-800 mb-4">Control de Acceso (Versión Corregida)</h1>
+            <h1 className="text-3xl font-bold text-center text-gray-800 mb-4">Control de Acceso y Configuración</h1>
             {status && <p className="text-center text-blue-600 font-semibold mb-4">{status}</p>}
+
+            <div className="bg-white shadow-md rounded-lg p-6">
+                <h2 className="text-xl font-bold text-blue-700 mb-2">Configuración de Reuniones y Eventos</h2>
+                <p className="text-sm text-gray-500 mb-4">Establezca los horarios de reunión y las fechas en que se cancelan por eventos especiales. Estos ajustes se aplicarán a los programas que se generen.</p>
+                {localMeetingConfig && (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 border-b pb-6 mb-6">
+                            <div>
+                                <h3 className="font-semibold text-gray-800 mb-2">Reunión de entre semana</h3>
+                                <div className="flex gap-4">
+                                    <select value={localMeetingConfig.midweekDay} onChange={e => handleMeetingConfigChange('midweekDay', Number(e.target.value))} className="p-2 border rounded-md w-full">
+                                        {dayOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                                    </select>
+                                    <input type="time" value={localMeetingConfig.midweekTime} onChange={e => handleMeetingConfigChange('midweekTime', e.target.value)} className="p-2 border rounded-md"/>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-gray-800 mb-2">Reunión de fin de semana</h3>
+                                <div className="flex gap-4">
+                                     <select value={localMeetingConfig.weekendDay} onChange={e => handleMeetingConfigChange('weekendDay', Number(e.target.value))} className="p-2 border rounded-md w-full">
+                                        {dayOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                                    </select>
+                                    <input type="time" value={localMeetingConfig.weekendTime} onChange={e => handleMeetingConfigChange('weekendTime', e.target.value)} className="p-2 border rounded-md"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="font-semibold text-gray-800 mb-2">Eventos Especiales (sin reunión)</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-4">
+                                <input type="date" value={newEvent.date} onChange={e => setNewEvent(p => ({...p, date: e.target.value}))} className="p-2 border rounded-md"/>
+                                <input type="text" value={newEvent.description} onChange={e => setNewEvent(p => ({...p, description: e.target.value}))} placeholder="Descripción (Ej: Asamblea)" className="p-2 border rounded-md"/>
+                                <button onClick={handleAddEvent} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Añadir Evento</button>
+                            </div>
+                            <ul className="space-y-2 max-h-40 overflow-y-auto">
+                                {localMeetingConfig.specialEvents.map(event => (
+                                    <li key={event.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                        <div>
+                                            <span className="font-medium">{event.date}</span> - <span className="text-gray-600">{event.description}</span>
+                                        </div>
+                                        <button onClick={() => handleRemoveEvent(event.id)} className="text-red-500 hover:text-red-700 font-bold">&times;</button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        {canManage && <div className="text-right mt-6"><button onClick={handleSaveMeetingConfig} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Guardar Configuración de Reuniones</button></div>}
+                    </>
+                )}
+            </div>
 
             <div className="bg-white shadow-md rounded-lg p-6">
                 <h2 className="text-xl font-bold text-blue-700 mb-2">Comité de Servicio</h2>

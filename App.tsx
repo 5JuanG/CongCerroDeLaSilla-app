@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -194,6 +195,20 @@ export interface PublicTalkAssignment {
     phone?: string;
 }
 
+export interface SpecialEvent {
+    id: string;
+    date: string; // YYYY-MM-DD
+    description: string;
+}
+
+export interface MeetingConfig {
+    midweekDay: number; // 0 (Sun) - 6 (Sat)
+    midweekTime: string; // HH:mm
+    weekendDay: number;
+    weekendTime: string;
+    specialEvents: SpecialEvent[];
+}
+
 export interface ModalInfo {
     type: 'success' | 'error' | 'info';
     title: string;
@@ -238,6 +253,7 @@ export const compressImage = (file: File, targetWidth: number = 1024): Promise<F
 const App: React.FC = () => {
     const [user, setUser] = useState<UserData | null>(null);
     const [appConfig, setAppConfig] = useState<{ is15HourOptionEnabled: boolean; isPublicReportFormEnabled: boolean; } | null>(null);
+    const [meetingConfig, setMeetingConfig] = useState<MeetingConfig | null>(null);
     const [initialization, setInitialization] = useState({ authChecked: false, configLoaded: false });
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [activeView, setActiveView] = useState<View>('home');
@@ -263,7 +279,7 @@ const App: React.FC = () => {
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
     
     // Derived loading state
-    const loading = !initialization.authChecked || !initialization.configLoaded;
+    const loading = !initialization.authChecked || !initialization.configLoaded || !meetingConfig;
     
     // Derived state for permissions
     const canManage = useMemo(() => {
@@ -363,10 +379,29 @@ const App: React.FC = () => {
             setInitialization(prev => ({ ...prev, configLoaded: true }));
         });
 
+        const meetingConfigUnsubscribe = db.collection('settings').doc('meeting_config').onSnapshot((doc: any) => {
+            if (!isMounted) return;
+            const data = doc.data();
+            setMeetingConfig({
+                midweekDay: data?.midweekDay ?? 2, // Default Tuesday
+                midweekTime: data?.midweekTime ?? '19:30',
+                weekendDay: data?.weekendDay ?? 6, // Default Saturday
+                weekendTime: data?.weekendTime ?? '16:30',
+                specialEvents: data?.specialEvents ?? []
+            });
+        }, (err: Error) => {
+            if (!isMounted) return;
+            console.error("Meeting config listener failed:", err);
+            setMeetingConfig({ // Provide safe defaults on error
+                midweekDay: 2, midweekTime: '19:30', weekendDay: 6, weekendTime: '16:30', specialEvents: []
+            });
+        });
+
         return () => {
             isMounted = false;
             authUnsubscribe();
             configUnsubscribe();
+            meetingConfigUnsubscribe();
             if (userProfileUnsubscribe) {
                 userProfileUnsubscribe();
             }
@@ -741,6 +776,9 @@ const App: React.FC = () => {
      const handleUpdatePublicReportFormEnabled = (isEnabled: boolean) => {
         return db.collection('settings').doc('config').set({ isPublicReportFormEnabled: isEnabled }, { merge: true });
     };
+    const handleSaveMeetingConfig = (config: MeetingConfig) => {
+        return db.collection('settings').doc('meeting_config').set(config, { merge: true });
+    };
     const handleResetData = async () => {
         if (user?.role !== 'admin') {
             setModalInfo({type: 'error', title: 'Permiso Denegado', message: 'Solo los administradores pueden realizar esta acción.'});
@@ -867,13 +905,13 @@ const App: React.FC = () => {
         informeServicio: <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => setActiveView('precursorAuxiliar')} invitationContent={invitationContent} />,
         territorios: <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} territoryMaps={territoryMaps} onUploadMap={handleUploadTerritoryMap} onDeleteMap={handleDeleteTerritoryMap} canManage={canManage} onShowModal={setModalInfo} />,
         precursorAuxiliar: <PrecursorAuxiliar userRole={user?.role || 'publisher'} isCommitteeMember={user?.isCommitteeMember || false} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} />,
-        controlAcceso: <ControlAcceso users={users} publishers={publishers} committeeMembers={committeeMembers} onUpdateUserPermissions={handleUpdateUserPermissions} onUpdateServiceCommittee={handleUpdateServiceCommittee} onLinkUserToPublisher={handleLinkUserToPublisher} isPublicReportFormEnabled={appConfig?.isPublicReportFormEnabled || false} onUpdatePublicReportFormEnabled={handleUpdatePublicReportFormEnabled} onResetData={handleResetData} currentUserRole={user?.role || 'publisher'} canManage={canManage} />,
+        controlAcceso: <ControlAcceso users={users} publishers={publishers} committeeMembers={committeeMembers} onUpdateUserPermissions={handleUpdateUserPermissions} onUpdateServiceCommittee={handleUpdateServiceCommittee} onLinkUserToPublisher={handleLinkUserToPublisher} isPublicReportFormEnabled={appConfig?.isPublicReportFormEnabled || false} onUpdatePublicReportFormEnabled={handleUpdatePublicReportFormEnabled} onResetData={handleResetData} currentUserRole={user?.role || 'publisher'} canManage={canManage} meetingConfig={meetingConfig} onSaveMeetingConfig={handleSaveMeetingConfig} />,
         informeMensualGrupo: <InformeMensualGrupo publishers={publishers} serviceReports={serviceReports} onBatchUpdateReports={handleBatchUpdateServiceReports} />,
         gestionContenidoInvitacion: <GestionContenidoInvitacion invitationContent={invitationContent} onAddInvitation={handleAddInvitation} onDeleteInvitation={handleDeleteInvitation} homepageContent={homepageContent} onAddHomepageContent={handleAddHomepageContent} onDeleteHomepageContent={handleDeleteHomepageContent} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} onUpdate15HourOption={handleUpdate15HourOption} />,
         informeMensualConsolidado: <InformeMensualConsolidado publishers={publishers} serviceReports={serviceReports} />,
         dashboardCursos: <DashboardCursos publishers={publishers} serviceReports={serviceReports} />,
         dashboardPrecursores: <DashboardPrecursores publishers={publishers} serviceReports={serviceReports} pioneerApplications={pioneerApplications} />,
-        asignacionesReunion: <AsignacionesReunion publishers={publishers} schedules={schedules} onSaveSchedule={handleSaveMeetingSchedule} onUpdatePublisherAssignments={handleUpdatePublisherAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configAsignacionesReunion')} />,
+        asignacionesReunion: <AsignacionesReunion publishers={publishers} schedules={schedules} onSaveSchedule={handleSaveMeetingSchedule} onUpdatePublisherAssignments={handleUpdatePublisherAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configAsignacionesReunion')} meetingConfig={meetingConfig!} />,
         programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} />,
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
@@ -938,18 +976,19 @@ const App: React.FC = () => {
                 let nextTalk: (PublicTalkAssignment & { talkNumber: number }) | null = null;
                 let nextDate = new Date('9999-12-31');
     
-                const visibilityMap = publicTalksSchedule.publicVisibility || {};
-
                 Object.entries(publicTalksSchedule).forEach(([talkNumStr, assignments]) => {
-                    if(Array.isArray(assignments)) {
+                    const talkNumber = parseInt(talkNumStr, 10);
+                    // FIX: Ensure the key from the schedule is a valid number and the value is an array before processing.
+                    // This prevents iterating over properties like 'outgoingTalks' or 'publicVisibility'.
+                    if (!isNaN(talkNumber) && Array.isArray(assignments)) {
                         assignments.forEach(a => {
                             if (a && a.date) {
                                 const talkDate = new Date(a.date + 'T00:00:00');
-                                const yearMonthKey = `${talkDate.getFullYear()}-${MONTHS[talkDate.getMonth()]}`;
                                 
-                                if (visibilityMap[yearMonthKey] && talkDate >= today && talkDate < nextDate) {
+                                if (talkDate >= today && talkDate < nextDate) {
                                     nextDate = talkDate;
-                                    nextTalk = { ...a, talkNumber: parseInt(talkNumStr, 10) };
+                                    // FIX: Assign the parsed and validated talkNumber.
+                                    nextTalk = { ...a, talkNumber: talkNumber };
                                 }
                             }
                         });
@@ -960,7 +999,7 @@ const App: React.FC = () => {
     
             return (
                 <div className="text-center p-4 sm:p-8 bg-white rounded-lg shadow-md max-w-4xl mx-auto">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-blue-800">Bienvenido al Portal Público</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-blue-800">Congregacion Cerro de la Silla-Guadalupe, Bienvenido</h2>
                     <p className="mt-4 text-md sm:text-lg text-gray-600">Aquí puede ver los programas de las reuniones, consultar territorios y más.</p>
                     <p className="mt-2 text-gray-500">Para acceder a todas las funciones, por favor inicie sesión.</p>
                     {upcomingTalk && (
@@ -981,7 +1020,7 @@ const App: React.FC = () => {
                 publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
                 break;
             case 'asignacionesReunion':
-                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
+                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} meetingConfig={meetingConfig!} />;
                 break;
             case 'reunionPublica':
                 publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => {}} canManage={false} publishers={publishers} onShowModal={setModalInfo} />;
