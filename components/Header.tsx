@@ -11,7 +11,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ user, activeViewLabel }) => {
     return (
-        <header className="flex-shrink-0 flex justify-between items-center pb-4 border-b border-gray-200">
+        <header className="flex-shrink-0 flex justify-between items-center p-4 sm:p-6 border-b border-gray-200 bg-white">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-800 truncate pr-2">{activeViewLabel}</h1>
             <div className="flex items-center gap-3 sm:gap-4">
                 <div className="text-right">

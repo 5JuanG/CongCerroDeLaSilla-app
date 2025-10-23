@@ -61,7 +61,8 @@ const manageablePermissions: { label: string; items: { permission: Permission; l
             { permission: 'editRegistrosServicio', label: 'Editar registro en "Tarjetas de Publicador"' },
             { permission: 'manageGrupos', label: 'Administrar en "Grupos"' },
             { permission: 'configVidaYMinisterio', label: 'Configuración en "Vida y Ministerio"' },
-            { permission: 'configAsignacionesReunion', label: 'Configuración de Participantes en "Asignación Reunión"' },
+            { permission: 'manageMeetingAssignments', label: 'Generar/Editar Programa (Acomodadores)' },
+            { permission: 'configAsignacionesReunion', label: 'Configurar Participantes (Acomodadores)' },
             { permission: 'managePublicTalks', label: 'Guardar/Editar en "Reunión Pública"' },
             { permission: 'resetData', label: 'Limpiar datos' },
         ]

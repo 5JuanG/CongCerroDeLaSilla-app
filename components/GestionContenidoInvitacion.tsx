@@ -1,25 +1,25 @@
-
-
 import React, { useState, useEffect } from 'react';
-import { InvitationContent, HomepageContent, compressImage } from '../App';
+import { InvitationContent, HomepageContent, compressImage, ModalInfo } from '../App';
 
 interface GestionContenidoProps {
     invitationContent: InvitationContent[];
-    onAddInvitation: (imageFile: File, phrase: string, onProgress?: (progress: number) => void) => Promise<void>;
+    onAddInvitation: (imageDataUrl: string, phrase: string) => Promise<void>;
     onDeleteInvitation: (contentId: string) => Promise<void>;
     
     homepageContent: HomepageContent[];
-    onAddHomepageContent: (imageFile: File, title: string, phrase: string, onProgress?: (progress: number) => void) => Promise<void>;
+    onAddHomepageContent: (imageDataUrl: string, title: string, phrase: string) => Promise<void>;
     onDeleteHomepageContent: (contentId: string) => Promise<void>;
 
     is15HourOptionEnabled: boolean;
     onUpdate15HourOption: (isEnabled: boolean) => Promise<void>;
+    onShowModal: (info: ModalInfo) => void;
 }
 
 const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({ 
     invitationContent, onAddInvitation, onDeleteInvitation, 
     homepageContent, onAddHomepageContent, onDeleteHomepageContent,
-    is15HourOptionEnabled, onUpdate15HourOption 
+    is15HourOptionEnabled, onUpdate15HourOption,
+    onShowModal
 }) => {
     const [activeTab, setActiveTab] = useState<'homepage' | 'invitation' | 'settings'>('homepage');
 
@@ -32,14 +32,10 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
     const [homepageImageFiles, setHomepageImageFiles] = useState<File[]>([]);
     const [homepageImagePreviews, setHomepageImagePreviews] = useState<string[]>([]);
 
-    const [uploadState, setUploadState] = useState({
-        homepage: { isUploading: false, progress: 0 },
-        invitation: { isUploading: false, progress: 0 }
-    });
-    const [status, setStatus] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
-        const urlsToClean = [...invitationImagePreviews, ...homepageImagePreviews];
+        const urlsToClean = [...invitationImagePreviews, ...homepageImagePreviews].filter(url => url.startsWith('blob:'));
         return () => {
             urlsToClean.forEach(url => URL.revokeObjectURL(url));
         };
@@ -48,7 +44,6 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'invitation' | 'homepage') => {
         if (e.target.files) {
             const files = Array.from(e.target.files);
-            // FIX: Add type assertion to resolve 'unknown' type error from TS compiler.
             const newPreviews = files.map(file => URL.createObjectURL(file as Blob));
             if (type === 'invitation') {
                 setInvitationImageFiles(files);
@@ -77,51 +72,64 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
         const files = type === 'invitation' ? invitationImageFiles : homepageImageFiles;
         const phrase = type === 'invitation' ? invitationPhrase : homepagePhrase;
         const title = type === 'homepage' ? homepageTitle : '';
-
+    
         if (files.length === 0 || !phrase.trim() || (type === 'homepage' && !title.trim())) {
-            setStatus('Por favor, complete todos los campos y seleccione al menos una imagen.');
+            onShowModal({ type: 'error', title: 'Campos Incompletos', message: 'Por favor, complete todos los campos y seleccione al menos una imagen.' });
             return;
         }
-
-        setUploadState(prev => ({ ...prev, [type]: { isUploading: true, progress: 0 } }));
-        setStatus(`Comprimiendo ${files.length} imágen(es)...`);
-        
+    
+        setIsUploading(true);
+        onShowModal({ type: 'info', title: 'Procesando Imágenes', message: `Comprimiendo y subiendo ${files.length} imágen(es)... Espere un momento.` });
+    
         try {
-            const totalFiles = files.length;
-            const progressPerFile: number[] = new Array(totalFiles).fill(0);
-            
-            const updateOverallStatus = () => {
-                const totalProgress = progressPerFile.reduce((sum, p) => sum + p, 0);
-                const overallPercentage = totalProgress / totalFiles;
-                setUploadState(prev => ({ ...prev, [type]: { ...prev[type], progress: overallPercentage } }));
-            };
-            
-            const compressedFiles = await Promise.all(files.map(file => compressImage(file)));
-            setStatus('Subiendo imágenes...');
-
-            const uploadPromises = compressedFiles.map((file, index) => {
-                const onProgress = (progress: number) => {
-                    progressPerFile[index] = progress;
-                    updateOverallStatus();
-                };
-                return type === 'invitation' 
-                    ? onAddInvitation(file, phrase.trim(), onProgress) 
-                    : onAddHomepageContent(file, title.trim(), phrase.trim(), onProgress);
-            });
-            await Promise.all(uploadPromises);
-            setStatus('¡Contenido añadido con éxito!');
-            if(type === 'invitation') {
-                setInvitationPhrase(''); setInvitationImageFiles([]); setInvitationImagePreviews([]);
-            } else {
-                setHomepageTitle(''); setHomepagePhrase(''); setHomepageImageFiles([]); setHomepageImagePreviews([]);
+            const compressedDataUrls: string[] = await Promise.all(files.map(file => compressImage(file)));
+    
+            let successCount = 0;
+            let failedFiles: string[] = [];
+    
+            for (let i = 0; i < compressedDataUrls.length; i++) {
+                const dataUrl = compressedDataUrls[i];
+                const originalFileName = files[i].name;
+    
+                try {
+                    if (type === 'invitation') {
+                        await onAddInvitation(dataUrl, phrase.trim());
+                    } else {
+                        await onAddHomepageContent(dataUrl, title.trim(), phrase.trim());
+                    }
+                    successCount++;
+                } catch (uploadError) {
+                    console.error(`Error uploading ${originalFileName}:`, uploadError);
+                    failedFiles.push(originalFileName);
+                }
             }
-            setTimeout(() => setStatus(''), 5000);
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al subir el contenido. Alguna de las imágenes pudo haber fallado.';
-            setStatus(`Error: ${errorMessage}`);
-            console.error(error);
+    
+            if (failedFiles.length > 0) {
+                onShowModal({
+                    type: 'error',
+                    title: 'Carga Incompleta',
+                    message: `Se subieron ${successCount} de ${compressedDataUrls.length} imágenes.\n\nFallaron: ${failedFiles.join(', ')}`
+                });
+            } else {
+                onShowModal({
+                    type: 'success',
+                    title: 'Carga Exitosa',
+                    message: `¡Se añadieron ${successCount} imágenes con éxito!`
+                });
+            }
+    
+            // Reset form only on full success
+            if (failedFiles.length === 0) {
+                if (type === 'invitation') {
+                    setInvitationPhrase(''); setInvitationImageFiles([]); setInvitationImagePreviews([]);
+                } else {
+                    setHomepageTitle(''); setHomepagePhrase(''); setHomepageImageFiles([]); setHomepageImagePreviews([]);
+                }
+            }
+        } catch (compressionError) {
+            onShowModal({ type: 'error', title: 'Error de Compresión', message: `No se pudieron procesar las imágenes: ${(compressionError as Error).message}` });
         } finally {
-            setUploadState(prev => ({ ...prev, [type]: { isUploading: false, progress: 0 } }));
+            setIsUploading(false);
         }
     };
     
@@ -136,19 +144,6 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
         >
             {label}
         </button>
-    );
-    
-    const UploadButtonWithProgress: React.FC<{ isUploading: boolean; progress: number; text: string }> = ({ isUploading, progress, text }) => (
-        <>
-            <button type="submit" disabled={isUploading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-wait transition-colors">
-                {isUploading ? (progress > 0 ? `Subiendo... ${progress.toFixed(0)}%` : 'Procesando imágenes...') : text}
-            </button>
-            {isUploading && (
-                <div className="mt-4 w-full bg-gray-200 rounded-full h-2.5">
-                    <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress || 0}%` }}></div>
-                </div>
-            )}
-        </>
     );
 
     return (
@@ -187,7 +182,9 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
                                     <label htmlFor="homepagePhrase" className="block text-sm font-medium text-gray-700 mb-1">3. Frase / Descripción</label>
                                     <textarea id="homepagePhrase" value={homepagePhrase} onChange={e => setHomepagePhrase(e.target.value)} rows={2} placeholder="Ej: Unamos nuestras voces para llevar este mensaje de esperanza." className="w-full p-2 border border-gray-300 rounded-md shadow-sm"/>
                                 </div>
-                                <UploadButtonWithProgress isUploading={uploadState.homepage.isUploading} progress={uploadState.homepage.progress} text="Añadir a Carrusel"/>
+                                <button type="submit" disabled={isUploading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-wait transition-colors">
+                                    {isUploading ? 'Subiendo...' : 'Añadir a Carrusel'}
+                                </button>
                             </form>
                              <h3 className="text-lg font-bold text-gray-700 mt-8 mb-4">Contenido del Carrusel Actual</h3>
                              {homepageContent.length > 0 ? (
@@ -219,10 +216,10 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
                                     <label htmlFor="invitationPhrase" className="block text-sm font-medium text-gray-700 mb-1">2. Frase de Ánimo</label>
                                     <textarea id="invitationPhrase" value={invitationPhrase} onChange={e => setInvitationPhrase(e.target.value)} rows={3} placeholder="Ej: ¡Tu celo es contagioso! ¿Has pensado en ser precursor?" className="w-full p-2 border border-gray-300 rounded-md shadow-sm"/>
                                 </div>
-                                <UploadButtonWithProgress isUploading={uploadState.invitation.isUploading} progress={uploadState.invitation.progress} text="Añadir a Invitaciones"/>
+                                <button type="submit" disabled={isUploading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-wait transition-colors">
+                                    {isUploading ? 'Subiendo...' : 'Añadir a Invitaciones'}
+                                </button>
                             </form>
-                             {status && <p className="text-center font-semibold mt-4 text-blue-600">{status}</p>}
-
                              <h3 className="text-lg font-bold text-gray-700 mt-8 mb-4">Contenido de Invitación Actual</h3>
                             {invitationContent.length > 0 ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

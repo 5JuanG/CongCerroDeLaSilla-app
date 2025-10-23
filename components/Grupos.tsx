@@ -154,8 +154,8 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {Object.entries(activeGroupsData).map(([name, data]) => {
-                        if (data.members.length === 0) return null;
                         const groupData = data as { members: Publisher[]; prCount: number };
+                        if (groupData.members.length === 0) return null;
                         return (
                         <div key={name} className="bg-white rounded-lg shadow-md flex flex-col">
                             <div className="bg-blue-600 text-white p-3 font-bold rounded-t-lg">{name}</div>
@@ -187,12 +187,12 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                                 <div key={groupName} className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex flex-col">
                                     <div className="bg-yellow-400 text-yellow-900 p-3 font-bold rounded-t-lg">Grupo: {groupName}</div>
                                     <ul className="flex-grow p-2">
-                                        {members.map(p => (
+                                        {(members as Publisher[]).map(p => (
                                             <li key={p.id} className="p-2 border-b border-yellow-200/50 text-sm">{getPublisherFullName(p)}</li>
                                         ))}
                                     </ul>
                                     <div className="bg-yellow-100 p-3 rounded-b-lg font-bold text-sm">
-                                        Total Inactivos: {members.length}
+                                        Total Inactivos: {(members as Publisher[]).length}
                                     </div>
                                 </div>
                             ))}
@@ -215,7 +215,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                                         ))}
                                     </ul>
                                     <div className="bg-gray-200 p-3 rounded-b-lg font-bold text-sm">
-                                        Total: {members.length}
+                                        Total: {(members as Publisher[]).length}
                                     </div>
                                 </div>
                             ))}
@@ -235,7 +235,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                 </h1>
                 {canManage && (
                     <button onClick={() => setView(v => v === 'summary' ? 'admin' : 'summary')} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
-                        {view === 'summary' ? 'Ir a Administrar' : 'Volver al Resumen'}
+                        {view === 'summary' ? 'Ir a Administrar' : 'Volver a Resumen'}
                     </button>
                 )}
             </div>
@@ -243,26 +243,29 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             {view === 'summary' ? <SummaryView /> : <AdminView />}
 
             {editingPublisher && (
-                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-                        <h2 className="text-xl font-bold mb-4">Editar Grupo de Publicador</h2>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
+                        <h2 className="text-xl font-bold mb-4">Editar Grupo de {getPublisherFullName(editingPublisher)}</h2>
                         <div className="mb-4">
-                            <label className="block font-bold">Nombre</label>
-                            <input type="text" value={getPublisherFullName(editingPublisher)} readOnly className="w-full p-2 bg-gray-100 rounded"/>
-                        </div>
-                        <div className="mb-6">
-                            <label htmlFor="edit-group" className="block font-bold">Grupo</label>
-                            <select id="edit-group" value={editingPublisher.Grupo || ''} onChange={e => setEditingPublisher(p => p ? {...p, Grupo: e.target.value} : null)} className="w-full p-2 border rounded">
-                                <option value="">Sin Grupo</option>
-                                {groupNames.map(name => <option key={name} value={name}>{name}</option>)}
-                            </select>
+                            <label htmlFor="edit-group" className="block mb-2">Grupo de Servicio:</label>
+                            <input
+                                id="edit-group"
+                                type="text"
+                                value={editingPublisher.Grupo || ''}
+                                onChange={e => setEditingPublisher({ ...editingPublisher, Grupo: e.target.value })}
+                                className="w-full p-2 border rounded"
+                                list="group-suggestions"
+                            />
+                            <datalist id="group-suggestions">
+                                {groupNames.map(name => <option key={name} value={name} />)}
+                            </datalist>
                         </div>
                         <div className="flex justify-end gap-4">
                             <button onClick={() => setEditingPublisher(null)} className="px-4 py-2 bg-gray-200 rounded-md">Cancelar</button>
                             <button onClick={handleSaveChanges} className="px-4 py-2 bg-blue-600 text-white rounded-md">Guardar</button>
                         </div>
                     </div>
-                 </div>
+                </div>
             )}
         </div>
     );

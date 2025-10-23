@@ -34,7 +34,9 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
             .filter(([key]) => key.startsWith('saturday'))
             .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
 
-        return saturdayMeetings.map(([dateKey, assignment]) => {
+        return saturdayMeetings.map(([dateKey, assignmentUntyped]) => {
+            // FIX: Cast assignment to DayAssignment to access its properties.
+            const assignment = assignmentUntyped as DayAssignment;
             const satDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
             const tueDate = new Date(satDate);
             tueDate.setDate(satDate.getDate() - 4);

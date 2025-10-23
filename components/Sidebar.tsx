@@ -9,6 +9,8 @@ interface SidebarProps {
     userRole: UserRole;
     userPermissions: Permission[];
     isCommitteeMember: boolean;
+    isCollapsed: boolean;
+    setIsCollapsed: (collapsed: boolean) => void;
 }
 
 const NavLink: React.FC<{
@@ -51,9 +53,8 @@ const NavLink: React.FC<{
     );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, userRole, userPermissions, isCommitteeMember }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, userRole, userPermissions, isCommitteeMember, isCollapsed, setIsCollapsed }) => {
     const [isSidebarOpen, setSidebarOpen] = useState(false);
-    const [isCollapsed, setIsCollapsed] = useState(false);
 
     const allNavItems: { view: View; label: string; icon: React.ReactElement; tooltip?: string; }[] = [
         { view: 'home', label: 'Inicio', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
@@ -91,7 +92,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
         // For other users, filter based on their specific permissions array.
         const allowedViews = new Set<View>(userPermissions.filter(p => allNavItems.some(nav => nav.view === p)) as View[]);
 
-        return allNavItems.filter(item => allowedViews.has(item.view));
+        // Always include 'home' view, plus any other views the user has permission for.
+        return allNavItems.filter(item => item.view === 'home' || allowedViews.has(item.view));
 
     }, [userRole, userPermissions, isCommitteeMember]);
 
@@ -145,7 +147,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
             </div>
 
             {/* Sidebar */}
-            <aside className={`flex flex-col bg-blue-900 fixed lg:relative lg:translate-x-0 h-full z-20 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'} ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}`}>
+            <aside className={`flex flex-col bg-blue-900 fixed h-full z-20 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'} lg:translate-x-0 ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}`}>
                 {sidebarContent}
             </aside>
             

@@ -3,8 +3,8 @@ import { Publisher, ModalInfo, compressImage } from '../App';
 
 interface PublicadoresProps {
     publishers: Publisher[];
-    onAdd: (publisher: Omit<Publisher, 'id'>, onProgress?: (progress: number) => void) => Promise<void>;
-    onUpdate: (publisher: Publisher, onProgress?: (progress: number) => void) => Promise<void>;
+    onAdd: (publisher: Omit<Publisher, 'id'>) => Promise<void>;
+    onUpdate: (publisher: Publisher) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onShowModal: (info: ModalInfo) => void;
     canManage: boolean;
@@ -71,7 +71,6 @@ const PublisherCard: React.FC<{ publisher: Publisher; onEdit: (id: string) => vo
 // Main Component
 const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate, onDelete, onShowModal, canManage }) => {
     const [groups, setGroups] = useState<string[]>([]);
-    const [filteredPublishers, setFilteredPublishers] = useState<Publisher[]>([]);
     const [groupFilter, setGroupFilter] = useState('todos');
     const [currentPage, setCurrentPage] = useState(1);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,14 +83,16 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate
         setGroups(uniqueGroups);
     }, [publishers]);
 
-    useEffect(() => {
-        let data = publishers;
-        if (groupFilter !== 'todos') {
-            data = publishers.filter(p => p.Grupo === groupFilter);
+    const filteredPublishers = useMemo(() => {
+        if (groupFilter === 'todos') {
+            return publishers;
         }
-        setFilteredPublishers(data);
-        setCurrentPage(1); 
+        return publishers.filter(p => p.Grupo === groupFilter);
     }, [groupFilter, publishers]);
+    
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [groupFilter]);
 
     const paginatedPublishers = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
@@ -120,12 +121,12 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate
         }
     };
 
-    const handleFormSubmit = async (publisherData: Publisher | Omit<Publisher, 'id'>, onProgress?: (progress: number) => void) => {
+    const handleFormSubmit = async (publisherData: Publisher | Omit<Publisher, 'id'>) => {
         try {
             if ('id' in publisherData && publisherData.id) { // Update
-                await onUpdate(publisherData as Publisher, onProgress);
+                await onUpdate(publisherData as Publisher);
             } else { // Add
-                await onAdd(publisherData, onProgress);
+                await onAdd(publisherData);
             }
             setIsModalOpen(false);
             setEditingPublisher(null);
@@ -193,16 +194,16 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate
         document.body.removeChild(link);
     };
 
-    const PublisherForm: React.FC<{ publisher: Publisher | null, onSubmit: (data: any, onProgress?: (p: number) => void) => void, onCancel: () => void, onShowModal: PublicadoresProps['onShowModal'] }> = ({ publisher, onSubmit, onCancel, onShowModal }) => {
+    const PublisherForm: React.FC<{ publisher: Publisher | null, onSubmit: (data: any) => void, onCancel: () => void, onShowModal: PublicadoresProps['onShowModal'] }> = ({ publisher, onSubmit, onCancel, onShowModal }) => {
         const [formData, setFormData] = useState<any>(publisher || {
             Nombre: '', Apellido: '', Estatus: 'Activo', asignacionesDisponibles: []
         });
         const [isSaving, setIsSaving] = useState(false);
-        const [uploadProgress, setUploadProgress] = useState<number | null>(null);
         const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(publisher?.Foto || null);
         const [letterFileName, setLetterFileName] = useState<string | null>(null);
 
         useEffect(() => {
+            // Cleanup function to revoke the object URL if it's a blob URL
             return () => {
                 if (photoPreviewUrl && photoPreviewUrl.startsWith('blob:')) {
                     URL.revokeObjectURL(photoPreviewUrl);
@@ -217,12 +218,14 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate
 
                 if (id === 'Foto' && file) {
                     try {
-                        const compressedFile = await compressImage(file, 400); // Smaller width for profile pics
-                        setFormData((prev: any) => ({ ...prev, [id]: compressedFile }));
+                        const compressedDataUrl = await compressImage(file, 400);
+                        setFormData((prev: any) => ({ ...prev, [id]: compressedDataUrl }));
+                        
+                        // Clean up old blob URL if it exists
                         if (photoPreviewUrl && photoPreviewUrl.startsWith('blob:')) {
                             URL.revokeObjectURL(photoPreviewUrl);
                         }
-                        setPhotoPreviewUrl(URL.createObjectURL(compressedFile));
+                        setPhotoPreviewUrl(compressedDataUrl);
                     } catch (error) {
                         console.error("Image compression failed:", error);
                         onShowModal({ type: 'error', title: 'Error de Imagen', message: (error as Error).message });
@@ -257,17 +260,10 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate
         const handleSubmit = async (e: React.FormEvent) => {
             e.preventDefault();
             setIsSaving(true);
-            setUploadProgress(0);
-            
-            const onProgress = (progress: number) => {
-                setUploadProgress(progress);
-            };
-
             try {
-                await onSubmit(formData, onProgress);
+                await onSubmit(formData);
             } finally {
                 setIsSaving(false);
-                setUploadProgress(null);
             }
         }
 
@@ -378,7 +374,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, onAdd, onUpdate
                         <div className="mt-6 flex justify-end gap-4">
                            <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 rounded-md" disabled={isSaving}>Cancelar</button>
                            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400" disabled={isSaving}>
-                            {isSaving ? (uploadProgress !== null ? `Subiendo... ${uploadProgress.toFixed(0)}%` : 'Guardando...') : 'Guardar Cambios'}
+                            {isSaving ? 'Guardando...' : 'Guardar Cambios'}
                            </button>
                         </div>
                     </form>

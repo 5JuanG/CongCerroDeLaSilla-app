@@ -118,9 +118,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
-            const talkAssignments = [...(newSchedule[talkNumber] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
+            // FIX: Use string key for schedule object.
+            const talkAssignments = [...(newSchedule[talkNumber.toString()] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
             talkAssignments[slotIndex] = newData;
-            newSchedule[talkNumber] = talkAssignments;
+            // FIX: Use string key for schedule object.
+            newSchedule[talkNumber.toString()] = talkAssignments;
             return newSchedule;
         });
 
@@ -134,9 +136,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
-            const talkAssignments = [...(newSchedule[talkNumber] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
+            // FIX: Use string key for schedule object.
+            const talkAssignments = [...(newSchedule[talkNumber.toString()] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
             talkAssignments[slotIndex] = null;
-            newSchedule[talkNumber] = talkAssignments;
+            // FIX: Use string key for schedule object.
+            newSchedule[talkNumber.toString()] = talkAssignments;
             return newSchedule;
         });
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -25,6 +24,7 @@ import ReunionPublica from './components/ReunionPublica';
 import HomeDashboard from './components/HomeDashboard';
 import Vigilancia from './components/Vigilancia';
 import { DISCURSOS_PUBLICOS } from './components/discursos';
+import Carousel from './components/Carousel';
 
 
 declare const db: any;
@@ -45,6 +45,7 @@ export type GranularPermission =
     'manageGrupos' |
     'configVidaYMinisterio' |
     'configAsignacionesReunion' |
+    'manageMeetingAssignments' |
     'managePublicTalks' |
     'resetData';
 
@@ -60,7 +61,7 @@ export const ALL_PERMISSIONS: Permission[] = [
     'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica', 'vigilancia',
     // Granular Permissions
     'editAsistenciaReporte', 'managePublicadores', 'editRegistrosServicio', 'manageGrupos',
-    'configVidaYMinisterio', 'configAsignacionesReunion', 'managePublicTalks', 'resetData'
+    'configVidaYMinisterio', 'configAsignacionesReunion', 'manageMeetingAssignments', 'managePublicTalks', 'resetData'
 ];
 
 export interface UserData {
@@ -215,13 +216,16 @@ export interface ModalInfo {
     message: string;
 }
 
-export const compressImage = (file: File, targetWidth: number = 1024): Promise<File> => {
+export const compressImage = (file: File, targetWidth: number = 1024): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = event => {
+            if (!event.target?.result) {
+                return reject(new Error('No se pudo leer el archivo de imagen.'));
+            }
             const img = new Image();
-            img.src = event.target?.result as string;
+            img.src = event.target.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const scaleFactor = targetWidth / img.width;
@@ -232,17 +236,8 @@ export const compressImage = (file: File, targetWidth: number = 1024): Promise<F
                     return reject(new Error('No se pudo obtener el contexto del canvas.'));
                 }
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                ctx.canvas.toBlob((blob) => {
-                    if (blob) {
-                        const compressedFile = new File([blob], file.name, {
-                            type: 'image/webp',
-                            lastModified: Date.now()
-                        });
-                        resolve(compressedFile);
-                    } else {
-                        reject(new Error('La compresión de la imagen falló.'));
-                    }
-                }, 'image/webp', 0.85);
+                const dataUrl = canvas.toDataURL('image/webp', 0.85);
+                resolve(dataUrl);
             };
             img.onerror = error => reject(error);
         };
@@ -252,12 +247,14 @@ export const compressImage = (file: File, targetWidth: number = 1024): Promise<F
 
 const App: React.FC = () => {
     const [user, setUser] = useState<UserData | null>(null);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [appConfig, setAppConfig] = useState<{ is15HourOptionEnabled: boolean; isPublicReportFormEnabled: boolean; } | null>(null);
     const [meetingConfig, setMeetingConfig] = useState<MeetingConfig | null>(null);
     const [initialization, setInitialization] = useState({ authChecked: false, configLoaded: false });
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [activeView, setActiveView] = useState<View>('home');
     const [publicView, setPublicView] = useState<string>('home');
+    const [connectionError, setConnectionError] = useState<string | null>(null);
 
     // Data states
     const [publishers, setPublishers] = useState<Publisher[]>([]);
@@ -268,13 +265,13 @@ const App: React.FC = () => {
     const [lmSchedules, setLmSchedules] = useState<LMMeetingSchedule[]>([]);
     const [publicTalksSchedule, setPublicTalksSchedule] = useState<PublicTalksSchedule>({});
     const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
+    const [homepageContent, setHomepageContent] = useState<HomepageContent[]>([]);
     
     // Private data states
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [committeeMembers, setCommitteeMembers] = useState<string[]>([]);
     const [invitationContent, setInvitationContent] = useState<InvitationContent[]>([]);
-    const [homepageContent, setHomepageContent] = useState<HomepageContent[]>([]);
     const [pioneerApplications, setPioneerApplications] = useState<PioneerApplication[]>([]);
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
     
@@ -318,6 +315,8 @@ const App: React.FC = () => {
                 
                 userProfileUnsubscribe = userDocRef.onSnapshot(async (userDoc: any) => {
                     if (!isMounted) return;
+                    // Connection is good, clear any previous error banner.
+                    setConnectionError(null);
                     try {
                         const committeeDoc = await db.collection('settings').doc('service_committee').get();
                         
@@ -347,16 +346,21 @@ const App: React.FC = () => {
                              auth.signOut();
                         }
                     }
-                }, (error: Error) => { // Error callback for onSnapshot
+                }, (error: any) => { // Error callback for onSnapshot
                     console.error("User profile listener failed:", error);
                      if (isMounted) {
-                        setModalInfo({ type: 'error', title: 'Error de Conexión', message: 'Se perdió la conexión con los datos de su perfil.' });
-                        auth.signOut();
+                        if (error.code === 'permission-denied') {
+                            setModalInfo({ type: 'error', title: 'Error de Permisos', message: 'No tiene permiso para acceder a sus datos. La sesión se cerrará.' });
+                            auth.signOut();
+                        } else {
+                            setConnectionError('Se perdió la conexión con los datos del perfil. Intentando reconectar...');
+                        }
                     }
                 });
             } else {
                 // User is logged out
                 setUser(null);
+                setConnectionError(null);
                 // Mark auth check as complete for logged-out users
                 if (isMounted && !initialization.authChecked) {
                    setInitialization(prev => ({ ...prev, authChecked: true }));
@@ -408,109 +412,49 @@ const App: React.FC = () => {
         };
     }, []);
 
-    // Effect for fetching PUBLIC data (runs once on mount)
+    // Effect for fetching ALL data, now dependent on user authentication.
     useEffect(() => {
-        const unsubscribers = [
-            db.collection('publishers').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setPublishers(data);
-            }, (err: Error) => console.error("Publishers listener failed:", err)),
-
-            db.collection('service_reports').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setServiceReports(data);
-            }, (err: Error) => console.error("Service Reports listener failed:", err)),
-            
-            db.collection('territory_records').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setTerritoryRecords(data);
-            }, (err: Error) => console.error("Territory listener failed:", err)),
-
-            db.collection('territory_maps').orderBy('uploadedAt', 'desc').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setTerritoryMaps(data);
-            }, (err: Error) => console.error("Territory Maps listener failed:", err)),
-            
-            db.collection('meeting_schedules').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                // Sort client-side to avoid Firestore index requirements.
-                data.sort((a: MeetingAssignmentSchedule, b: MeetingAssignmentSchedule) => {
-                    if (a.year !== b.year) {
-                        return b.year - a.year;
-                    }
-                    return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
-                });
-                setSchedules(data);
-            }, (err: Error) => console.error("Meeting Schedules listener failed:", err)),
-
-            db.collection('lm_schedules').orderBy('year', 'desc').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setLmSchedules(data);
-            }, (err: Error) => console.error("LM Schedules listener failed:", err)),
-            
-            db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => {
-                setPublicTalksSchedule(doc.data() || { outgoingTalks: [] });
-            }, (err: Error) => console.error("Public Talks listener failed:", err)),
-
-            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setVigilanciaSchedules(data);
-            }, (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
-        ];
-
-        return () => {
-            unsubscribers.forEach(unsub => unsub());
-        };
-    }, []);
-
-    // Effect for fetching PRIVATE data when user logs in, and cleaning up on logout
-    useEffect(() => {
+        // If we are loading or the user is logged out, clear all data and do nothing.
         if (loading || !user) {
-            // Clear only private data on logout
+            setPublishers([]);
+            setServiceReports([]);
+            setTerritoryRecords([]);
+            setTerritoryMaps([]);
+            setSchedules([]);
+            setLmSchedules([]);
+            setPublicTalksSchedule({});
+            setVigilanciaSchedules([]);
+            setHomepageContent([]);
             setAttendanceRecords([]);
             setUsers([]);
             setCommitteeMembers([]);
             setInvitationContent([]);
-            setHomepageContent([]);
             setPioneerApplications([]);
             return;
         }
 
+        // User is logged in, set up all listeners.
         const unsubscribers = [
-            db.collection('attendance').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setAttendanceRecords(data);
-            }, (err: Error) => console.error("Attendance listener failed:", err)),
-            
-            db.collection('users').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setUsers(data);
-            }, (err: Error) => console.error("Users listener failed:", err)),
-            
-            db.collection('settings').doc('service_committee').onSnapshot((doc: any) => {
-                setCommitteeMembers(doc.data()?.members || []);
-            }, (err: Error) => console.error("Committee listener failed:", err)),
-
-            db.collection('invitation_content').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setInvitationContent(data);
-            }, (err: Error) => console.error("Invitation Content listener failed:", err)),
-
-            db.collection('homepage_content').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setHomepageContent(data);
-            }, (err: Error) => console.error("Homepage Content listener failed:", err)),
-
-            db.collection('pioneer_applications').onSnapshot((snapshot: any) => {
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                setPioneerApplications(data);
-            }, (err: Error) => console.error("Pioneer Applications listener failed:", err)),
+            db.collection('publishers').onSnapshot((snapshot: any) => setPublishers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Publishers listener failed:", err)),
+            db.collection('service_reports').onSnapshot((snapshot: any) => setServiceReports(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Service Reports listener failed:", err)),
+            db.collection('territory_records').onSnapshot((snapshot: any) => setTerritoryRecords(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Territory listener failed:", err)),
+            db.collection('territory_maps').orderBy('uploadedAt', 'desc').onSnapshot((snapshot: any) => setTerritoryMaps(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Territory Maps listener failed:", err)),
+            db.collection('meeting_schedules').orderBy('year', 'desc').orderBy('month', 'desc').onSnapshot((snapshot: any) => setSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Meeting Schedules listener failed:", err)),
+            db.collection('lm_schedules').orderBy('year', 'desc').onSnapshot((snapshot: any) => setLmSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("LM Schedules listener failed:", err)),
+            db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => setPublicTalksSchedule(doc.data() || { outgoingTalks: [] }), (err: Error) => console.error("Public Talks listener failed:", err)),
+            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => setVigilanciaSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
+            db.collection('homepage_content').onSnapshot((snapshot: any) => setHomepageContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Homepage Content listener failed:", err)),
+            db.collection('attendance').onSnapshot((snapshot: any) => setAttendanceRecords(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Attendance listener failed:", err)),
+            db.collection('users').onSnapshot((snapshot: any) => setUsers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Users listener failed:", err)),
+            db.collection('settings').doc('service_committee').onSnapshot((doc: any) => setCommitteeMembers(doc.data()?.members || []), (err: Error) => console.error("Committee listener failed:", err)),
+            db.collection('invitation_content').onSnapshot((snapshot: any) => setInvitationContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Invitation Content listener failed:", err)),
+            db.collection('pioneer_applications').onSnapshot((snapshot: any) => setPioneerApplications(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Pioneer Applications listener failed:", err)),
         ];
 
         return () => {
             unsubscribers.forEach(unsub => unsub());
         };
-    }, [user, loading]);
+    }, [user, loading]); // This effect now correctly depends on the user and loading state.
     
     // --- Handlers for database mutations ---
 
@@ -545,95 +489,65 @@ const App: React.FC = () => {
         }
     };
     
-    const handleAddPublisher = async (publisher: Omit<Publisher, 'id'>, onProgress?: (p: number) => void) => {
+    const handleAddPublisher = async (publisher: Omit<Publisher, 'id'>) => {
         try {
             const { Foto, ['Carta de presentacion']: Carta, ...rest } = publisher;
-            let fotoUrl = null;
-            let cartaUrl = null;
+            const dataToSave: any = { ...rest };
 
-            if (Foto instanceof File) {
-                const storageRef = storage.ref(`publisher_photos/${Date.now()}_${Foto.name}`);
-                const uploadTask = storageRef.put(Foto);
-                
-                uploadTask.on('state_changed', 
-                    (snapshot: any) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        if (onProgress) onProgress(progress * 0.5); // 50% for photo
-                    },
-                    (error: any) => { throw error; },
-                    async () => {
-                        fotoUrl = await uploadTask.snapshot.ref.getDownloadURL();
-                        if (Carta instanceof File) {
-                           // Continue with letter upload
-                        } else {
-                           await db.collection('publishers').add({ ...rest, Foto: fotoUrl });
-                        }
-                    }
-                );
+            if (typeof Foto === 'string' && Foto.startsWith('data:')) {
+                const storageRef = storage.ref(`publisher_photos/${Date.now()}_photo.webp`);
+                const uploadTask = storageRef.putString(Foto, 'data_url', { contentType: 'image/webp' });
+                await uploadTask; // Wait for upload to complete
+                dataToSave.Foto = await uploadTask.snapshot.ref.getDownloadURL();
+            } else {
+                dataToSave.Foto = Foto || null;
             }
+
             if (Carta instanceof File) {
-                const letterStorageRef = storage.ref(`publisher_letters/${Date.now()}_${Carta.name}`);
-                const letterUploadTask = letterStorageRef.put(Carta);
-                letterUploadTask.on('state_changed',
-                    (snapshot: any) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                         if (onProgress) onProgress(50 + (progress * 0.5)); // 50% for letter
-                    },
-                    (error: any) => { throw error; },
-                    async () => {
-                        cartaUrl = await letterUploadTask.snapshot.ref.getDownloadURL();
-                        await db.collection('publishers').add({ ...rest, Foto: fotoUrl, 'Carta de presentacion': cartaUrl });
-                    }
-                );
+                const uniqueFileName = `${Date.now()}_letter.pdf`;
+                const storageRef = storage.ref(`publisher_letters/${uniqueFileName}`);
+                const uploadTask = storageRef.put(Carta, { contentType: 'application/pdf' });
+                await uploadTask; // Wait for upload to complete
+                dataToSave['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
+            } else {
+                dataToSave['Carta de presentacion'] = Carta || null;
             }
-             if (!(Foto instanceof File) && !(Carta instanceof File)) {
-                await db.collection('publishers').add(publisher);
-            }
+
+            await db.collection('publishers').add(dataToSave);
         } catch (error) {
             setModalInfo({ type: 'error', title: 'Error', message: (error as Error).message });
-            throw error;
+            throw error; // Re-throw to be caught in the component
         }
     };
-    
-    const handleUpdatePublisher = async (publisher: Publisher, onProgress?: (p: number) => void) => {
+
+    const handleUpdatePublisher = async (publisher: Publisher) => {
         try {
             const { id, Foto, ['Carta de presentacion']: Carta, ...rest } = publisher;
-            let dataToUpdate: any = { ...rest };
-            
-            if (Foto instanceof File) {
-                const storageRef = storage.ref(`publisher_photos/${Date.now()}_${Foto.name}`);
-                const uploadTask = storageRef.put(Foto);
-                await new Promise<void>((resolve, reject) => {
-                    uploadTask.on('state_changed', (snapshot: any) => {
-                        if (onProgress) onProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 50);
-                    }, reject, async () => {
-                        dataToUpdate.Foto = await uploadTask.snapshot.ref.getDownloadURL();
-                        resolve();
-                    });
-                });
+            const dataToUpdate: any = { ...rest };
+
+            if (typeof Foto === 'string' && Foto.startsWith('data:')) {
+                const storageRef = storage.ref(`publisher_photos/${Date.now()}_photo.webp`);
+                const uploadTask = storageRef.putString(Foto, 'data_url', { contentType: 'image/webp' });
+                await uploadTask; // Wait for upload to complete
+                dataToUpdate.Foto = await uploadTask.snapshot.ref.getDownloadURL();
             } else {
-                 dataToUpdate.Foto = Foto;
+                dataToUpdate.Foto = Foto || null;
             }
 
             if (Carta instanceof File) {
-                 const storageRef = storage.ref(`publisher_letters/${Date.now()}_${Carta.name}`);
-                const uploadTask = storageRef.put(Carta);
-                await new Promise<void>((resolve, reject) => {
-                    uploadTask.on('state_changed', (snapshot: any) => {
-                        if (onProgress) onProgress(50 + ((snapshot.bytesTransferred / snapshot.totalBytes) * 50));
-                    }, reject, async () => {
-                        dataToUpdate['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
-                        resolve();
-                    });
-                });
+                const uniqueFileName = `${Date.now()}_letter.pdf`;
+                const storageRef = storage.ref(`publisher_letters/${uniqueFileName}`);
+                const uploadTask = storageRef.put(Carta, { contentType: 'application/pdf' });
+                await uploadTask; // Wait for upload to complete
+                dataToUpdate['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
             } else {
-                 dataToUpdate['Carta de presentacion'] = Carta;
+                dataToUpdate['Carta de presentacion'] = Carta || null;
             }
 
             await db.collection('publishers').doc(id).update(dataToUpdate);
         } catch (error) {
             setModalInfo({ type: 'error', title: 'Error', message: (error as Error).message });
-            throw error;
+            throw error; // Re-throw to be caught in the component
         }
     };
 
@@ -713,40 +627,35 @@ const App: React.FC = () => {
         }
     };
     
-    const handleUploadTerritoryMap = async (territoryId: string, imageFile: File) => {
-        const storageRef = storage.ref(`territory_maps/${territoryId}_${Date.now()}_${imageFile.name}`);
-        const uploadTask = storageRef.put(imageFile);
-        
-        await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', null,
-                (error: any) => reject(error),
-                async () => {
-                    const mapUrl = await uploadTask.snapshot.ref.getDownloadURL();
-                    const existingMapQuery = await db.collection('territory_maps').where('territoryId', '==', territoryId).get();
+    const handleUploadTerritoryMap = async (territoryId: string, imageDataUrl: string) => {
+        const fileName = `${territoryId}_${Date.now()}.webp`;
+        const storageRef = storage.ref(`territory_maps/${fileName}`);
+        const uploadTask = storageRef.putString(imageDataUrl, 'data_url', { contentType: 'image/webp' });
     
-                    if (!existingMapQuery.empty) {
-                        const docId = existingMapQuery.docs[0].id;
-                        const oldMapUrl = existingMapQuery.docs[0].data().mapUrl;
-                        if (oldMapUrl) {
-                            try { await storage.refFromURL(oldMapUrl).delete(); } catch (e) { console.warn("Old map file not found, continuing update."); }
-                        }
-                        await db.collection('territory_maps').doc(docId).update({
-                            mapUrl,
-                            fileName: imageFile.name,
-                            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    } else {
-                        await db.collection('territory_maps').add({
-                            territoryId,
-                            mapUrl,
-                            fileName: imageFile.name,
-                            uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    }
-                    resolve();
-                }
-            );
-        });
+        await uploadTask; // Wait for completion
+        const mapUrl = await uploadTask.snapshot.ref.getDownloadURL();
+        
+        const existingMapQuery = await db.collection('territory_maps').where('territoryId', '==', territoryId).get();
+
+        if (!existingMapQuery.empty) {
+            const docId = existingMapQuery.docs[0].id;
+            const oldMapUrl = existingMapQuery.docs[0].data().mapUrl;
+            if (oldMapUrl && oldMapUrl !== mapUrl) {
+                try { await storage.refFromURL(oldMapUrl).delete(); } catch (e) { console.warn("Old map file not found or could not be deleted, continuing update."); }
+            }
+            await db.collection('territory_maps').doc(docId).update({
+                mapUrl,
+                fileName: fileName,
+                uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } else {
+            await db.collection('territory_maps').add({
+                territoryId,
+                mapUrl,
+                fileName: fileName,
+                uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
     };
     
     const handleDeleteTerritoryMap = async (mapId: string, mapUrl: string) => {
@@ -816,43 +725,25 @@ const App: React.FC = () => {
         }
     };
     
-    const handleAddInvitation = async (imageFile: File, phrase: string, onProgress?: (progress: number) => void) => {
-        const storageRef = storage.ref(`invitation_images/${Date.now()}_${imageFile.name}`);
-        const uploadTask = storageRef.put(imageFile);
+    const handleAddInvitation = async (imageDataUrl: string, phrase: string) => {
+        const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
+        const storageRef = storage.ref(`invitation_images/${uniqueFileName}`);
+        const uploadTask = storageRef.putString(imageDataUrl, 'data_url', { contentType: 'image/webp' });
         
-        await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', 
-                (snapshot: any) => {
-                    if (onProgress) onProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                },
-                (error: any) => reject(error),
-                async () => {
-                    const imageUrl = await uploadTask.snapshot.ref.getDownloadURL();
-                    await db.collection('invitation_content').add({ imageUrl, phrase });
-                    resolve();
-                }
-            );
-        });
+        await uploadTask;
+        const imageUrl = await uploadTask.snapshot.ref.getDownloadURL();
+        await db.collection('invitation_content').add({ imageUrl, phrase, fileName: uniqueFileName });
     };
     const handleDeleteInvitation = (contentId: string) => db.collection('invitation_content').doc(contentId).delete();
 
-    const handleAddHomepageContent = async (imageFile: File, title: string, phrase: string, onProgress?: (progress: number) => void) => {
-        const storageRef = storage.ref(`homepage_images/${Date.now()}_${imageFile.name}`);
-        const uploadTask = storageRef.put(imageFile);
+    const handleAddHomepageContent = async (imageDataUrl: string, title: string, phrase: string) => {
+        const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
+        const storageRef = storage.ref(`homepage_images/${uniqueFileName}`);
+        const uploadTask = storageRef.putString(imageDataUrl, 'data_url', { contentType: 'image/webp' });
         
-        await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', 
-                (snapshot: any) => {
-                    if (onProgress) onProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                },
-                (error: any) => reject(error),
-                async () => {
-                    const imageUrl = await uploadTask.snapshot.ref.getDownloadURL();
-                    await db.collection('homepage_content').add({ imageUrl, title, phrase });
-                    resolve();
-                }
-            );
-        });
+        await uploadTask;
+        const imageUrl = await uploadTask.snapshot.ref.getDownloadURL();
+        await db.collection('homepage_content').add({ imageUrl, title, phrase, fileName: uniqueFileName });
     };
     const handleDeleteHomepageContent = (contentId: string) => db.collection('homepage_content').doc(contentId).delete();
 
@@ -907,11 +798,20 @@ const App: React.FC = () => {
         precursorAuxiliar: <PrecursorAuxiliar userRole={user?.role || 'publisher'} isCommitteeMember={user?.isCommitteeMember || false} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} />,
         controlAcceso: <ControlAcceso users={users} publishers={publishers} committeeMembers={committeeMembers} onUpdateUserPermissions={handleUpdateUserPermissions} onUpdateServiceCommittee={handleUpdateServiceCommittee} onLinkUserToPublisher={handleLinkUserToPublisher} isPublicReportFormEnabled={appConfig?.isPublicReportFormEnabled || false} onUpdatePublicReportFormEnabled={handleUpdatePublicReportFormEnabled} onResetData={handleResetData} currentUserRole={user?.role || 'publisher'} canManage={canManage} meetingConfig={meetingConfig} onSaveMeetingConfig={handleSaveMeetingConfig} />,
         informeMensualGrupo: <InformeMensualGrupo publishers={publishers} serviceReports={serviceReports} onBatchUpdateReports={handleBatchUpdateServiceReports} />,
-        gestionContenidoInvitacion: <GestionContenidoInvitacion invitationContent={invitationContent} onAddInvitation={handleAddInvitation} onDeleteInvitation={handleDeleteInvitation} homepageContent={homepageContent} onAddHomepageContent={handleAddHomepageContent} onDeleteHomepageContent={handleDeleteHomepageContent} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} onUpdate15HourOption={handleUpdate15HourOption} />,
+        gestionContenidoInvitacion: <GestionContenidoInvitacion onShowModal={setModalInfo} invitationContent={invitationContent} onAddInvitation={handleAddInvitation} onDeleteInvitation={handleDeleteInvitation} homepageContent={homepageContent} onAddHomepageContent={handleAddHomepageContent} onDeleteHomepageContent={handleDeleteHomepageContent} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} onUpdate15HourOption={handleUpdate15HourOption} />,
         informeMensualConsolidado: <InformeMensualConsolidado publishers={publishers} serviceReports={serviceReports} />,
         dashboardCursos: <DashboardCursos publishers={publishers} serviceReports={serviceReports} />,
         dashboardPrecursores: <DashboardPrecursores publishers={publishers} serviceReports={serviceReports} pioneerApplications={pioneerApplications} />,
-        asignacionesReunion: <AsignacionesReunion publishers={publishers} schedules={schedules} onSaveSchedule={handleSaveMeetingSchedule} onUpdatePublisherAssignments={handleUpdatePublisherAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configAsignacionesReunion')} meetingConfig={meetingConfig!} />,
+        asignacionesReunion: <AsignacionesReunion 
+                                publishers={publishers} 
+                                schedules={schedules} 
+                                onSaveSchedule={handleSaveMeetingSchedule} 
+                                onUpdatePublisherAssignments={handleUpdatePublisherAssignments} 
+                                onShowModal={setModalInfo} 
+                                canConfigureParticipants={userPermissions.includes('configAsignacionesReunion')} 
+                                canManageSchedule={userPermissions.includes('manageMeetingAssignments')} 
+                                meetingConfig={meetingConfig!} 
+                            />,
         programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} />,
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
@@ -969,47 +869,15 @@ const App: React.FC = () => {
             { view: 'informeServicio', label: 'Informar Servicio' },
         ];
         
-        const PublicHome = () => {
-            const upcomingTalk = useMemo(() => {
-                const today = new Date();
-                today.setHours(0,0,0,0);
-                let nextTalk: (PublicTalkAssignment & { talkNumber: number }) | null = null;
-                let nextDate = new Date('9999-12-31');
-    
-                Object.entries(publicTalksSchedule).forEach(([talkNumStr, assignments]) => {
-                    const talkNumber = parseInt(talkNumStr, 10);
-                    // FIX: Ensure the key from the schedule is a valid number and the value is an array before processing.
-                    // This prevents iterating over properties like 'outgoingTalks' or 'publicVisibility'.
-                    if (!isNaN(talkNumber) && Array.isArray(assignments)) {
-                        assignments.forEach(a => {
-                            if (a && a.date) {
-                                const talkDate = new Date(a.date + 'T00:00:00');
-                                
-                                if (talkDate >= today && talkDate < nextDate) {
-                                    nextDate = talkDate;
-                                    // FIX: Assign the parsed and validated talkNumber.
-                                    nextTalk = { ...a, talkNumber: talkNumber };
-                                }
-                            }
-                        });
-                    }
-                });
-                return nextTalk;
-            }, [publicTalksSchedule]);
-    
+        const PublicHome = ({ homepageContent }: { homepageContent: HomepageContent[] }) => {
+            if (homepageContent.length > 0) {
+                return <Carousel slides={homepageContent} />;
+            }
             return (
-                <div className="text-center p-4 sm:p-8 bg-white rounded-lg shadow-md max-w-4xl mx-auto">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-blue-800">Congregacion Cerro de la Silla-Guadalupe, Bienvenido</h2>
-                    <p className="mt-4 text-md sm:text-lg text-gray-600">Aquí puede ver los programas de las reuniones, consultar territorios y más.</p>
-                    <p className="mt-2 text-gray-500">Para acceder a todas las funciones, por favor inicie sesión.</p>
-                    {upcomingTalk && (
-                        <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
-                            <h3 className="text-xl font-semibold text-blue-700">Próximo Discurso Público</h3>
-                            <p className="mt-2 text-gray-800"><strong>Fecha:</strong> {new Date(upcomingTalk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                            <p><strong>Orador:</strong> {upcomingTalk.speakerName}</p>
-                            <p><strong>Discurso:</strong> {upcomingTalk.talkNumber}. {DISCURSOS_PUBLICOS.find(t => t.number === upcomingTalk.talkNumber)?.title}</p>
-                        </div>
-                    )}
+                 <div className="text-center p-4 sm:p-8 space-y-8 max-w-4xl mx-auto">
+                     <h2 className="text-2xl sm:text-3xl font-bold text-blue-800">Congregacion Cerro de la Silla-Guadalupe, Bienvenido</h2>
+                     <p className="mt-4 text-md sm:text-lg text-gray-600">Aquí puede ver los programas de las reuniones, consultar territorios y más.</p>
+                     <p className="mt-2 text-gray-500">Para acceder a todas las funciones, por favor inicie sesión.</p>
                 </div>
             );
         };
@@ -1020,7 +888,7 @@ const App: React.FC = () => {
                 publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
                 break;
             case 'asignacionesReunion':
-                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} meetingConfig={meetingConfig!} />;
+                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfigureParticipants={false} canManageSchedule={false} meetingConfig={meetingConfig!} />;
                 break;
             case 'reunionPublica':
                 publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => {}} canManage={false} publishers={publishers} onShowModal={setModalInfo} />;
@@ -1032,14 +900,14 @@ const App: React.FC = () => {
                 publicContent = <DashboardCursos publishers={publishers} serviceReports={serviceReports} />;
                 break;
             case 'territorios':
-                publicContent = <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} territoryMaps={territoryMaps} onUploadMap={handleUploadTerritoryMap} onDeleteMap={handleDeleteTerritoryMap} canManage={true} onShowModal={setModalInfo} />;
+                publicContent = <Territorios records={territoryRecords} onSave={async () => {}} onDelete={async () => {}} territoryMaps={territoryMaps} onUploadMap={async () => {}} onDeleteMap={async () => {}} canManage={false} onShowModal={setModalInfo} />;
                 break;
             case 'informeServicio':
                 publicContent = <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => {}} invitationContent={invitationContent} isPublicForm={true} />;
                 break;
             case 'home':
             default:
-                publicContent = <PublicHome />;
+                publicContent = <PublicHome homepageContent={homepageContent} />;
         }
 
         return (
@@ -1100,13 +968,16 @@ const App: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-gray-100">
-            <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember}/>
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6 pl-20 lg:pl-6">
-                     <Header user={userProfileForHeader} activeViewLabel={activeViewLabel} />
-                     <div className="mt-6">
-                        {userPermissions.includes(activeView) ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}
-                     </div>
+            <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
+            <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+                {connectionError && (
+                    <div className="bg-red-600 text-white text-center p-2 text-sm animate-pulse z-10">
+                        {connectionError}
+                    </div>
+                )}
+                <Header user={userProfileForHeader} activeViewLabel={activeViewLabel} />
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6">
+                    {activeView === 'home' || userPermissions.includes(activeView) ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}
                 </main>
             </div>
 

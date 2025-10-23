@@ -8,7 +8,8 @@ interface AsignacionesReunionProps {
     onSaveSchedule: (schedule: Omit<MeetingAssignmentSchedule, 'id'>) => Promise<void>;
     onUpdatePublisherAssignments: (publisherId: string, assignments: string[]) => Promise<void>;
     onShowModal: (info: ModalInfo) => void;
-    canConfig: boolean;
+    canConfigureParticipants: boolean;
+    canManageSchedule: boolean;
     meetingConfig: MeetingConfig;
 }
 
@@ -39,13 +40,106 @@ const formatTime = (time: string): string => {
 };
 
 
+// Configuration View Component
+interface ConfigViewProps {
+    activePublishers: Publisher[];
+    malePublishers: Publisher[];
+    onUpdatePublisherAssignments: (publisherId: string, assignments: string[]) => Promise<void>;
+    onShowModal: (info: ModalInfo) => void;
+    canConfigure: boolean;
+}
+
+const ConfigView: React.FC<ConfigViewProps> = ({
+    activePublishers,
+    malePublishers,
+    onUpdatePublisherAssignments,
+    onShowModal,
+    canConfigure
+}) => {
+    const [assignments, setAssignments] = useState(() =>
+        Object.fromEntries(activePublishers.map(p => [p.id, p.asignacionesDisponibles || []]))
+    );
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleToggle = (pubId: string, role: string) => {
+        if (!canConfigure) return; // Guard
+        setAssignments(prev => {
+            const current = prev[pubId] || [];
+            const newAssignments = current.includes(role)
+                ? current.filter(r => r !== role)
+                : [...current, role];
+            return { ...prev, [pubId]: newAssignments };
+        });
+    };
+
+    const handleSave = async () => {
+        if (!canConfigure) {
+            onShowModal({ type: 'error', title: 'Permiso Denegado', message: 'No tiene permiso para guardar esta configuración.' });
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const promises = Object.entries(assignments).map(([pubId, roles]) =>
+                onUpdatePublisherAssignments(pubId, roles as string[])
+            );
+            await Promise.all(promises);
+            onShowModal({ type: 'success', title: 'Guardado', message: 'Configuración de participantes guardada.' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div>
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Publicador</th>
+                            {ALL_ASSIGNMENT_ROLES.map(role => (
+                                <th key={role} className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">{role}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {malePublishers.map(pub => (
+                            <tr key={pub.id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{[pub.Nombre, pub.Apellido].filter(Boolean).join(' ')}</td>
+                                {ALL_ASSIGNMENT_ROLES.map(role => (
+                                    <td key={role} className="px-6 py-4 text-center">
+                                        <input
+                                            type="checkbox"
+                                            className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            checked={assignments[pub.id]?.includes(role) || false}
+                                            onChange={() => handleToggle(pub.id, role)}
+                                            disabled={!canConfigure}
+                                        />
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="text-right mt-6">
+                <button onClick={handleSave} disabled={isLoading || !canConfigure} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                    {isLoading ? 'Guardando...' : 'Guardar Configuración'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+// Main Component
 const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
     publishers,
     schedules,
     onSaveSchedule,
     onUpdatePublisherAssignments,
     onShowModal,
-    canConfig,
+    canConfigureParticipants,
+    canManageSchedule,
     meetingConfig
 }) => {
     const [activeTab, setActiveTab] = useState<'schedule' | 'config'>('schedule');
@@ -458,7 +552,9 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 .filter(([key]) => key.startsWith('weekend'))
                 .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
 
-            return weekendMeetings.map(([dateKey, assignment]) => {
+            return weekendMeetings.map(([dateKey, assignmentUntyped]) => {
+                // FIX: Cast assignment to DayAssignment to access its properties.
+                const assignment = assignmentUntyped as DayAssignment;
                 const weekendMeetDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
                 
                 const dayDiff = meetingConfig.weekendDay - meetingConfig.midweekDay;
@@ -595,74 +691,6 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             </div>
         );
     };
-    
-    const ConfigView = () => {
-        const [assignments, setAssignments] = useState(() => 
-            Object.fromEntries(activePublishers.map(p => [p.id, p.asignacionesDisponibles || []]))
-        );
-
-        const handleToggle = (pubId: string, role: string) => {
-            setAssignments(prev => {
-                const current = prev[pubId] || [];
-                const newAssignments = current.includes(role) 
-                    ? current.filter(r => r !== role) 
-                    : [...current, role];
-                return { ...prev, [pubId]: newAssignments };
-            });
-        };
-
-        const handleSave = async () => {
-            setIsLoading(true);
-            try {
-                const promises = Object.entries(assignments).map(([pubId, roles]) => 
-                    onUpdatePublisherAssignments(pubId, roles as string[])
-                );
-                await Promise.all(promises);
-                onShowModal({type: 'success', title: 'Guardado', message: 'Configuración de participantes guardada.'});
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        return (
-            <div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                         <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Publicador</th>
-                                {ALL_ASSIGNMENT_ROLES.map(role => (
-                                    <th key={role} className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">{role}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {malePublishers.map(pub => (
-                                <tr key={pub.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{[pub.Nombre, pub.Apellido].filter(Boolean).join(' ')}</td>
-                                    {ALL_ASSIGNMENT_ROLES.map(role => (
-                                        <td key={role} className="px-6 py-4 text-center">
-                                            <input
-                                                type="checkbox"
-                                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                checked={assignments[pub.id]?.includes(role) || false}
-                                                onChange={() => handleToggle(pub.id, role)}
-                                            />
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                <div className="text-right mt-6">
-                    <button onClick={handleSave} disabled={isLoading} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
-                        {isLoading ? 'Guardando...' : 'Guardar Configuración'}
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="container mx-auto max-w-7xl">
@@ -673,16 +701,16 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                     <div className="flex flex-wrap justify-center gap-2">
                         {newlyGeneratedSchedule ? (
                             <>
-                                <button onClick={handleSaveGeneratedSchedule} disabled={isLoading} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
+                                <button onClick={handleSaveGeneratedSchedule} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                                     {isLoading ? 'Guardando...' : 'Guardar Programa'}
                                 </button>
-                                <button onClick={handleDiscardGeneratedSchedule} disabled={isLoading} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 disabled:bg-gray-400">
+                                <button onClick={handleDiscardGeneratedSchedule} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 disabled:bg-gray-400">
                                     Descartar
                                 </button>
                             </>
                         ) : isEditing ? (
                              <>
-                                <button onClick={handleSaveChanges} disabled={isLoading} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
+                                <button onClick={handleSaveChanges} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                                     {isLoading ? 'Guardando...' : 'Guardar Cambios'}
                                 </button>
                                 <button onClick={() => { setIsEditing(false); setEditableSchedule(null); }} className="px-4 py-2 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600">
@@ -691,10 +719,10 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                              </>
                          ) : (
                             <>
-                                <button onClick={handleGenerateSchedule} disabled={isLoading || !canConfig} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                                <button onClick={handleGenerateSchedule} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
                                     {isLoading ? 'Generando...' : 'Generar Programa'}
                                 </button>
-                                <button onClick={() => { setIsEditing(true); setEditableSchedule(JSON.parse(JSON.stringify(scheduleForSelectedMonth))); }} disabled={!scheduleForSelectedMonth || isLoading || !canConfig} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 disabled:bg-gray-400">
+                                <button onClick={() => { setIsEditing(true); setEditableSchedule(JSON.parse(JSON.stringify(scheduleForSelectedMonth))); }} disabled={!scheduleForSelectedMonth || isLoading || !canManageSchedule} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 disabled:bg-gray-400">
                                     Editar Programa
                                 </button>
                             </>
@@ -711,7 +739,7 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                     </select>
                 </div>
                 
-                {canConfig && !newlyGeneratedSchedule && (
+                {canManageSchedule && !newlyGeneratedSchedule && (
                      <div className="flex justify-center items-center gap-4 mb-6 p-3 bg-gray-100 rounded-lg">
                         <span className="font-semibold">Estado del Programa:</span>
                         <span className={`px-3 py-1 text-sm font-bold rounded-full ${isPublic ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -726,12 +754,22 @@ const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 <div className="border-b border-gray-200">
                     <nav className="-mb-px flex space-x-8">
                         <button onClick={() => setActiveTab('schedule')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab==='schedule' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:border-gray-300'}`}>Programa Mensual</button>
-                        {canConfig && <button onClick={() => setActiveTab('config')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab==='config' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:border-gray-300'}`}>Configuración de Participantes</button>}
+                        {canConfigureParticipants && <button onClick={() => setActiveTab('config')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab==='config' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:border-gray-300'}`}>Configuración de Participantes</button>}
                     </nav>
                 </div>
 
                 <div className="mt-6">
-                    {activeTab === 'schedule' ? <ScheduleView /> : <ConfigView />}
+                    {activeTab === 'schedule' ? <ScheduleView /> : (
+                        canConfigureParticipants ? 
+                        <ConfigView 
+                            activePublishers={activePublishers}
+                            malePublishers={malePublishers}
+                            onUpdatePublisherAssignments={onUpdatePublisherAssignments}
+                            onShowModal={onShowModal}
+                            canConfigure={canConfigureParticipants}
+                        /> 
+                        : null
+                    )}
                 </div>
             </div>
         </div>

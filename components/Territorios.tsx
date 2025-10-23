@@ -1,7 +1,5 @@
-
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { TerritoryRecord, TerritoryMap, ModalInfo } from '../App';
+import { TerritoryRecord, TerritoryMap, ModalInfo, compressImage } from '../App';
 import Tooltip from './Tooltip';
 
 interface TerritoriosProps {
@@ -9,7 +7,7 @@ interface TerritoriosProps {
     onSave: (record: Omit<TerritoryRecord, 'id'>) => Promise<void>;
     onDelete: (record: Partial<TerritoryRecord>) => Promise<void>;
     territoryMaps: TerritoryMap[];
-    onUploadMap: (territoryId: string, file: File) => Promise<void>;
+    onUploadMap: (territoryId: string, imageDataUrl: string) => Promise<void>;
     onDeleteMap: (mapId: string, mapUrl: string) => Promise<void>;
     canManage: boolean;
     onShowModal: (info: ModalInfo) => void;
@@ -30,36 +28,35 @@ const getCurrentServiceYear = () => {
 
 const MapManager: React.FC<{
     maps: TerritoryMap[];
-    onUpload: (territoryId: string, file: File) => Promise<void>;
+    onUpload: (territoryId: string, imageDataUrl: string) => Promise<void>;
     onDelete: (mapId: string, mapUrl: string) => Promise<void>;
     canManage: boolean;
     setViewingMapUrl: (url: string | null) => void;
-}> = ({ maps, onUpload, onDelete, canManage, setViewingMapUrl }) => {
+    onShowModal: (info: ModalInfo) => void;
+}> = ({ maps, onUpload, onDelete, canManage, setViewingMapUrl, onShowModal }) => {
     const [selectedTerritoryId, setSelectedTerritoryId] = useState('global');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
-    const [status, setStatus] = useState('');
 
     const handleUpload = async () => {
         if (!selectedFile) {
-            setStatus('Por favor, seleccione un archivo de imagen.');
+            onShowModal({ type: 'error', title: 'Archivo Faltante', message: 'Por favor, seleccione un archivo de imagen para subir.' });
             return;
         }
         setIsUploading(true);
-        setStatus(`Subiendo mapa para territorio ${selectedTerritoryId}...`);
+        onShowModal({type: 'info', title: 'Procesando', message: 'Comprimiendo imagen, espere un momento...'});
+    
         try {
-            await onUpload(selectedTerritoryId, selectedFile);
-            setStatus('¡Mapa subido con éxito!');
+            const compressedDataUrl = await compressImage(selectedFile, 1920); // Higher resolution for maps
+            await onUpload(selectedTerritoryId, compressedDataUrl);
+            onShowModal({ type: 'success', title: 'Éxito', message: `Mapa para el territorio ${selectedTerritoryId} subido correctamente.` });
             setSelectedFile(null);
-            // Clear file input visually
             const fileInput = document.getElementById('map-file-input') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
         } catch (error) {
-            setStatus('Error al subir el mapa.');
-            console.error(error);
+            onShowModal({ type: 'error', title: 'Error de Carga', message: `No se pudo subir el mapa: ${(error as Error).message}` });
         } finally {
             setIsUploading(false);
-            setTimeout(() => setStatus(''), 4000);
         }
     };
 
@@ -67,9 +64,10 @@ const MapManager: React.FC<{
         if(window.confirm(`¿Está seguro de que desea eliminar el mapa del territorio ${map.territoryId}?`)) {
             try {
                 await onDelete(map.id, map.mapUrl);
+                onShowModal({type: 'success', title: 'Eliminado', message: 'El mapa se ha eliminado.'})
             } catch (error) {
                 console.error("Error deleting map:", error);
-                alert("No se pudo eliminar el mapa.");
+                onShowModal({ type: 'error', title: 'Error', message: 'No se pudo eliminar el mapa.' });
             }
         }
     };
@@ -103,7 +101,6 @@ const MapManager: React.FC<{
                             {isUploading ? 'Subiendo...' : 'Subir Mapa'}
                         </button>
                     </div>
-                    {status && <p className="text-center text-sm font-semibold mt-4 text-blue-600">{status}</p>}
                 </div>
             )}
             
@@ -177,6 +174,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
     const totalPages = useMemo(() => Math.max(1, Math.ceil(maxVueltas / 4)), [maxVueltas]);
 
     const handleOpenModal = (terrNum: number, vueltaNum: number) => {
+        if (!canManage) return; // Prevent opening modal if user can't manage
         const record = territoryData[terrNum]?.vueltas[vueltaNum];
         setEditingRecord(record || { terrNum, vueltaNum, serviceYear: currentServiceYear });
         setIsModalOpen(true);
@@ -184,7 +182,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
 
     const handleSave = async (recordToSave: Partial<TerritoryRecord>) => {
         if (!recordToSave.terrNum || !recordToSave.vueltaNum || !recordToSave.serviceYear) {
-            alert("Error: Faltan datos esenciales (territorio, vuelta o año de servicio).");
+            onShowModal({type: 'error', title: 'Error', message: "Faltan datos esenciales (territorio, vuelta o año de servicio)."});
             return;
         }
 
@@ -200,11 +198,12 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
 
         try {
             await onSave(fullRecordData);
+            onShowModal({type: 'success', title: 'Guardado', message: 'Registro guardado con éxito.'});
             setIsModalOpen(false);
             setEditingRecord(null);
         } catch (error) {
             console.error("Failed to save:", error);
-            alert("Hubo un error al guardar el registro.");
+            onShowModal({type: 'error', title: 'Error', message: "Hubo un error al guardar el registro."});
         }
     };
 
@@ -218,11 +217,12 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
         if (window.confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
             try {
                 await onDelete(recordToDelete);
+                onShowModal({type: 'success', title: 'Eliminado', message: 'Registro eliminado con éxito.'});
                 setIsModalOpen(false);
                 setEditingRecord(null);
             } catch (error) {
                 console.error("Failed to delete:", error);
-                alert("Hubo un error al eliminar el registro.");
+                onShowModal({type: 'error', title: 'Error', message: "Hubo un error al eliminar el registro."});
             }
         }
     };
@@ -343,6 +343,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                             const ultimaFechaCompletado = vueltaPage > 1 && prevPageLastVueltaNum > 0
                                 ? terrData.vueltas[prevPageLastVueltaNum]?.completedDate || ''
                                 : '';
+                            const cellClasses = canManage ? 'cursor-pointer hover:bg-blue-50' : '';
 
                             return (
                                 <React.Fragment key={terrNum}>
@@ -359,7 +360,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                                         {vueltasRange.map(vueltaNum => {
                                             const vueltaData = terrData.vueltas[vueltaNum];
                                             return (
-                                                <td colSpan={2} key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className="p-1 md:p-2 border border-gray-400 text-center font-semibold cursor-pointer hover:bg-blue-50 align-bottom">
+                                                <td colSpan={2} key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center font-semibold align-bottom ${cellClasses}`}>
                                                     {vueltaData?.asignadoA || '\u00A0'}
                                                 </td>
                                             );
@@ -370,8 +371,8 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                                             const vueltaData = terrData.vueltas[vueltaNum];
                                             return (
                                                 <React.Fragment key={vueltaNum}>
-                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className="p-1 md:p-2 border border-gray-400 text-center cursor-pointer hover:bg-blue-50">{vueltaData?.assignedDate || '\u00A0'}</td>
-                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className="p-1 md:p-2 border border-gray-400 text-center cursor-pointer hover:bg-blue-50">{vueltaData?.completedDate || '\u00A0'}</td>
+                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center ${cellClasses}`}>{vueltaData?.assignedDate || '\u00A0'}</td>
+                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center ${cellClasses}`}>{vueltaData?.completedDate || '\u00A0'}</td>
                                                 </React.Fragment>
                                             );
                                         })}
@@ -417,11 +418,11 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                             {Array.from({ length: maxVueltas }, (_, i) => i + 1).map(vueltaNum => {
                                 const vueltaData = territoryData[terrNum]?.vueltas[vueltaNum];
                                 if (!vueltaData && filterStatus !== 'all' && filterStatus !== 'empty') return null;
-
+                                const cellClasses = canManage ? 'cursor-pointer' : '';
                                 const cardBgClass = 'bg-gray-50 border-gray-200'; // Neutral background
 
                                 return (
-                                    <div key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-3 rounded-md cursor-pointer border ${cardBgClass}`}>
+                                    <div key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-3 rounded-md border ${cardBgClass} ${cellClasses}`}>
                                         <p className="font-semibold text-gray-800">Vuelta {vueltaNum}: {vueltaData?.asignadoA || <span className="text-gray-400 italic">Sin asignar</span>}</p>
                                         {vueltaData?.asignadoA && (
                                             <p className="text-xs text-gray-600 mt-1">
@@ -497,7 +498,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
             )}
 
             {activeTab === 'mapas' && (
-                <MapManager maps={territoryMaps} onUpload={onUploadMap} onDelete={onDeleteMap} canManage={canManage} setViewingMapUrl={setViewingMapUrl} />
+                <MapManager maps={territoryMaps} onUpload={onUploadMap} onDelete={onDeleteMap} canManage={canManage} setViewingMapUrl={setViewingMapUrl} onShowModal={onShowModal} />
             )}
         </div>
     );
