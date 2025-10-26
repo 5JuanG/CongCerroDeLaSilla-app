@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
-import { Publisher, MeetingAssignmentSchedule, LMMeetingSchedule, PublicTalksSchedule, ModalInfo, View, MONTHS, PublicTalkAssignment, DayAssignment } from '../App';
+import { Publisher, MeetingAssignmentSchedule, LMMeetingSchedule, PublicTalksSchedule, ModalInfo, View, MONTHS, PublicTalkAssignment, DayAssignment, MeetingConfig } from '../App';
 import ShareModal from './ShareModal';
 import { DISCURSOS_PUBLICOS } from './discursos';
 import VidaYMinisterio from './VidaYMinisterio';
@@ -14,6 +14,7 @@ interface HomeDashboardProps {
     publishers: Publisher[];
     onShowModal: (info: ModalInfo) => void;
     setActiveView: (view: View) => void;
+    meetingConfig: MeetingConfig;
 }
 
 const findLatestSchedule = <T extends { year: number; month: string; isPublic?: boolean }>(schedules: T[]): T | undefined => {
@@ -34,7 +35,7 @@ const findLatestSchedule = <T extends { year: number; month: string; isPublic?: 
 };
 
 
-const HomeDashboard: React.FC<HomeDashboardProps> = ({ lmSchedules, schedules, publicTalksSchedule, publishers, onShowModal, setActiveView }) => {
+const HomeDashboard: React.FC<HomeDashboardProps> = ({ lmSchedules, schedules, publicTalksSchedule, publishers, onShowModal, setActiveView, meetingConfig }) => {
     
     const latestAuxSchedule = useMemo(() => findLatestSchedule(schedules), [schedules]);
     
@@ -99,8 +100,8 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ lmSchedules, schedules, p
 
             <AuxServicesScheduleCard
                 schedule={latestAuxSchedule}
-                getPublisherName={getPublisherName}
-                onShowNotAvailable={() => handleShowNotAvailableModal('Servicios Auxiliares')}
+                onShowNotAvailable={() => handleShowNotAvailableModal('Programa de Acomodadores')}
+                setActiveView={setActiveView}
             />
 
             <PublicTalksScheduleCard 
@@ -127,96 +128,28 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ lmSchedules, schedules, p
 
 const AuxServicesScheduleCard: React.FC<{
     schedule: MeetingAssignmentSchedule | undefined;
-    getPublisherName: (id: string | null | undefined) => string;
     onShowNotAvailable: () => void;
-}> = ({ schedule, getPublisherName, onShowNotAvailable }) => {
-    const displayData = useMemo(() => {
-        if (!schedule?.schedule) return [];
-
-        const saturdayMeetings = Object.entries(schedule.schedule)
-            .filter(([key]) => key.startsWith('saturday'))
-            .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
-
-        return saturdayMeetings.map(([dateKey, assignmentUntyped]) => {
-            // FIX: Cast assignment to DayAssignment to access its properties.
-            const assignment = assignmentUntyped as DayAssignment;
-            const satDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
-            const tueDate = new Date(satDate);
-            tueDate.setDate(satDate.getDate() - 4);
-            const sunDate = new Date(satDate);
-            sunDate.setDate(satDate.getDate() + 1);
-
-            const getAssignmentsWithRole = (roleKey: keyof DayAssignment, roleAbbr: string) => {
-                const ids = (assignment as any)[roleKey] as string[] | undefined;
-                return (ids || []).map(id => ({ name: getPublisherName(id), role: roleAbbr }));
-            };
-
-            const acomodadoresYMicrofonos = [
-                ...getAssignmentsWithRole('acomodadoresPrincipal', 'AP'),
-                ...getAssignmentsWithRole('acomodadoresAuditorio', 'APA'),
-                ...getAssignmentsWithRole('acomodadoresSala', 'AA'),
-                ...getAssignmentsWithRole('microfonos', 'AM'),
-                ...getAssignmentsWithRole('vigilantes', 'V'),
-            ];
-
-            return {
-                weekDateRange: `Martes ${tueDate.getDate()} de ${MONTHS[tueDate.getMonth()].toLowerCase()}\nDomingo ${sunDate.getDate()} de ${MONTHS[sunDate.getMonth()].toLowerCase()}`,
-                presidente: getPublisherName(assignment.presidente),
-                lectorAtalaya: getPublisherName(assignment.lectorAtalaya),
-                acomodadoresYMicrofonos,
-                aseo: assignment.aseo ? `Aseo: Grupo ${assignment.aseo}` : '',
-                hospitalidad: assignment.hospitalidad ? `Hospitalidad: Grupo ${assignment.hospitalidad}` : '',
-            };
-        });
-    }, [schedule, getPublisherName]);
-
+    setActiveView: (view: View) => void;
+}> = ({ schedule, onShowNotAvailable, setActiveView }) => {
+    
     return (
         <div className="bg-white p-6 rounded-2xl shadow-lg border-t-4 border-green-500">
             <div className="flex justify-between items-start mb-4">
                 <h2 className="text-xl font-bold text-gray-800">Programa de Acomodadores</h2>
-                <button onClick={() => onShowNotAvailable()} className="text-sm px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200">Ver Más</button>
+                <button 
+                    onClick={() => schedule ? setActiveView('programaServiciosAuxiliares') : onShowNotAvailable()} 
+                    className="text-sm px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200"
+                >
+                    Ver Programa
+                </button>
             </div>
-            {schedule && displayData.length > 0 ? (
-                <div>
-                     <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-800 flex flex-wrap justify-center gap-x-4 gap-y-1">
-                        <span className="font-semibold">Leyenda:</span>
-                        <span><strong>(AP)</strong>: P. Principal</span>
-                        <span><strong>(APA)</strong>: P. Auditorio</span>
-                        <span><strong>(AA)</strong>: Asistentes</span>
-                        <span><strong>(AM)</strong>: Micrófonos</span>
-                        <span><strong>(V)</strong>: Vigilantes</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full border-collapse min-w-[800px] text-xs">
-                            <thead className="bg-gray-800 text-white">
-                                <tr>
-                                    <th className="p-2 border border-gray-600 w-1/5">Semana</th>
-                                    <th className="p-2 border border-gray-600">Presidente</th>
-                                    <th className="p-2 border border-gray-600">Acomodadores, Micrófonos, Vigilantes</th>
-                                    <th className="p-2 border border-gray-600">Lector</th>
-                                    <th className="p-2 border border-gray-600">Aseo y Hospitalidad</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {displayData.map((week, index) => (
-                                    <tr key={index} className="align-top border-b">
-                                        <td className="p-2 border-l border-r font-semibold bg-gray-100 whitespace-pre-line text-center">{week.weekDateRange}</td>
-                                        <td className="p-2 border-r text-center">{week.presidente}</td>
-                                        <td className="p-2 border-r">
-                                            {week.acomodadoresYMicrofonos.map((item, idx) => (
-                                                <p key={idx}>{item.name} ({item.role})</p>
-                                            ))}
-                                        </td>
-                                        <td className="p-2 border-r text-center">{week.lectorAtalaya}</td>
-                                        <td className="p-2 border-r text-center whitespace-pre-line">
-                                            {week.aseo ? <div>{week.aseo}</div> : null}
-                                            {week.hospitalidad ? <div>{week.hospitalidad}</div> : null}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+            {schedule ? (
+                <div className="text-center p-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="mt-2 font-semibold text-gray-700">El programa para {schedule.month} está disponible.</p>
+                    <p className="text-sm text-gray-500">Haz clic en "Ver Programa" para ver los detalles.</p>
                 </div>
             ) : (
                  <p className="text-center text-gray-500 py-4">Programa no disponible.</p>

@@ -118,10 +118,10 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
-            // FIX: Use string key for schedule object.
+            // FIX: The schedule object is indexed by string, so convert the number to a string.
             const talkAssignments = [...(newSchedule[talkNumber.toString()] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
             talkAssignments[slotIndex] = newData;
-            // FIX: Use string key for schedule object.
+            // FIX: The schedule object is indexed by string, so convert the number to a string.
             newSchedule[talkNumber.toString()] = talkAssignments;
             return newSchedule;
         });
@@ -136,10 +136,10 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
-            // FIX: Use string key for schedule object.
+            // FIX: The schedule object is indexed by string, so convert the number to a string.
             const talkAssignments = [...(newSchedule[talkNumber.toString()] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
             talkAssignments[slotIndex] = null;
-            // FIX: Use string key for schedule object.
+            // FIX: The schedule object is indexed by string, so convert the number to a string.
             newSchedule[talkNumber.toString()] = talkAssignments;
             return newSchedule;
         });

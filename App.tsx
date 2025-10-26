@@ -44,7 +44,6 @@ export type GranularPermission =
     'editRegistrosServicio' |
     'manageGrupos' |
     'configVidaYMinisterio' |
-    'configAsignacionesReunion' |
     'manageMeetingAssignments' |
     'managePublicTalks' |
     'resetData';
@@ -61,7 +60,7 @@ export const ALL_PERMISSIONS: Permission[] = [
     'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica', 'vigilancia',
     // Granular Permissions
     'editAsistenciaReporte', 'managePublicadores', 'editRegistrosServicio', 'manageGrupos',
-    'configVidaYMinisterio', 'configAsignacionesReunion', 'manageMeetingAssignments', 'managePublicTalks', 'resetData'
+    'configVidaYMinisterio', 'manageMeetingAssignments', 'managePublicTalks', 'resetData'
 ];
 
 export interface UserData {
@@ -439,8 +438,26 @@ const App: React.FC = () => {
             db.collection('service_reports').onSnapshot((snapshot: any) => setServiceReports(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Service Reports listener failed:", err)),
             db.collection('territory_records').onSnapshot((snapshot: any) => setTerritoryRecords(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Territory listener failed:", err)),
             db.collection('territory_maps').orderBy('uploadedAt', 'desc').onSnapshot((snapshot: any) => setTerritoryMaps(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Territory Maps listener failed:", err)),
-            db.collection('meeting_schedules').orderBy('year', 'desc').orderBy('month', 'desc').onSnapshot((snapshot: any) => setSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Meeting Schedules listener failed:", err)),
-            db.collection('lm_schedules').orderBy('year', 'desc').onSnapshot((snapshot: any) => setLmSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("LM Schedules listener failed:", err)),
+            db.collection('meeting_schedules').onSnapshot((snapshot: any) => {
+                const allSchedules = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as MeetingAssignmentSchedule }));
+                allSchedules.sort((a, b) => {
+                    if (a.year !== b.year) {
+                        return b.year - a.year;
+                    }
+                    return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month); 
+                });
+                setSchedules(allSchedules);
+            }, (err: Error) => console.error("Meeting Schedules listener failed:", err)),
+            db.collection('lm_schedules').onSnapshot((snapshot: any) => {
+                const allLmSchedules = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as LMMeetingSchedule }));
+                allLmSchedules.sort((a, b) => {
+                    if (a.year !== b.year) {
+                        return b.year - a.year;
+                    }
+                    return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
+                });
+                setLmSchedules(allLmSchedules);
+            }, (err: Error) => console.error("LM Schedules listener failed:", err)),
             db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => setPublicTalksSchedule(doc.data() || { outgoingTalks: [] }), (err: Error) => console.error("Public Talks listener failed:", err)),
             db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => setVigilanciaSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
             db.collection('homepage_content').onSnapshot((snapshot: any) => setHomepageContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Homepage Content listener failed:", err)),
@@ -755,9 +772,6 @@ const App: React.FC = () => {
         const docId = `${schedule.year}-${schedule.month}`;
         await db.collection('meeting_schedules').doc(docId).set(schedule, { merge: true });
     };
-    const handleUpdatePublisherAssignments = async (publisherId: string, assignments: string[]) => {
-        await db.collection('publishers').doc(publisherId).update({ asignacionesDisponibles: assignments });
-    };
     const handleSaveLMSchedule = (schedule: Omit<LMMeetingSchedule, 'id'> & { month: string; year: number }) => {
         const docId = `${schedule.year}-${schedule.month}`;
         return db.collection('lm_schedules').doc(docId).set(schedule, { merge: true });
@@ -787,6 +801,7 @@ const App: React.FC = () => {
                 publishers={publishers}
                 onShowModal={setModalInfo}
                 setActiveView={setActiveView}
+                meetingConfig={meetingConfig!}
               />,
         asistenciaForm: <AsistenciaForm attendanceRecords={attendanceRecords} onSave={handleSaveAttendance} />,
         asistenciaReporte: <AsistenciaReporte attendanceRecords={attendanceRecords} onBatchUpdateAttendance={handleBatchUpdateAttendance} canEdit={userPermissions.includes('editAsistenciaReporte')} />,
@@ -806,13 +821,11 @@ const App: React.FC = () => {
                                 publishers={publishers} 
                                 schedules={schedules} 
                                 onSaveSchedule={handleSaveMeetingSchedule} 
-                                onUpdatePublisherAssignments={handleUpdatePublisherAssignments} 
                                 onShowModal={setModalInfo} 
-                                canConfigureParticipants={userPermissions.includes('configAsignacionesReunion')} 
                                 canManageSchedule={userPermissions.includes('manageMeetingAssignments')} 
                                 meetingConfig={meetingConfig!} 
                             />,
-        programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} />,
+        programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} meetingConfig={meetingConfig!} />,
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
         reunionPublica: <ReunionPublica schedule={publicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} />,
@@ -854,6 +867,22 @@ const App: React.FC = () => {
         return publishers.find(p => p.authUid === user.id);
     }, [user, publishers]);
 
+    const userCanAccessView = useMemo(() => {
+        // These views are always available to any logged-in user, regardless of specific permissions.
+        const alwaysVisible: View[] = ['home', 'informeServicio', 'precursorAuxiliar', 'programaServiciosAuxiliares'];
+        if (alwaysVisible.includes(activeView)) {
+            return true;
+        }
+    
+        // Special case: 'Generar Prog. Acomodadores' is unlocked by the 'manageMeetingAssignments' permission.
+        if (activeView === 'asignacionesReunion') {
+            return userPermissions.includes('manageMeetingAssignments');
+        }
+        
+        // For all other views, check for a direct permission matching the view name.
+        return userPermissions.includes(activeView);
+    }, [activeView, userPermissions]);
+
     if (loading) {
         return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div></div>;
     }
@@ -888,13 +917,13 @@ const App: React.FC = () => {
                 publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
                 break;
             case 'asignacionesReunion':
-                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherAssignments={async () => {}} onShowModal={setModalInfo} canConfigureParticipants={false} canManageSchedule={false} meetingConfig={meetingConfig!} />;
+                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onShowModal={setModalInfo} canManageSchedule={false} meetingConfig={meetingConfig!} />;
                 break;
             case 'reunionPublica':
                 publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => {}} canManage={false} publishers={publishers} onShowModal={setModalInfo} />;
                 break;
             case 'programaServiciosAuxiliares':
-                publicContent = <ProgramaServiciosAuxiliares schedules={schedules.filter(s => s.isPublic)} publishers={publishers} onShowModal={setModalInfo} />;
+                publicContent = <ProgramaServiciosAuxiliares schedules={schedules.filter(s => s.isPublic)} publishers={publishers} onShowModal={setModalInfo} meetingConfig={meetingConfig!} />;
                 break;
             case 'dashboardCursos':
                 publicContent = <DashboardCursos publishers={publishers} serviceReports={serviceReports} />;
@@ -977,7 +1006,7 @@ const App: React.FC = () => {
                 )}
                 <Header user={userProfileForHeader} activeViewLabel={activeViewLabel} />
                 <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6">
-                    {activeView === 'home' || userPermissions.includes(activeView) ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}
+                    {userCanAccessView ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}
                 </main>
             </div>
 

@@ -92,8 +92,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
         // For other users, filter based on their specific permissions array.
         const allowedViews = new Set<View>(userPermissions.filter(p => allNavItems.some(nav => nav.view === p)) as View[]);
 
-        // Always include 'home' view, plus any other views the user has permission for.
-        return allNavItems.filter(item => item.view === 'home' || allowedViews.has(item.view));
+        // --- IMPLICIT PERMISSIONS ---
+        // If the user can manage assignments, they should also see the assignment generation page.
+        if (userPermissions.includes('manageMeetingAssignments')) {
+            allowedViews.add('asignacionesReunion');
+        }
+        
+        // Define views that should always be visible to any logged-in user.
+        const alwaysVisible: View[] = ['home', 'informeServicio', 'precursorAuxiliar', 'programaServiciosAuxiliares'];
+
+        return allNavItems.filter(item => alwaysVisible.includes(item.view) || allowedViews.has(item.view));
 
     }, [userRole, userPermissions, isCommitteeMember]);
 

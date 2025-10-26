@@ -48,8 +48,8 @@ const manageablePermissions: { label: string; items: { permission: Permission; l
             { permission: 'registroTransaccion', label: 'Registro de Transacción' },
             { permission: 'precursorAuxiliar', label: 'Prec. Auxiliar' },
             { permission: 'vidaYMinisterio', label: 'Vida y Ministerio' },
-            { permission: 'asignacionesReunion', label: 'Asignaciones Reunión' },
-            { permission: 'programaServiciosAuxiliares', label: 'Programa Serv. Auxiliares' },
+            { permission: 'asignacionesReunion', label: 'Generar Prog. Acomodadores' },
+            { permission: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
             { permission: 'reunionPublica', label: 'Reunión Pública' },
         ]
     },
@@ -62,7 +62,6 @@ const manageablePermissions: { label: string; items: { permission: Permission; l
             { permission: 'manageGrupos', label: 'Administrar en "Grupos"' },
             { permission: 'configVidaYMinisterio', label: 'Configuración en "Vida y Ministerio"' },
             { permission: 'manageMeetingAssignments', label: 'Generar/Editar Programa (Acomodadores)' },
-            { permission: 'configAsignacionesReunion', label: 'Configurar Participantes (Acomodadores)' },
             { permission: 'managePublicTalks', label: 'Guardar/Editar en "Reunión Pública"' },
             { permission: 'resetData', label: 'Limpiar datos' },
         ]

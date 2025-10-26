@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
-import { MeetingAssignmentSchedule, Publisher, ModalInfo, DayAssignment } from '../App';
+import { MeetingAssignmentSchedule, Publisher, ModalInfo, DayAssignment, MeetingConfig } from '../App';
 
 declare const jspdf: any;
 declare const html2canvas: any;
@@ -8,11 +8,12 @@ interface ProgramaServiciosAuxiliaresProps {
     schedules: MeetingAssignmentSchedule[];
     publishers: Publisher[];
     onShowModal: (info: ModalInfo) => void;
+    meetingConfig: MeetingConfig;
 }
 
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = ({ schedules, publishers, onShowModal }) => {
+const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = ({ schedules, publishers, onShowModal, meetingConfig }) => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState(MONTHS[new Date().getMonth()]);
     const pdfContentRef = useRef<HTMLDivElement>(null);
@@ -28,23 +29,22 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
     const displayData = useMemo(() => {
         const scheduleForMonth = schedules.find(s => s.year === selectedYear && s.month === selectedMonth && s.isPublic);
 
-        if (!scheduleForMonth?.schedule) return [];
+        if (!scheduleForMonth?.schedule || !meetingConfig) return [];
 
-        const saturdayMeetings = Object.entries(scheduleForMonth.schedule)
-            .filter(([key]) => key.startsWith('saturday'))
+        const weekendMeetings = Object.entries(scheduleForMonth.schedule)
+            .filter(([key]) => key.startsWith('weekend'))
             .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
 
-        return saturdayMeetings.map(([dateKey, assignmentUntyped]) => {
-            // FIX: Cast assignment to DayAssignment to access its properties.
+        return weekendMeetings.map(([dateKey, assignmentUntyped]) => {
             const assignment = assignmentUntyped as DayAssignment;
-            const satDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
-            const tueDate = new Date(satDate);
-            tueDate.setDate(satDate.getDate() - 4);
-            const sunDate = new Date(satDate);
-            sunDate.setDate(satDate.getDate() + 1);
-
+            const weekendMeetDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T00:00:00');
+            
+            const dayDiff = meetingConfig.weekendDay - meetingConfig.midweekDay;
+            const midweekMeetDate = new Date(weekendMeetDate);
+            midweekMeetDate.setDate(weekendMeetDate.getDate() - (dayDiff >= 0 ? dayDiff : dayDiff + 7));
+            
             const getAssignmentsWithRole = (roleKey: keyof DayAssignment, roleAbbr: string) => {
-                const ids = (assignment as any)[roleKey] as string[] | undefined;
+                const ids = (assignment as any)[roleKey] as (string | null)[] | undefined;
                 return (ids || []).map(id => ({ name: getPublisherName(id), role: roleAbbr }));
             };
 
@@ -56,8 +56,10 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                 ...getAssignmentsWithRole('vigilantes', 'V'),
             ];
 
+            const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
             return {
-                weekDateRange: `Martes ${tueDate.getDate()} de ${MONTHS[tueDate.getMonth()].toLowerCase()}\nDomingo ${sunDate.getDate()} de ${MONTHS[sunDate.getMonth()].toLowerCase()}`,
+                weekDateRange: `${dayNames[meetingConfig.midweekDay]} ${midweekMeetDate.getDate()} de ${MONTHS[midweekMeetDate.getMonth()].toLowerCase()}\n${dayNames[meetingConfig.weekendDay]} ${weekendMeetDate.getDate()} de ${MONTHS[weekendMeetDate.getMonth()].toLowerCase()}`,
                 presidente: getPublisherName(assignment.presidente),
                 lectorAtalaya: getPublisherName(assignment.lectorAtalaya),
                 acomodadoresYMicrofonos,
@@ -66,7 +68,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
             };
         });
 
-    }, [selectedYear, selectedMonth, schedules, getPublisherName]);
+    }, [selectedYear, selectedMonth, schedules, getPublisherName, meetingConfig]);
     
     const handleExportPdf = () => {
         const content = pdfContentRef.current;
@@ -163,7 +165,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
             `}</style>
             <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
                 <div className="buttons-container-export flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-                    <h1 className="text-xl font-bold text-gray-800 text-center md:text-left">Visualizador del Programa de Servicios Auxiliares</h1>
+                    <h1 className="text-xl font-bold text-gray-800 text-center md:text-left">Visualizador del Programa de Acomodadores</h1>
                     <div className="flex flex-wrap justify-center gap-2">
                         <button onClick={handleExportPdf} disabled={displayData.length === 0} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                             Exportar a PDF
