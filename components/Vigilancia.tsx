@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Tooltip from './Tooltip';
+import { MONTHS } from '../App';
 
 interface VigilanciaEvent {
     id: string;
@@ -25,8 +26,6 @@ interface VigilanciaProps {
     onSave: (schedule: VigilanciaSchedule) => Promise<void>;
 }
 
-// FIX: Define MONTHS constant to resolve 'Cannot find name' error.
-const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const TUESDAY_SLOTS = ["7:20-7:50pm", "7:50-8:20pm", "8:20-8:50pm", "8:50-9:20pm"];
 const SATURDAY_SLOTS = ["4:15-4:50pm", "4:50-5:20pm", "5:20-5:50pm", "5:50-6:20pm"];
 const CONGREGATIONS = ["Jardines de Andalucia", "Las Jacarandas", "Nacozari", "Cerro de la Silla", "Niños Heroes"];
@@ -220,7 +219,7 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
             {status && <div className="text-center font-semibold text-blue-600">{status}</div>}
 
             {renderScheduleTable(
-                "Programa de Vigilancia de Los martes",
+                "Programa de Vigilancia de Los Martes",
                 TUESDAY_SLOTS,
                 dataForTuesday,
                 (month, slot, cong) => handleDataChange('tuesday', month, slot, cong)

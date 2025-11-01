@@ -1,3 +1,8 @@
+
+
+
+
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -257,7 +262,6 @@ const App: React.FC = () => {
     const [activeView, setActiveView] = useState<View>('home');
     const [publicView, setPublicView] = useState<string>('home');
     const [connectionError, setConnectionError] = useState<string | null>(null);
-    const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
     // Data states
     const [publishers, setPublishers] = useState<Publisher[]>([]);
@@ -433,12 +437,10 @@ const App: React.FC = () => {
         const unsubscribers = [
             db.collection('publishers').onSnapshot((snapshot: any) => {
                 setPublishers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setDataLoadError(null); // Clear error on successful load
                 setPublicDataStatus(prev => ({...prev, publishers: true}));
             }, (err: Error) => {
-                console.error("CRITICAL: Listener for 'publishers' failed:", err);
-                setDataLoadError("No se pudieron cargar los datos de publicadores. Esta es una función esencial. La causa más probable es que las reglas de seguridad de Firestore no permiten la lectura pública. Revise las instrucciones en index.html y la configuración de su proyecto de Firebase.");
-                setPublicDataStatus(prev => ({...prev, publishers: true})); // Still mark as "loaded" to unblock UI
+                console.error("Public Publishers listener failed:", err);
+                setPublicDataStatus(prev => ({...prev, publishers: true}));
             }),
             db.collection('service_reports').onSnapshot((snapshot: any) => {
                 setServiceReports(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
@@ -978,19 +980,6 @@ const App: React.FC = () => {
         return userPermissions.includes(activeView);
     }, [activeView, userPermissions]);
 
-    const ErrorBanner = ({ message }: { message: string }) => (
-        <div className="bg-red-600 text-white text-center p-4 z-20 shadow-lg">
-            <h3 className="font-bold text-lg">Error Crítico de Carga de Datos</h3>
-            <p className="text-sm mt-1">{message}</p>
-            <button 
-                onClick={() => window.location.reload()} 
-                className="mt-3 px-4 py-1 border-2 border-white rounded-md font-semibold hover:bg-red-700 transition-colors"
-            >
-              Recargar Página
-            </button>
-        </div>
-    );
-
     if (loading) {
         return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div></div>;
     }
@@ -1037,7 +1026,7 @@ const App: React.FC = () => {
                 publicContent = <DashboardCursos publishers={publishers} serviceReports={serviceReports} />;
                 break;
             case 'territorios':
-                publicContent = <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} territoryMaps={territoryMaps} onUploadMap={handleUploadTerritoryMap} onDeleteMap={handleDeleteTerritoryMap} canManage={true} onShowModal={setModalInfo} />;
+                publicContent = <Territorios records={territoryRecords} onSave={async () => {}} onDelete={async () => {}} territoryMaps={territoryMaps} onUploadMap={async () => {}} onDeleteMap={async () => {}} canManage={false} onShowModal={setModalInfo} />;
                 break;
             case 'informeServicio':
                 publicContent = <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => {}} invitationContent={invitationContent} isLoggedIn={false} />;
@@ -1049,7 +1038,6 @@ const App: React.FC = () => {
 
         return (
             <div className="h-screen bg-gray-100 flex flex-col">
-                {dataLoadError && <ErrorBanner message={dataLoadError} />}
                 <header className="bg-white shadow-md p-4 flex justify-between items-center">
                     <h1 className="text-xl font-bold text-blue-800">Congregación Cerro de la Silla</h1>
                     <button onClick={() => setIsLoginModalOpen(true)} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
@@ -1108,7 +1096,6 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-gray-100">
             <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
             <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-                {dataLoadError && <ErrorBanner message={dataLoadError} />}
                 {connectionError && (
                     <div className="bg-red-600 text-white text-center p-2 text-sm animate-pulse z-10">
                         {connectionError}

@@ -1,4 +1,3 @@
-// FIX: Import `useMemo` from `react` to fix 'Cannot find name' error.
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react';
 import { UserRole, MONTHS } from '../App';
 import { GoogleGenAI } from "@google/genai";

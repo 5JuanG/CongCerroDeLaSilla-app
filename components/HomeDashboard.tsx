@@ -123,9 +123,6 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ lmSchedules, schedules, p
     );
 };
 
-// ... Internal components (AuxServicesScheduleCard, PublicTalksScheduleCard) ...
-// NOTE: These components will be defined below inside this same file.
-
 const AuxServicesScheduleCard: React.FC<{
     schedule: MeetingAssignmentSchedule | undefined;
     onShowNotAvailable: () => void;

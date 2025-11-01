@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Publisher, ServiceReport, InvitationContent, MONTHS } from '../App';
 
@@ -13,7 +11,7 @@ interface InformeServicioProps {
     onSaveReport: (report: Omit<ServiceReport, 'id'>) => Promise<void>;
     onApplyForPioneer: () => void;
     invitationContent: InvitationContent[];
-    isPublicForm?: boolean;
+    isLoggedIn: boolean;
 }
 
 interface InvitationDetails {
@@ -77,7 +75,7 @@ const InvitationModal: React.FC<{
 };
 
 
-const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceReports, onSaveReport, onApplyForPioneer, invitationContent, isPublicForm = false }) => {
+const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceReports, onSaveReport, onApplyForPioneer, invitationContent, isLoggedIn }) => {
     const [anio, setAnio] = useState<number | string>(new Date().getFullYear());
     const [mes, setMes] = useState('');
     const [grupo, setGrupo] = useState('');
@@ -106,7 +104,18 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
     }, [publishers]);
 
     const grupos = useMemo(() => Object.keys(publishersData).sort(), [publishersData]);
-    const publicadoresEnGrupo = useMemo(() => publishersData[grupo] || [], [publishersData, grupo]);
+    
+    const publicadoresEnGrupo = useMemo(() => {
+        const publishersInGroup = publishersData[grupo] || [];
+        // Sort publishers alphabetically
+        return publishersInGroup.sort((a, b) => {
+            const nameA = `${a.Nombre} ${a.Apellido}`.toLowerCase();
+            const nameB = `${b.Nombre} ${b.Apellido}`.toLowerCase();
+            if (nameA < nameB) return -1;
+            if (nameA > nameB) return 1;
+            return 0;
+        });
+    }, [publishersData, grupo]);
     
     const invitationSlides = (invitationContent && invitationContent.length > 0)
         ? invitationContent.map(item => ({ imageUrl: item.imageUrl, text: item.phrase }))
@@ -190,7 +199,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
 
         try {
             const reportData = {
-                idPublicador,
+                idPublicador: idPublicador,
                 anioCalendario: Number(anio),
                 mes,
                 participacion: predico,
@@ -204,8 +213,8 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
 
             setStatus({ message: '¡Informe guardado con éxito!', type: 'success' });
             
-            if (!isPublicForm) {
-                const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            if (isLoggedIn) {
+                const months = MONTHS;
                 const currentMonthIndex = months.indexOf(mes);
                 const currentYear = Number(anio);
                 let nextMonthIndex = currentMonthIndex + 1;
@@ -223,7 +232,8 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
             setTimeout(() => setStatus({ message: '', type: '' }), 5000);
 
         } catch (error) {
-            setStatus({ message: 'Error al guardar el informe.', type: 'error' });
+            console.error("Save failed:", error);
+            setStatus({ message: `Error al guardar el informe. Por favor, revise su conexión o contacte al administrador. Detalles: ${(error as Error).message}`, type: 'error' });
         } finally {
             setIsSubmitting(false);
         }
@@ -249,23 +259,20 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                             </div>
                         </div>
 
-                        <>
-                            <div className="form-group mb-4">
-                                <label htmlFor="grupo" className="label">Grupo:</label>
-                                <select id="grupo" value={grupo} onChange={handleGrupoChange} required className="input">
-                                    <option value="" disabled>Seleccione</option>
-                                    {grupos.map(g => <option key={g} value={g}>{g}</option>)}
-                                </select>
-                            </div>
-                            <div className="form-group mb-6">
-                                <label htmlFor="id_publicador" className="label">Nombre:</label>
-                                <select id="id_publicador" value={idPublicador} onChange={e => setIdPublicador(e.target.value)} required disabled={!grupo} className="input">
-                                    <option value="" disabled>{grupo ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
-                                    {publicadoresEnGrupo.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
-                                </select>
-                            </div>
-                        </>
-
+                        <div className="form-group mb-4">
+                            <label htmlFor="grupo" className="label">Grupo:</label>
+                            <select id="grupo" value={grupo} onChange={handleGrupoChange} required className="input">
+                                <option value="" disabled>Seleccione un grupo</option>
+                                {grupos.map(g => <option key={g} value={g}>{g}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group mb-6">
+                            <label htmlFor="id_publicador" className="label">Nombre:</label>
+                            <select id="id_publicador" value={idPublicador} onChange={e => setIdPublicador(e.target.value)} required disabled={!grupo} className="input">
+                                <option value="" disabled>{grupo ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
+                                {publicadoresEnGrupo.map(p => <option key={p.id} value={p.id}>{[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ')}</option>)}
+                            </select>
+                        </div>
 
                         <table className="w-full border-collapse mb-6">
                             <tbody>

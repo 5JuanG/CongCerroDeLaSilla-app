@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Publisher, ServiceReport, MONTHS } from '../App';
+// FIX: Use `import type` to break circular dependency for the type checker.
+import type { Publisher, ServiceReport } from '../App';
+import { MONTHS } from '../App';
 import Tooltip from './Tooltip';
 
 type EditableReport = Omit<ServiceReport, 'id'>;

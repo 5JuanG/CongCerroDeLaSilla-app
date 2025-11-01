@@ -56,7 +56,13 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             publicVisibility: schedule.publicVisibility || {}
         };
 
-        const maxLength = Object.values(schedule).reduce((max, arr) => (Array.isArray(arr) ? Math.max(max, arr.length) : max), 0);
+        // FIX: Replaced reduce with a for loop for better type safety and readability when calculating max length.
+        let maxLength = 0;
+        for (const value of Object.values(schedule)) {
+            if (Array.isArray(value)) {
+                maxLength = Math.max(maxLength, value.length);
+            }
+        }
         const requiredLength = Math.max(maxLength, (yearPage + 1) * YEARS_PER_PAGE);
 
         DISCURSOS_PUBLICOS.forEach(talk => {
@@ -81,6 +87,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         if (dateFilter) {
             const talkNumbersOnDate = new Set<number>();
             Object.entries(localSchedule).forEach(([talkNum, assignments]) => {
+                if (talkNum === 'publicVisibility' || talkNum === 'outgoingTalks') return;
                 if (Array.isArray(assignments) && assignments?.some(a => a?.date === dateFilter)) {
                     talkNumbersOnDate.add(Number(talkNum));
                 }
@@ -107,7 +114,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     }, [searchQuery, categoryFilter, dateFilter, localSchedule]);
 
     const handleSlotClick = (talkNumber: number, slotIndex: number) => {
-        const currentData = localSchedule[talkNumber]?.[slotIndex] || {};
+        const currentData = localSchedule[talkNumber.toString()]?.[slotIndex] || {};
         setEditingSlot({ talkNumber, slotIndex, data: currentData });
         setIsModalOpen(true);
     };
@@ -118,11 +125,10 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
-            // FIX: The schedule object is indexed by string, so convert the number to a string.
-            const talkAssignments = [...(newSchedule[talkNumber.toString()] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
+            const talkKey = talkNumber.toString();
+            const talkAssignments = [...(newSchedule[talkKey] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
             talkAssignments[slotIndex] = newData;
-            // FIX: The schedule object is indexed by string, so convert the number to a string.
-            newSchedule[talkNumber.toString()] = talkAssignments;
+            newSchedule[talkKey] = talkAssignments;
             return newSchedule;
         });
 
@@ -136,11 +142,10 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
-            // FIX: The schedule object is indexed by string, so convert the number to a string.
-            const talkAssignments = [...(newSchedule[talkNumber.toString()] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
+            const talkKey = talkNumber.toString();
+            const talkAssignments = [...(newSchedule[talkKey] || Array(YEARS_PER_PAGE * (yearPage + 1)).fill(null))];
             talkAssignments[slotIndex] = null;
-            // FIX: The schedule object is indexed by string, so convert the number to a string.
-            newSchedule[talkNumber.toString()] = talkAssignments;
+            newSchedule[talkKey] = talkAssignments;
             return newSchedule;
         });
 
@@ -178,6 +183,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             if (!visibilityMap[yearMonthKey]) return [];
     
             for (const talkNumStr in schedule) {
+                // FIX: Guard against iterating over non-discourse properties of the schedule object.
                 if(talkNumStr === 'publicVisibility' || talkNumStr === 'outgoingTalks') continue;
                 const assignments = schedule[talkNumStr];
                 if (Array.isArray(assignments)) {
@@ -773,7 +779,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                     <div className="grid grid-cols-6 gap-2 w-1/2">
                                         {displayedYears.map((year, localSlotIndex) => {
                                             const globalSlotIndex = yearPage * YEARS_PER_PAGE + localSlotIndex;
-                                            const assignment = localSchedule[talk.number]?.[globalSlotIndex];
+                                            const assignment = localSchedule[talk.number.toString()]?.[globalSlotIndex];
                                             return (
                                                 <button
                                                     key={globalSlotIndex}

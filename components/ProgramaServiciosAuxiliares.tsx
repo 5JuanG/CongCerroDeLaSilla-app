@@ -79,44 +79,47 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
 
         onShowModal({ type: 'info', title: 'Generando PDF', message: 'Por favor, espere un momento...' });
 
-        // Temporarily apply styles for PDF generation
         content.classList.add('pdf-export');
 
         html2canvas(content, {
             scale: 2,
             useCORS: true,
-            onclone: (document) => {
-                const titleElement = document.querySelector('.pdf-title-export') as HTMLElement;
-                if(titleElement) titleElement.style.display = 'block';
-                const legendElement = document.querySelector('.pdf-legend-export') as HTMLElement;
-                if(legendElement) legendElement.style.display = 'flex';
-            }
         }).then(canvas => {
             // @ts-ignore
             const { jsPDF } = jspdf;
             const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
             
             pdf.setFontSize(14);
-            pdf.text("PROGRAMA DE ACOMODADORES, LECTORES, HOSPITALIDAD Y ASEO CONG CERRO DE LA SILLA-GPE.", pdf.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
-
-            pdf.setFontSize(12);
-
+            pdf.setFont('helvetica', 'bold');
+            const title = [
+                "PROGRAMA DE ACOMODADORES, LECTORES, HOSPITALIDAD Y ASEO",
+                `CONG. CERRO DE LA SILLA-GPE. - ${selectedMonth.toUpperCase()} ${selectedYear}`
+            ];
+            pdf.text(title, pdf.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+            
             const imgData = canvas.toDataURL('image/png');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const ratio = canvas.width / canvas.height;
-            let width = pdfWidth - 20; // with margin
-            let height = width / ratio;
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            
+            const margin = 15;
+            const topMargin = 30;
 
-            if (height > pdfHeight - 40) { // leave space for title and margins
-                height = pdfHeight - 40;
-                width = height * ratio;
+            const imgWidth = pageWidth - margin * 2;
+            const imgHeight = canvas.height * imgWidth / canvas.width;
+            
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', margin, topMargin, imgWidth, imgHeight);
+            heightLeft -= (pageHeight - topMargin - margin);
+
+            while (heightLeft > 0) {
+                position -= (pageHeight - margin * 2);
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+                heightLeft -= (pageHeight - margin * 2);
             }
 
-            const x = (pdfWidth - width) / 2;
-            const y = 25;
-
-            pdf.addImage(imgData, 'PNG', x, y, width, height);
             pdf.save(`Programa_Acomodadores_${selectedMonth}_${selectedYear}.pdf`);
             onShowModal({ type: 'success', title: 'Éxito', message: 'PDF generado correctamente.' });
         }).catch(err => {
@@ -132,6 +135,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
              <style>{`
                 .pdf-export table {
                     font-size: 12pt;
+                    min-width: 0 !important;
                 }
                 .pdf-export {
                     background-color: white !important;
@@ -220,7 +224,7 @@ const ProgramaServiciosAuxiliares: React.FC<ProgramaServiciosAuxiliaresProps> = 
                             ))}
                         </div>
                         {/* --- Desktop Table View (for display and PDF export) --- */}
-                        <div className="hidden md:block">
+                        <div className="hidden md:block overflow-x-auto">
                             <div className="pdf-title-export hidden text-center mb-4">
                                 PROGRAMA DE ACOMODADORES, LECTORES, HOSPITALIDAD Y ASEO CONG CERRO DE LA SILLA-GPE.
                             </div>
