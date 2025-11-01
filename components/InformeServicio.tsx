@@ -203,10 +203,10 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                 anioCalendario: Number(anio),
                 mes,
                 participacion: predico,
-                cursosBiblicos: cursos !== '' ? Number(cursos) : undefined,
-                horas: horas !== '' ? Number(horas) : undefined,
+                cursosBiblicos: Number(cursos) || 0,
+                horas: Number(horas) || 0,
                 precursorAuxiliar: tipoServicio === 'Precursor Auxiliar' ? 'PA' : '',
-                notas: notas || undefined,
+                notas: notas || '',
             };
 
             await onSaveReport(reportData as Omit<ServiceReport, 'id'>);
