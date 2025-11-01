@@ -104,21 +104,35 @@ const RecordCard: React.FC<RecordCardProps> = ({
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, month: string, year: number) => {
         if (isGlobal || !publisher || !onDataChange) return;
-
+    
         const { dataset, value, type, checked } = e.target;
         const field = dataset.field as keyof Report;
         if (!field) return;
-        
-        let finalValue: any = type === 'checkbox' ? checked : (value === '' ? undefined : value);
-        if (field === 'precursorAuxiliar') finalValue = finalValue ? 'PA' : '';
-        if(type === 'number' && value !== '') finalValue = Number(value);
-        
-        const existingReport = reportsData.find(r => r.idPublicador === publisher.id && r.mes === month && r.anioCalendario === year) || {
-            idPublicador: publisher.id, mes: month, anioCalendario: year, participacion: false, precursorAuxiliar: ''
+    
+        const existingReport = reportsData.find(r => r.idPublicador === publisher!.id && r.mes === month && r.anioCalendario === year) || {
+            idPublicador: publisher!.id, mes: month, anioCalendario: year, participacion: false, precursorAuxiliar: ''
         };
         
-        const updatedReport = { ...existingReport, [field]: finalValue };
-
+        let updatedReport: Report = { ...existingReport };
+    
+        switch (field) {
+            case 'participacion':
+                updatedReport.participacion = checked;
+                break;
+            case 'precursorAuxiliar':
+                updatedReport.precursorAuxiliar = checked ? 'PA' : '';
+                break;
+            case 'cursosBiblicos':
+                updatedReport.cursosBiblicos = value === '' ? 0 : Number(value);
+                break;
+            case 'horas':
+                updatedReport.horas = value === '' ? 0 : Number(value);
+                break;
+            case 'notas':
+                updatedReport.notas = value; // value will be '' if empty
+                break;
+        }
+    
         onDataChange(updatedReport);
     };
 
