@@ -34,7 +34,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     const [yearPage, setYearPage] = useState(0);
     const START_YEAR = 2024;
     const YEARS_PER_PAGE = 6;
-    
+
     const [whatsAppModalData, setWhatsAppModalData] = useState<{ talkNumber: number; data: PublicTalkAssignment } | null>(null);
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -68,7 +68,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         DISCURSOS_PUBLICOS.forEach(talk => {
             const talkKey = talk.number.toString();
             const existingAssignments = schedule[talkKey] || [];
-            
+
             const newAssignments = Array(requiredLength).fill(null);
             for (let i = 0; i < existingAssignments.length; i++) {
                 if (i < newAssignments.length) {
@@ -104,7 +104,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
 
         if (searchQuery) {
             const lowercasedQuery = searchQuery.toLowerCase();
-            talks = talks.filter(talk => 
+            talks = talks.filter(talk =>
                 talk.title.toLowerCase().includes(lowercasedQuery) ||
                 talk.number.toString().startsWith(searchQuery)
             );
@@ -122,7 +122,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     const handleModalSave = (newData: PublicTalkAssignment) => {
         if (!editingSlot) return;
         const { talkNumber, slotIndex } = editingSlot;
-        
+
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
             const talkKey = talkNumber.toString();
@@ -139,7 +139,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     const handleModalDelete = () => {
         if (!editingSlot) return;
         const { talkNumber, slotIndex } = editingSlot;
-        
+
         setLocalSchedule(prev => {
             const newSchedule = { ...prev };
             const talkKey = talkNumber.toString();
@@ -171,7 +171,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             setTimeout(() => setStatus(''), 3000);
         }
     };
-    
+
     if (!canManage) {
         // This is the new public-facing view.
         const monthlyTalks = useMemo(() => {
@@ -181,10 +181,10 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             const yearMonthKey = `${viewYear}-${viewMonth}`;
 
             if (!visibilityMap[yearMonthKey]) return [];
-    
+
             for (const talkNumStr in schedule) {
                 // FIX: Guard against iterating over non-discourse properties of the schedule object.
-                if(talkNumStr === 'publicVisibility' || talkNumStr === 'outgoingTalks') continue;
+                if (talkNumStr === 'publicVisibility' || talkNumStr === 'outgoingTalks') continue;
                 const assignments = schedule[talkNumStr];
                 if (Array.isArray(assignments)) {
                     for (const assignment of assignments) {
@@ -202,7 +202,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             }
             return talks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         }, [schedule, viewYear, viewMonth]);
-    
+
         return (
             <div className="container mx-auto p-4 bg-white rounded-lg shadow-md">
                 <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Programa Mensual de Discursos Públicos</h1>
@@ -220,7 +220,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                         </select>
                     </div>
                 </div>
-    
+
                 {monthlyTalks.length > 0 ? (
                     <div>
                         {/* Mobile Card View */}
@@ -278,11 +278,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             </div>
         );
     }
-    
+
     const WhatsAppShareModal: React.FC<{ talkNumber: number; data: PublicTalkAssignment; onClose: () => void; }> = ({ talkNumber, data, onClose }) => {
         const [hospitality, setHospitality] = useState('no_ha_confirmado');
         const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talkNumber);
-    
+
         const generateMessage = () => {
             let hospitalityText = '';
             switch (hospitality) {
@@ -296,26 +296,26 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                     hospitalityText = 'No ha confirmado.';
                     break;
             }
-    
+
             const message = `*Discurso Público para el ${data.date}* 🗓️\n\n` +
                 `*Título:* ${talkInfo?.number}. ${talkInfo?.title}\n` +
                 `*Orador:* ${data.speakerName || ''}\n` +
                 `*Congregación:* ${data.congregation || ''}\n` +
                 `*Canción:* ${data.song || ''}\n\n` +
                 `*¿Se quedará a la hospitalidad?*\n${hospitalityText}`;
-            
+
             return message;
         };
-        
+
         const message = generateMessage();
-    
+
         const handleSend = () => {
             const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
             window.open(url, '_blank');
         };
-    
+
         return (
-             <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-[60] p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-[60] p-4">
                 <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
                     <div className="p-4 border-b">
                         <h3 className="text-xl font-bold">Compartir por WhatsApp</h3>
@@ -324,9 +324,9 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">¿Se quedará a la hospitalidad?</label>
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-                                <label className="flex items-center"><input type="radio" name="hospitality" value="si" checked={hospitality === 'si'} onChange={(e) => setHospitality(e.target.value)} className="mr-2"/> Sí</label>
-                                <label className="flex items-center"><input type="radio" name="hospitality" value="no" checked={hospitality === 'no'} onChange={(e) => setHospitality(e.target.value)} className="mr-2"/> No</label>
-                                <label className="flex items-center"><input type="radio" name="hospitality" value="no_ha_confirmado" checked={hospitality === 'no_ha_confirmado'} onChange={(e) => setHospitality(e.target.value)} className="mr-2"/> No ha confirmado</label>
+                                <label className="flex items-center"><input type="radio" name="hospitality" value="si" checked={hospitality === 'si'} onChange={(e) => setHospitality(e.target.value)} className="mr-2" /> Sí</label>
+                                <label className="flex items-center"><input type="radio" name="hospitality" value="no" checked={hospitality === 'no'} onChange={(e) => setHospitality(e.target.value)} className="mr-2" /> No</label>
+                                <label className="flex items-center"><input type="radio" name="hospitality" value="no_ha_confirmado" checked={hospitality === 'no_ha_confirmado'} onChange={(e) => setHospitality(e.target.value)} className="mr-2" /> No ha confirmado</label>
                             </div>
                         </div>
                         <div className="bg-gray-100 p-4 rounded-md max-h-60 overflow-y-auto">
@@ -409,70 +409,121 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     };
 
     const displayedYears = Array.from({ length: YEARS_PER_PAGE }, (_, i) => START_YEAR + yearPage * YEARS_PER_PAGE + i);
-    
+
     const OutgoingSpeakersView = () => {
-        const speakers = useMemo(() => 
+        const [monthFilter, setMonthFilter] = useState('');
+        const [yearFilter, setYearFilter] = useState<number | ''>('');
+        const [speakerFilter, setSpeakerFilter] = useState('');
+
+        const speakers = useMemo(() =>
             publishers.filter(p => p.Sexo === 'Hombre' && (p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial'))
-            .sort((a,b) => a.Nombre.localeCompare(b.Nombre)), 
-        [publishers]);
-    
+                .sort((a, b) => a.Nombre.localeCompare(b.Nombre)),
+            [publishers]);
+
         const getSpeakerName = (id: string) => {
             const speaker = speakers.find(s => s.id === id);
             return speaker ? `${speaker.Nombre} ${speaker.Apellido}` : 'Desconocido';
         };
-    
-        const sortedAssignments = useMemo(() => 
-            [...localOutgoingSchedule].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-        [localOutgoingSchedule]);
-    
+
+        const filteredAssignments = useMemo(() => {
+            return localOutgoingSchedule.filter(assignment => {
+                const date = new Date(assignment.date + 'T00:00:00');
+                const monthMatch = monthFilter ? MONTHS[date.getMonth()] === monthFilter : true;
+                const yearMatch = yearFilter ? date.getFullYear() === yearFilter : true;
+                const speakerMatch = speakerFilter ? assignment.speakerId === speakerFilter : true;
+                return monthMatch && speakerMatch && yearMatch;
+            }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }, [localOutgoingSchedule, monthFilter, speakerFilter, yearFilter]);
+
         const handleAddClick = () => {
             setEditingOutgoingTalk({ id: crypto.randomUUID() });
             setIsOutgoingModalOpen(true);
         };
-    
+
         const handleEditClick = (talk: OutgoingTalkAssignment) => {
             setEditingOutgoingTalk(talk);
             setIsOutgoingModalOpen(true);
         };
-    
+
         const handleDeleteClick = (talkId: string) => {
             if (window.confirm("¿Está seguro de que desea eliminar esta asignación?")) {
                 setLocalOutgoingSchedule(prev => prev.filter(t => t.id !== talkId));
             }
         };
-        
+
         return (
             <div>
-                <div className="flex justify-end mb-4">
-                    <button onClick={handleAddClick} disabled={!canManage} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                <div className="flex flex-col xl:flex-row justify-between items-end mb-6 gap-4 bg-gray-50 p-4 rounded-lg border">
+                    <div className="flex flex-wrap gap-4 w-full xl:w-auto">
+                        <div className="w-full sm:w-32">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Año</label>
+                            <select
+                                value={yearFilter}
+                                onChange={(e) => setYearFilter(e.target.value ? Number(e.target.value) : '')}
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                            >
+                                <option value="">Todos</option>
+                                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
+                        <div className="w-full sm:w-40">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Mes</label>
+                            <select
+                                value={monthFilter}
+                                onChange={(e) => setMonthFilter(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                            >
+                                <option value="">Todos</option>
+                                {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                        <div className="w-full sm:w-64">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Orador</label>
+                            <select
+                                value={speakerFilter}
+                                onChange={(e) => setSpeakerFilter(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                            >
+                                <option value="">Todos</option>
+                                {speakers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.Nombre} {s.Apellido}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <button onClick={handleAddClick} disabled={!canManage} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 whitespace-nowrap">
                         Añadir Asignación
                     </button>
                 </div>
-                
+
                 <div className="space-y-4">
-                    {sortedAssignments.length > 0 ? sortedAssignments.map(talk => {
+                    {filteredAssignments.length > 0 ? filteredAssignments.map(talk => {
                         const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talk.talkNumber);
                         return (
-                            <div key={talk.id} className="bg-gray-50 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4">
+                            <div key={talk.id} className="bg-gray-50 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4 hover:shadow-md transition-shadow">
                                 <div>
-                                    <p className="font-bold text-lg">{getSpeakerName(talk.speakerId)}</p>
-                                    <p className="text-sm text-gray-600">
-                                        <span className="font-semibold text-blue-700">{talk.date}</span> a {talk.congregation}
+                                    <p className="font-bold text-lg text-gray-800">{getSpeakerName(talk.speakerId)}</p>
+                                    <p className="text-sm text-gray-600 flex items-center gap-2">
+                                        <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded">{new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                        <span>en <span className="font-semibold">{talk.congregation}</span></span>
                                     </p>
-                                    <p className="text-sm text-gray-800 mt-1">
-                                        Discurso: {talkInfo?.number}. {talkInfo?.title}
+                                    <p className="text-sm text-gray-800 mt-2">
+                                        <span className="font-semibold text-gray-600">Tema: </span>
+                                        {talkInfo ? `${talkInfo.number}. ${talkInfo.title}` : 'Tema no encontrado'}
                                     </p>
                                 </div>
                                 {canManage && (
                                     <div className="flex gap-2">
-                                        <button onClick={() => handleEditClick(talk)} className="text-sm px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">Editar</button>
-                                        <button onClick={() => handleDeleteClick(talk.id)} className="text-sm px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">Eliminar</button>
+                                        <button onClick={() => handleEditClick(talk)} className="text-sm px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors">Editar</button>
+                                        <button onClick={() => handleDeleteClick(talk.id)} className="text-sm px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">Eliminar</button>
                                     </div>
                                 )}
                             </div>
                         );
                     }) : (
-                        <p className="text-center text-gray-500 py-8">No hay asignaciones de oradores salientes programadas.</p>
+                        <div className="text-center text-gray-500 py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                            <p>No se encontraron asignaciones con los filtros seleccionados.</p>
+                        </div>
                     )}
                 </div>
             </div>
@@ -481,14 +532,14 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
 
     const OutgoingAssignmentModal = () => {
         if (!isOutgoingModalOpen || !editingOutgoingTalk) return null;
-    
+
         const [formData, setFormData] = useState<Partial<OutgoingTalkAssignment>>(editingOutgoingTalk);
-    
-        const speakers = useMemo(() => 
+
+        const speakers = useMemo(() =>
             publishers.filter(p => p.Sexo === 'Hombre' && (p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial'))
-            .sort((a,b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`)), 
-        [publishers]);
-    
+                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`)),
+            [publishers]);
+
         const getSpeakerName = (id: string) => {
             const speaker = speakers.find(s => s.id === id);
             return speaker ? `${speaker.Nombre} ${speaker.Apellido}` : 'Desconocido';
@@ -497,29 +548,29 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
         };
-    
+
         const handleSave = (e: React.FormEvent) => {
             e.preventDefault();
-            
+
             const { speakerId, date, talkNumber, congregation, id } = formData;
-    
+
             if (!speakerId || !date || !talkNumber || !congregation || !id) {
                 onShowModal({ type: 'error', title: 'Campos Incompletos', message: 'Por favor, complete todos los campos.' });
                 return;
             }
-    
+
             const newDate = new Date(date + "T00:00:00");
             const newMonth = newDate.getMonth();
             const newYear = newDate.getFullYear();
-    
+
             const conflict = localOutgoingSchedule.find(assignment => {
                 if (assignment.id === id) return false;
                 if (assignment.speakerId !== speakerId) return false;
-    
+
                 const existingDate = new Date(assignment.date + "T00:00:00");
                 return existingDate.getMonth() === newMonth && existingDate.getFullYear() === newYear;
             });
-    
+
             const proceed = () => {
                 const finalData: OutgoingTalkAssignment = {
                     id,
@@ -540,7 +591,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                 setIsOutgoingModalOpen(false);
                 setEditingOutgoingTalk(null);
             };
-            
+
             if (conflict) {
                 const speakerName = getSpeakerName(speakerId);
                 if (window.confirm(`¡Alerta! ${speakerName} ya tiene una asignación para este mes (${conflict.date} en ${conflict.congregation}). ¿Desea programar esta asignación de todos modos?`)) {
@@ -550,7 +601,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                 proceed();
             }
         };
-        
+
         return (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
                 <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
@@ -591,14 +642,14 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             </div>
         );
     };
-    
+
     const MonthlyView = () => {
         const monthlyTalks = useMemo(() => {
             const talks: ({ talkInfo: typeof DISCURSOS_PUBLICOS[0] } & PublicTalkAssignment)[] = [];
             const monthIndex = MONTHS.indexOf(viewMonth);
-    
+
             for (const talkNumStr in localSchedule) {
-                if(talkNumStr === 'publicVisibility' || talkNumStr === 'outgoingTalks') continue;
+                if (talkNumStr === 'publicVisibility' || talkNumStr === 'outgoingTalks') continue;
 
                 const assignments = localSchedule[talkNumStr];
                 if (Array.isArray(assignments)) {
@@ -617,10 +668,10 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             }
             return talks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         }, [localSchedule, viewYear, viewMonth]);
-    
+
         const yearMonthKey = `${viewYear}-${viewMonth}`;
         const isPublic = localSchedule.publicVisibility?.[yearMonthKey] || false;
-    
+
         const handleToggleVisibility = () => {
             setLocalSchedule(prev => {
                 const newVisibility = { ...(prev.publicVisibility || {}) };
@@ -628,7 +679,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                 return { ...prev, publicVisibility: newVisibility };
             });
         };
-    
+
         return (
             <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
@@ -645,8 +696,8 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                         </select>
                     </div>
                 </div>
-                
-                 <div className="flex justify-center items-center gap-4 mb-6 p-3 bg-gray-100 rounded-lg">
+
+                <div className="flex justify-center items-center gap-4 mb-6 p-3 bg-gray-100 rounded-lg">
                     <span className="font-semibold">Estado del Programa:</span>
                     <span className={`px-3 py-1 text-sm font-bold rounded-full ${isPublic ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {isPublic ? 'Visible' : 'Oculto'}
@@ -657,7 +708,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                 </div>
 
                 {monthlyTalks.length > 0 ? (
-                     <div className="overflow-x-auto">
+                    <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-100">
                                 <tr>
@@ -689,9 +740,9 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             <AssignmentModal />
             {isOutgoingModalOpen && <OutgoingAssignmentModal />}
             {whatsAppModalData && (
-                <WhatsAppShareModal 
-                    talkNumber={whatsAppModalData.talkNumber} 
-                    data={whatsAppModalData.data} 
+                <WhatsAppShareModal
+                    talkNumber={whatsAppModalData.talkNumber}
+                    data={whatsAppModalData.data}
                     onClose={() => setWhatsAppModalData(null)}
                 />
             )}
@@ -704,13 +755,13 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                     </button>
                 </div>
             </div>
-            
+
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                     <button onClick={() => setActiveTab('planner')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'planner' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                         Planificador Anual
                     </button>
-                     <button onClick={() => setActiveTab('monthly')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'monthly' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                    <button onClick={() => setActiveTab('monthly')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'monthly' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                         Programa Mensual
                     </button>
                     <button onClick={() => setActiveTab('outgoing')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'outgoing' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
@@ -718,13 +769,13 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                     </button>
                 </nav>
             </div>
-            
+
             {activeTab === 'planner' && (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
                         <div>
                             <label htmlFor="search-query" className="block text-sm font-medium text-gray-700">Buscar por Título o Número:</label>
-                            <input type="search" id="search-query" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ej: Jehová, el 'Gran Creador' o 101" className="mt-1 w-full p-2 border rounded-md"/>
+                            <input type="search" id="search-query" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Ej: Jehová, el 'Gran Creador' o 101" className="mt-1 w-full p-2 border rounded-md" />
                         </div>
                         <div>
                             <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700">Filtrar por Categoría:</label>
@@ -735,7 +786,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                         </div>
                         <div>
                             <label htmlFor="date-filter" className="block text-sm font-medium text-gray-700">Filtrar por Fecha:</label>
-                            <input type="date" id="date-filter" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md"/>
+                            <input type="date" id="date-filter" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-md" />
                         </div>
                     </div>
 
@@ -757,7 +808,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                             Siguiente
                         </button>
                     </div>
-                    
+
                     <div className="overflow-x-auto">
                         <div className="min-w-[800px]">
                             {/* Header */}
@@ -769,44 +820,44 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                             </div>
                             {/* Body */}
                             <div className="max-h-[70vh] overflow-y-auto">
-                            {filteredDiscursos.length > 0 ? filteredDiscursos.map(talk => {
-                                const isNoUsar = talk.title.toLowerCase().includes('(no usar)');
-                                return (
-                                <div key={talk.number} className={`flex items-center p-2 border-b ${isNoUsar ? 'bg-gray-200 text-gray-500' : 'hover:bg-blue-50'}`}>
-                                    <div className="flex-1 text-sm">
-                                        <span className="font-semibold">{talk.number}.</span> {talk.title}
+                                {filteredDiscursos.length > 0 ? filteredDiscursos.map(talk => {
+                                    const isNoUsar = talk.title.toLowerCase().includes('(no usar)');
+                                    return (
+                                        <div key={talk.number} className={`flex items-center p-2 border-b ${isNoUsar ? 'bg-gray-200 text-gray-500' : 'hover:bg-blue-50'}`}>
+                                            <div className="flex-1 text-sm">
+                                                <span className="font-semibold">{talk.number}.</span> {talk.title}
+                                            </div>
+                                            <div className="grid grid-cols-6 gap-2 w-1/2">
+                                                {displayedYears.map((year, localSlotIndex) => {
+                                                    const globalSlotIndex = yearPage * YEARS_PER_PAGE + localSlotIndex;
+                                                    const assignment = localSchedule[talk.number.toString()]?.[globalSlotIndex];
+                                                    return (
+                                                        <button
+                                                            key={globalSlotIndex}
+                                                            disabled={isNoUsar || !canManage}
+                                                            onClick={() => handleSlotClick(talk.number, globalSlotIndex)}
+                                                            title={assignment ? `${assignment.date}\n${assignment.speakerName}` : 'Asignar discurso'}
+                                                            className={`h-8 text-xs border rounded-md transition-colors disabled:cursor-not-allowed ${assignment?.date ? (new Date(assignment.date + 'T00:00:00') < new Date() ? 'bg-gray-300' : 'bg-blue-200 hover:bg-blue-300') : 'bg-white hover:bg-gray-200'
+                                                                } disabled:bg-gray-300 truncate px-1`}
+                                                        >
+                                                            {assignment?.date || ''}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )
+                                }) : (
+                                    <div className="text-center p-6 text-gray-500">
+                                        No se encontraron discursos que coincidan con los filtros aplicados.
                                     </div>
-                                    <div className="grid grid-cols-6 gap-2 w-1/2">
-                                        {displayedYears.map((year, localSlotIndex) => {
-                                            const globalSlotIndex = yearPage * YEARS_PER_PAGE + localSlotIndex;
-                                            const assignment = localSchedule[talk.number.toString()]?.[globalSlotIndex];
-                                            return (
-                                                <button
-                                                    key={globalSlotIndex}
-                                                    disabled={isNoUsar || !canManage}
-                                                    onClick={() => handleSlotClick(talk.number, globalSlotIndex)}
-                                                    title={assignment ? `${assignment.date}\n${assignment.speakerName}` : 'Asignar discurso'}
-                                                    className={`h-8 text-xs border rounded-md transition-colors disabled:cursor-not-allowed ${
-                                                        assignment?.date ? (new Date(assignment.date + 'T00:00:00') < new Date() ? 'bg-gray-300' : 'bg-blue-200 hover:bg-blue-300') : 'bg-white hover:bg-gray-200'
-                                                    } disabled:bg-gray-300 truncate px-1`}
-                                                >
-                                                    {assignment?.date || ''}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}) : (
-                                <div className="text-center p-6 text-gray-500">
-                                    No se encontraron discursos que coincidan con los filtros aplicados.
-                                </div>
-                            )}
+                                )}
                             </div>
                         </div>
                     </div>
                 </>
             )}
-             {activeTab === 'monthly' && <MonthlyView />}
+            {activeTab === 'monthly' && <MonthlyView />}
             {activeTab === 'outgoing' && <OutgoingSpeakersView />}
         </div>
     );

@@ -7,7 +7,7 @@ interface TerritoriosProps {
     onSave: (record: Omit<TerritoryRecord, 'id'>) => Promise<void>;
     onDelete: (record: Partial<TerritoryRecord>) => Promise<void>;
     territoryMaps: TerritoryMap[];
-    onUploadMap: (territoryId: string, imageDataUrl: string) => Promise<void>;
+    onUploadMap: (territoryId: string, imageFile: Blob) => Promise<void>;
     onDeleteMap: (mapId: string, mapUrl: string) => Promise<void>;
     canManage: boolean;
     onShowModal: (info: ModalInfo) => void;
@@ -28,7 +28,7 @@ const getCurrentServiceYear = () => {
 
 const MapManager: React.FC<{
     maps: TerritoryMap[];
-    onUpload: (territoryId: string, imageDataUrl: string) => Promise<void>;
+    onUpload: (territoryId: string, imageFile: Blob) => Promise<void>;
     onDelete: (mapId: string, mapUrl: string) => Promise<void>;
     canManage: boolean;
     setViewingMapUrl: (url: string | null) => void;
@@ -44,11 +44,11 @@ const MapManager: React.FC<{
             return;
         }
         setIsUploading(true);
-        onShowModal({type: 'info', title: 'Procesando', message: 'Comprimiendo imagen, espere un momento...'});
-    
+        onShowModal({ type: 'info', title: 'Procesando', message: 'Comprimiendo imagen, espere un momento...' });
+
         try {
-            const compressedDataUrl = await compressImage(selectedFile, 1920); // Higher resolution for maps
-            await onUpload(selectedTerritoryId, compressedDataUrl);
+            const compressedBlob = await compressImage(selectedFile, 1920); // Higher resolution for maps
+            await onUpload(selectedTerritoryId, compressedBlob);
             onShowModal({ type: 'success', title: 'Éxito', message: `Mapa para el territorio ${selectedTerritoryId} subido correctamente.` });
             setSelectedFile(null);
             const fileInput = document.getElementById('map-file-input') as HTMLInputElement;
@@ -61,17 +61,17 @@ const MapManager: React.FC<{
     };
 
     const handleDelete = async (map: TerritoryMap) => {
-        if(window.confirm(`¿Está seguro de que desea eliminar el mapa del territorio ${map.territoryId}?`)) {
+        if (window.confirm(`¿Está seguro de que desea eliminar el mapa del territorio ${map.territoryId}?`)) {
             try {
                 await onDelete(map.id, map.mapUrl);
-                onShowModal({type: 'success', title: 'Eliminado', message: 'El mapa se ha eliminado.'})
+                onShowModal({ type: 'success', title: 'Eliminado', message: 'El mapa se ha eliminado.' })
             } catch (error) {
                 console.error("Error deleting map:", error);
                 onShowModal({ type: 'error', title: 'Error', message: 'No se pudo eliminar el mapa.' });
             }
         }
     };
-    
+
     const sortedMaps = useMemo(() => {
         return [...maps].sort((a, b) => {
             if (a.territoryId === 'global') return -1;
@@ -94,8 +94,8 @@ const MapManager: React.FC<{
                             </select>
                         </div>
                         <div>
-                             <label htmlFor="map-file-input" className="block text-sm font-medium text-gray-700">Archivo de Imagen</label>
-                            <input id="map-file-input" type="file" onChange={e => setSelectedFile(e.target.files ? e.target.files[0] : null)} accept="image/png, image/jpeg, image/webp" className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                            <label htmlFor="map-file-input" className="block text-sm font-medium text-gray-700">Archivo de Imagen</label>
+                            <input id="map-file-input" type="file" onChange={e => setSelectedFile(e.target.files ? e.target.files[0] : null)} accept="image/png, image/jpeg, image/webp" className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                         </div>
                         <button onClick={handleUpload} disabled={isUploading || !selectedFile} className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
                             {isUploading ? 'Subiendo...' : 'Subir Mapa'}
@@ -103,14 +103,14 @@ const MapManager: React.FC<{
                     </div>
                 </div>
             )}
-            
+
             <div>
                 <h2 className="text-xl font-bold mb-4">Galería de Mapas</h2>
                 {sortedMaps.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {sortedMaps.map(map => (
-                             <div key={map.id} className="group relative border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
-                                <img src={map.mapUrl} alt={`Mapa ${map.territoryId}`} onClick={() => setViewingMapUrl(map.mapUrl)} className="w-full h-32 object-cover cursor-pointer"/>
+                            <div key={map.id} className="group relative border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
+                                <img src={map.mapUrl} alt={`Mapa ${map.territoryId}`} onClick={() => setViewingMapUrl(map.mapUrl)} className="w-full h-32 object-cover cursor-pointer" />
                                 <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-center py-1 text-sm font-bold">
                                     {map.territoryId === 'global' ? 'Global' : `Terr. ${map.territoryId}`}
                                 </div>
@@ -149,20 +149,20 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
         for (let i = 1; i <= 40; i++) {
             data[i] = { vueltas: {} };
         }
-        
+
         const currentYearRecords = records.filter(r => r.serviceYear === currentServiceYear);
 
         currentYearRecords.forEach(record => {
             if (!record.terrNum) return;
-            
+
             if (!data[record.terrNum]) {
                 data[record.terrNum] = { vueltas: {} };
             }
-            
+
             data[record.terrNum].vueltas[record.vueltaNum] = record;
             if (record.vueltaNum > maxV) maxV = record.vueltaNum;
         });
-        
+
         let effectiveMaxVueltas = Math.max(4, maxV);
         if (maxV > 0 && maxV % 4 === 0) {
             effectiveMaxVueltas = maxV + 1;
@@ -182,7 +182,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
 
     const handleSave = async (recordToSave: Partial<TerritoryRecord>) => {
         if (!recordToSave.terrNum || !recordToSave.vueltaNum || !recordToSave.serviceYear) {
-            onShowModal({type: 'error', title: 'Error', message: "Faltan datos esenciales (territorio, vuelta o año de servicio)."});
+            onShowModal({ type: 'error', title: 'Error', message: "Faltan datos esenciales (territorio, vuelta o año de servicio)." });
             return;
         }
 
@@ -198,12 +198,12 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
 
         try {
             await onSave(fullRecordData);
-            onShowModal({type: 'success', title: 'Guardado', message: 'Registro guardado con éxito.'});
+            onShowModal({ type: 'success', title: 'Guardado', message: 'Registro guardado con éxito.' });
             setIsModalOpen(false);
             setEditingRecord(null);
         } catch (error) {
             console.error("Failed to save:", error);
-            onShowModal({type: 'error', title: 'Error', message: "Hubo un error al guardar el registro."});
+            onShowModal({ type: 'error', title: 'Error', message: "Hubo un error al guardar el registro." });
         }
     };
 
@@ -217,12 +217,12 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
         if (window.confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
             try {
                 await onDelete(recordToDelete);
-                onShowModal({type: 'success', title: 'Eliminado', message: 'Registro eliminado con éxito.'});
+                onShowModal({ type: 'success', title: 'Eliminado', message: 'Registro eliminado con éxito.' });
                 setIsModalOpen(false);
                 setEditingRecord(null);
             } catch (error) {
                 console.error("Failed to delete:", error);
-                onShowModal({type: 'error', title: 'Error', message: "Hubo un error al eliminar el registro."});
+                onShowModal({ type: 'error', title: 'Error', message: "Hubo un error al eliminar el registro." });
             }
         }
     };
@@ -252,11 +252,11 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
             });
         }
     };
-    
+
     const filteredTerritoryNumbers = useMemo(() => {
         return Object.keys(territoryData).map(Number).filter(terrNum => {
             if (filterTerritory && !terrNum.toString().startsWith(filterTerritory)) return false;
-            
+
             const vueltas = Object.values(territoryData[terrNum].vueltas);
 
             if (searchQuery) {
@@ -272,7 +272,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
             }
         });
     }, [territoryData, filterTerritory, filterStatus, searchQuery]);
-    
+
     const CrudModal = () => {
         const [record, setRecord] = useState(editingRecord);
         if (!isModalOpen || !record) return null;
@@ -280,7 +280,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
             setRecord(prev => ({ ...prev, [e.target.id]: e.target.value }));
         };
         return (
-             <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
                 <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
                     <div className="p-4 border-b"><h2 className="text-xl font-bold">Territorio {record.terrNum} (Vuelta {record.vueltaNum})</h2></div>
                     <div className="p-4 space-y-4">
@@ -290,20 +290,20 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                         <div><label htmlFor="observations" className="block text-sm font-medium">Observaciones:</label><textarea id="observations" value={record.observations || ''} onChange={handleChange} rows={3} className="mt-1 w-full p-2 border rounded" /></div>
                     </div>
                     <div className="p-4 bg-gray-50 flex justify-between">
-                         {record.id ? (
+                        {record.id ? (
                             <button onClick={() => handleDelete(record)} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Eliminar</button>
-                         ) : <div></div>}
-                         <div>
+                        ) : <div></div>}
+                        <div>
                             <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded mr-2">Cancelar</button>
                             <button onClick={() => handleSave(record)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Guardar</button>
-                         </div>
+                        </div>
                     </div>
                 </div>
             </div>
         )
     }
 
-    const DesktopTable = ({ startTerr, endTerr }: {startTerr: number, endTerr: number}) => {
+    const DesktopTable = ({ startTerr, endTerr }: { startTerr: number, endTerr: number }) => {
         const vueltasPorPagina = 4;
         const startVuelta = (vueltaPage - 1) * vueltasPorPagina + 1;
         const vueltasRange = Array.from({ length: vueltasPorPagina }, (_, i) => startVuelta + i);
@@ -316,7 +316,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
         }
 
         return (
-             <div className="overflow-x-auto">
+            <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs md:text-sm">
                     <thead className="bg-gray-100 text-[10px] md:text-xs">
                         <tr>
@@ -382,17 +382,17 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                         })}
                     </tbody>
                 </table>
-             </div>
+            </div>
         )
     };
 
     const MobileCards = () => {
-         if (filteredTerritoryNumbers.length === 0) {
+        if (filteredTerritoryNumbers.length === 0) {
             return <div className="p-4 text-center text-gray-500">No hay territorios para mostrar con los filtros actuales.</div>;
         }
-        
+
         const getLastCompletedDate = (terrNum: number) => {
-             const allVueltas = (Object.values(territoryData[terrNum].vueltas) as TerritoryRecord[])
+            const allVueltas = (Object.values(territoryData[terrNum].vueltas) as TerritoryRecord[])
                 .filter((v) => v.completedDate)
                 .sort((a, b) => new Date(b.completedDate!).getTime() - new Date(a.completedDate!).getTime());
             return allVueltas.length > 0 ? (allVueltas[0] as TerritoryRecord).completedDate : 'N/A';
@@ -414,7 +414,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                         <p className="text-sm font-normal text-gray-500 -mt-2 mb-3">
                             Última fecha en que se completó: {getLastCompletedDate(terrNum)}
                         </p>
-                         <div className="space-y-2">
+                        <div className="space-y-2">
                             {Array.from({ length: maxVueltas }, (_, i) => i + 1).map(vueltaNum => {
                                 const vueltaData = territoryData[terrNum]?.vueltas[vueltaNum];
                                 if (!vueltaData && filterStatus !== 'all' && filterStatus !== 'empty') return null;
@@ -457,7 +457,7 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                     </button>
                 </nav>
             </div>
-            
+
             {activeTab === 'registro' && (
                 <>
                     <header className="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -491,8 +491,8 @@ const Territorios: React.FC<TerritoriosProps> = ({ records, onSave, onDelete, te
                     )}
                     <div className="md:hidden"><MobileCards /></div>
                     <div className="hidden md:block space-y-6">
-                        <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={1} endTerr={20}/></div>
-                        <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={21} endTerr={40}/></div>
+                        <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={1} endTerr={20} /></div>
+                        <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={21} endTerr={40} /></div>
                     </div>
                 </>
             )}
