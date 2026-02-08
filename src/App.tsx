@@ -1,8 +1,3 @@
-
-
-
-
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -16,13 +11,11 @@ import InformeServicio from './components/InformeServicio';
 import Territorios from './components/Territorios';
 import PrecursorAuxiliar from './components/PrecursorAuxiliar';
 import ControlAcceso from './components/ControlAcceso';
-// FIX: Use named import to resolve circular dependency issue.
 import { InformeMensualGrupo } from './components/InformeMensualGrupo';
 import GestionContenidoInvitacion from './components/GestionContenidoInvitacion';
 import InformeMensualConsolidado from './components/InformeMensualConsolidado';
 import DashboardCursos from './components/DashboardCursos';
 import DashboardPrecursores from './components/DashboardPrecursores';
-// FIX: Use named import to resolve circular dependency issue.
 import { AsignacionesReunion } from './components/AsignacionesReunion';
 import ProgramaServiciosAuxiliares from './components/ProgramaServiciosAuxiliares';
 import VidaYMinisterio from './components/VidaYMinisterio';
@@ -33,224 +26,23 @@ import Vigilancia from './components/Vigilancia';
 import { DISCURSOS_PUBLICOS } from './components/discursos';
 import Carousel from './components/Carousel';
 
+// Import from new shared files
+import {
+    UserRole, View, Permission, GranularPermission, UserData, Publisher,
+    ServiceReport, AsistenciaData, AttendanceRecord, TerritoryRecord,
+    TerritoryMap, TerritoryResponsible, DailyTerritoryAssignment, TerritoryMarker,
+    InvitationContent, HomepageContent, MeetingAssignmentSchedule,
+    DayAssignment, LMMeetingSchedule, LMWeekAssignment, PioneerApplication,
+    OutgoingTalkAssignment, PublicTalksSchedule, PublicTalkAssignment, SpecialEvent, MeetingConfig,
+    VigilanciaConfig, ModalInfo
+} from './types';
+import { MONTHS, SERVICE_YEAR_MONTHS, ALL_PERMISSIONS } from './constants';
+import { compressImage, downloadFile } from './utils';
 
 declare const db: any;
 declare const auth: any;
 declare const firebase: any;
 declare const storage: any;
-
-export const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-export const SERVICE_YEAR_MONTHS = [...MONTHS.slice(8), ...MONTHS.slice(0, 8)];
-
-export type UserRole = 'admin' | 'overseer' | 'publisher' | 'helper' | 'auxiliary' | 'secretario';
-export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica' | 'vigilancia';
-
-export type GranularPermission = 
-    'editAsistenciaReporte' |
-    'managePublicadores' |
-    'editRegistrosServicio' |
-    'manageGrupos' |
-    'configVidaYMinisterio' |
-    'manageMeetingAssignments' |
-    'managePublicTalks' |
-    'resetData';
-
-export type Permission = View | GranularPermission;
-
-// FIX: Define ALL_PERMISSIONS constant to grant full access to admin/secretario roles.
-export const ALL_PERMISSIONS: Permission[] = [
-    // Views
-    'asistenciaForm', 'asistenciaReporte', 'publicadores', 'registrosServicio', 'grupos', 
-    'informeServicio', 'territorios', 'precursorAuxiliar', 'home', 'controlAcceso', 
-    'informeMensualGrupo', 'gestionContenidoInvitacion', 'informeMensualConsolidado', 
-    'dashboardCursos', 'dashboardPrecursores', 'asignacionesReunion', 
-    'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica', 'vigilancia',
-    // Granular Permissions
-    'editAsistenciaReporte', 'managePublicadores', 'editRegistrosServicio', 'manageGrupos',
-    'configVidaYMinisterio', 'manageMeetingAssignments', 'managePublicTalks', 'resetData'
-];
-
-export interface UserData {
-    id: string;
-    email: string;
-    role: UserRole;
-    isCommitteeMember: boolean;
-    permissions: Permission[];
-    authUid?: string;
-}
-
-export interface Publisher {
-    id: string;
-    [key: string]: any; 
-}
-
-export interface ServiceReport {
-    id: string;
-    idPublicador: string;
-    nombrePublicador?: string; // For public submissions
-    anioCalendario: number;
-    mes: string;
-    participacion: boolean;
-    precursorAuxiliar: string;
-    horas?: number;
-    cursosBiblicos?: number;
-    notas?: string;
-}
-
-export interface AsistenciaData {
-    es_sem1: string; es_sem2: string; es_sem3: string; es_sem4: string; es_sem5: string;
-    fs_sem1: string; fs_sem2: string; fs_sem3: string; fs_sem4: string; fs_sem5: string;
-}
-export interface AttendanceRecord extends AsistenciaData {
-    id: string;
-    ano: number;
-    mes: string;
-}
-
-export interface TerritoryRecord {
-    id: string;
-    terrNum: number;
-    vueltaNum: number;
-    serviceYear: number;
-    asignadoA?: string;
-    assignedDate?: string;
-    completedDate?: string;
-    observations?: string;
-}
-
-export interface TerritoryMap {
-    id: string;
-    territoryId: string;
-    mapUrl: string;
-    fileName: string;
-    uploadedAt: any;
-}
-
-export interface InvitationContent {
-    id: string;
-    imageUrl: string;
-    phrase: string;
-}
-
-export interface HomepageContent {
-    id: string;
-    imageUrl: string;
-    title: string;
-    phrase: string;
-}
-
-export interface MeetingAssignmentSchedule {
-    id: string;
-    year: number;
-    month: string;
-    schedule: { [dateKey: string]: DayAssignment };
-    isPublic?: boolean;
-}
-
-export interface DayAssignment {
-    fechaReunion?: string;
-    reunionHorario?: string;
-    vigilanciaHorario?: string;
-    presidente?: string;
-    conductorAtalaya?: string;
-    lectorAtalaya?: string;
-    // FIX: Allow null values for assignments, as a slot may be empty if there are not enough publishers.
-    acomodadoresPrincipal?: (string | null)[];
-    acomodadoresAuditorio?: (string | null)[];
-    acomodadoresSala?: (string | null)[];
-    microfonos?: (string | null)[];
-    vigilantes?: (string | null)[];
-    aseo?: string;
-    hospitalidad?: string;
-}
-
-export interface LMMeetingSchedule {
-    id: string;
-    year: number;
-    month: string;
-    weeks: LMWeekAssignment[];
-    isPublic?: boolean;
-}
-export interface LMWeekAssignment {
-    [key: string]: any;
-}
-export interface PioneerApplication {
-    id: string;
-    nombre: string;
-    mes: string;
-    deContinuo: boolean;
-    status: 'Pendiente' | 'Aprobado';
-}
-
-export interface OutgoingTalkAssignment {
-    id: string;
-    speakerId: string;
-    talkNumber: number;
-    date: string;
-    congregation: string;
-}
-
-export interface PublicTalksSchedule {
-    [key: string]: any; // Allows for arbitrary talk numbers
-    outgoingTalks?: OutgoingTalkAssignment[];
-    publicVisibility?: { [yearMonth: string]: boolean };
-}
-export interface PublicTalkAssignment {
-    date: string;
-    speakerName: string;
-    song: string;
-    congregation?: string;
-    phone?: string;
-}
-
-export interface SpecialEvent {
-    id: string;
-    date: string; // YYYY-MM-DD
-    description: string;
-}
-
-export interface MeetingConfig {
-    midweekDay: number; // 0 (Sun) - 6 (Sat)
-    midweekTime: string; // HH:mm
-    weekendDay: number;
-    weekendTime: string;
-    specialEvents: SpecialEvent[];
-}
-
-export interface ModalInfo {
-    type: 'success' | 'error' | 'info';
-    title: string;
-    message: string;
-}
-
-export const compressImage = (file: File, targetWidth: number = 1024): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = event => {
-            if (!event.target?.result) {
-                return reject(new Error('No se pudo leer el archivo de imagen.'));
-            }
-            const img = new Image();
-            img.src = event.target.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const scaleFactor = targetWidth / img.width;
-                canvas.width = targetWidth;
-                canvas.height = img.height * scaleFactor;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    return reject(new Error('No se pudo obtener el contexto del canvas.'));
-                }
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL('image/webp', 0.85);
-                resolve(dataUrl);
-            };
-            img.onerror = error => reject(error);
-        };
-        reader.onerror = error => reject(error);
-    });
-};
 
 const App: React.FC = () => {
     const [user, setUser] = useState<UserData | null>(null);
@@ -262,24 +54,29 @@ const App: React.FC = () => {
     const [activeView, setActiveView] = useState<View>('home');
     const [publicView, setPublicView] = useState<string>('home');
     const [connectionError, setConnectionError] = useState<string | null>(null);
+    const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
     // Data states
     const [publishers, setPublishers] = useState<Publisher[]>([]);
     const [serviceReports, setServiceReports] = useState<ServiceReport[]>([]);
     const [territoryRecords, setTerritoryRecords] = useState<TerritoryRecord[]>([]);
     const [territoryMaps, setTerritoryMaps] = useState<TerritoryMap[]>([]);
+    const [territoryResponsible, setTerritoryResponsible] = useState<TerritoryResponsible | null>(null);
+    const [dailyTerritoryAssignments, setDailyTerritoryAssignments] = useState<DailyTerritoryAssignment[]>([]);
+    const [territoryMarkers, setTerritoryMarkers] = useState<TerritoryMarker[]>([]);
     const [schedules, setSchedules] = useState<MeetingAssignmentSchedule[]>([]);
     const [lmSchedules, setLmSchedules] = useState<LMMeetingSchedule[]>([]);
     const [publicTalksSchedule, setPublicTalksSchedule] = useState<PublicTalksSchedule>({});
     const [homepageContent, setHomepageContent] = useState<HomepageContent[]>([]);
     const [invitationContent, setInvitationContent] = useState<InvitationContent[]>([]);
-    
+
     // Private data states
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [committeeMembers, setCommitteeMembers] = useState<string[]>([]);
     const [pioneerApplications, setPioneerApplications] = useState<PioneerApplication[]>([]);
     const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
+    const [vigilanciaConfig, setVigilanciaConfig] = useState<VigilanciaConfig | null>(null);
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
 
     // New state to track individual public data loading status
@@ -288,16 +85,19 @@ const App: React.FC = () => {
         serviceReports: false,
         territoryRecords: false,
         territoryMaps: false,
+        territoryResponsible: false,
+        dailyAssignments: false,
         schedules: false,
         lmSchedules: false,
         publicTalks: false,
         homepage: false,
         invitation: false,
+        territoryMarkers: false,
     });
-    
+
     // Derived loading state
-    const loading = !initialization.authChecked || !initialization.configLoaded || !meetingConfig || !initialization.publicDataLoaded;
-    
+    const loading = !initialization.authChecked || !initialization.configLoaded || !meetingConfig || !vigilanciaConfig || !initialization.publicDataLoaded;
+
     // Derived state for permissions
     const canManage = useMemo(() => {
         if (!user) return false;
@@ -332,14 +132,14 @@ const App: React.FC = () => {
             if (firebaseUser) {
                 // User is logged in, set up a real-time listener for their profile
                 const userDocRef = db.collection('users').doc(firebaseUser.uid);
-                
+
                 userProfileUnsubscribe = userDocRef.onSnapshot(async (userDoc: any) => {
                     if (!isMounted) return;
                     // Connection is good, clear any previous error banner.
                     setConnectionError(null);
                     try {
                         const committeeDoc = await db.collection('settings').doc('service_committee').get();
-                        
+
                         const userData = userDoc.data() || {};
                         const committeeUIDs = committeeDoc.data()?.members || [];
                         const isMember = committeeUIDs.includes(firebaseUser.uid);
@@ -351,8 +151,9 @@ const App: React.FC = () => {
                             permissions: userData.permissions || [],
                             isCommitteeMember: isMember,
                             authUid: firebaseUser.uid,
+                            publisherId: userData.publisherId || null,
                         };
-                        
+
                         setUser(currentUser);
                         setIsLoginModalOpen(false);
                         // Mark auth as checked once we have the user profile
@@ -362,13 +163,13 @@ const App: React.FC = () => {
                     } catch (error) {
                         console.error("Error fetching committee data for user profile:", error);
                         if (isMounted) {
-                             setModalInfo({ type: 'error', title: 'Error de Perfil', message: 'No se pudieron cargar los datos complementarios de su perfil.' });
-                             auth.signOut();
+                            setModalInfo({ type: 'error', title: 'Error de Perfil', message: 'No se pudieron cargar los datos complementarios de su perfil.' });
+                            auth.signOut();
                         }
                     }
                 }, (error: any) => { // Error callback for onSnapshot
                     console.error("User profile listener failed:", error);
-                     if (isMounted) {
+                    if (isMounted) {
                         if (error.code === 'permission-denied') {
                             setModalInfo({ type: 'error', title: 'Error de Permisos', message: 'No tiene permiso para acceder a sus datos. La sesión se cerrará.' });
                             auth.signOut();
@@ -383,7 +184,7 @@ const App: React.FC = () => {
                 setConnectionError(null);
                 // Mark auth check as complete for logged-out users
                 if (isMounted && !initialization.authChecked) {
-                   setInitialization(prev => ({ ...prev, authChecked: true }));
+                    setInitialization(prev => ({ ...prev, authChecked: true }));
                 }
             }
         });
@@ -421,11 +222,30 @@ const App: React.FC = () => {
             });
         });
 
+        const vigilanciaConfigUnsubscribe = db.collection('settings').doc('vigilancia_config').onSnapshot((doc: any) => {
+            if (!isMounted) return;
+            const data = doc.data();
+            setVigilanciaConfig({
+                tuesdaySlots: data?.tuesdaySlots ?? ["7:20-7:50pm", "7:50-8:20pm", "8:20-8:50pm", "8:50-9:20pm"],
+                saturdaySlots: data?.saturdaySlots ?? ["4:15-4:50pm", "4:50-5:20pm", "5:20-5:50pm", "5:50-6:20pm"],
+                congregations: data?.congregations ?? ["Jardines de Andalucia", "Las Jacarandas", "Nacozari", "Cerro de la Silla", "Niños Heroes"]
+            });
+        }, (err: Error) => {
+            if (!isMounted) return;
+            console.error("Vigilancia config listener failed:", err);
+            setVigilanciaConfig({
+                tuesdaySlots: ["7:20-7:50pm", "7:50-8:20pm", "8:20-8:50pm", "8:50-9:20pm"],
+                saturdaySlots: ["4:15-4:50pm", "4:50-5:20pm", "5:20-5:50pm", "5:50-6:20pm"],
+                congregations: ["Jardines de Andalucia", "Las Jacarandas", "Nacozari", "Cerro de la Silla", "Niños Heroes"]
+            });
+        });
+
         return () => {
             isMounted = false;
             authUnsubscribe();
             configUnsubscribe();
             meetingConfigUnsubscribe();
+            vigilanciaConfigUnsubscribe();
             if (userProfileUnsubscribe) {
                 userProfileUnsubscribe();
             }
@@ -437,43 +257,45 @@ const App: React.FC = () => {
         const unsubscribers = [
             db.collection('publishers').onSnapshot((snapshot: any) => {
                 setPublishers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setPublicDataStatus(prev => ({...prev, publishers: true}));
+                setDataLoadError(null); // Clear error on successful load
+                setPublicDataStatus(prev => ({ ...prev, publishers: true }));
             }, (err: Error) => {
-                console.error("Public Publishers listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, publishers: true}));
+                console.error("CRITICAL: Listener for 'publishers' failed:", err);
+                setDataLoadError("No se pudieron cargar los datos de publicadores. Esta es una función esencial. La causa más probable es que las reglas de seguridad de Firestore no permiten la lectura pública. Revise las instrucciones en index.html y la configuración de su proyecto de Firebase.");
+                setPublicDataStatus(prev => ({ ...prev, publishers: true })); // Still mark as "loaded" to unblock UI
             }),
             db.collection('service_reports').onSnapshot((snapshot: any) => {
                 setServiceReports(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setPublicDataStatus(prev => ({...prev, serviceReports: true}));
+                setPublicDataStatus(prev => ({ ...prev, serviceReports: true }));
             }, (err: Error) => {
-                 console.error("Public Service Reports listener failed:", err);
-                 setPublicDataStatus(prev => ({...prev, serviceReports: true}));
+                console.error("Public Service Reports listener failed:", err);
+                setPublicDataStatus(prev => ({ ...prev, serviceReports: true }));
             }),
             db.collection('territory_records').onSnapshot((snapshot: any) => {
                 setTerritoryRecords(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setPublicDataStatus(prev => ({...prev, territoryRecords: true}));
+                setPublicDataStatus(prev => ({ ...prev, territoryRecords: true }));
             }, (err: Error) => {
                 console.error("Public Territory listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, territoryRecords: true}));
+                setPublicDataStatus(prev => ({ ...prev, territoryRecords: true }));
             }),
             db.collection('territory_maps').orderBy('uploadedAt', 'desc').onSnapshot((snapshot: any) => {
                 setTerritoryMaps(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setPublicDataStatus(prev => ({...prev, territoryMaps: true}));
+                setPublicDataStatus(prev => ({ ...prev, territoryMaps: true }));
             }, (err: Error) => {
                 console.error("Public Territory Maps listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, territoryMaps: true}));
+                setPublicDataStatus(prev => ({ ...prev, territoryMaps: true }));
             }),
             db.collection('meeting_schedules').onSnapshot((snapshot: any) => {
                 const allSchedules = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as MeetingAssignmentSchedule }));
                 allSchedules.sort((a, b) => {
                     if (a.year !== b.year) return b.year - a.year;
-                    return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month); 
+                    return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
                 });
                 setSchedules(allSchedules);
-                setPublicDataStatus(prev => ({...prev, schedules: true}));
+                setPublicDataStatus(prev => ({ ...prev, schedules: true }));
             }, (err: Error) => {
                 console.error("Public Meeting Schedules listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, schedules: true}));
+                setPublicDataStatus(prev => ({ ...prev, schedules: true }));
             }),
             db.collection('lm_schedules').onSnapshot((snapshot: any) => {
                 const allLmSchedules = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as LMMeetingSchedule }));
@@ -482,31 +304,52 @@ const App: React.FC = () => {
                     return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
                 });
                 setLmSchedules(allLmSchedules);
-                setPublicDataStatus(prev => ({...prev, lmSchedules: true}));
+                setPublicDataStatus(prev => ({ ...prev, lmSchedules: true }));
             }, (err: Error) => {
                 console.error("Public LM Schedules listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, lmSchedules: true}));
+                setPublicDataStatus(prev => ({ ...prev, lmSchedules: true }));
             }),
             db.collection('public_talks_schedule').doc('schedule').onSnapshot((doc: any) => {
                 setPublicTalksSchedule(doc.data() || { outgoingTalks: [] });
-                setPublicDataStatus(prev => ({...prev, publicTalks: true}));
+                setPublicDataStatus(prev => ({ ...prev, publicTalks: true }));
             }, (err: Error) => {
                 console.error("Public Talks listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, publicTalks: true}));
+                setPublicDataStatus(prev => ({ ...prev, publicTalks: true }));
             }),
             db.collection('homepage_content').onSnapshot((snapshot: any) => {
                 setHomepageContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setPublicDataStatus(prev => ({...prev, homepage: true}));
+                setPublicDataStatus(prev => ({ ...prev, homepage: true }));
             }, (err: Error) => {
                 console.error("Public Homepage Content listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, homepage: true}));
+                setPublicDataStatus(prev => ({ ...prev, homepage: true }));
             }),
             db.collection('invitation_content').onSnapshot((snapshot: any) => {
                 setInvitationContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-                setPublicDataStatus(prev => ({...prev, invitation: true}));
+                setPublicDataStatus(prev => ({ ...prev, invitation: true }));
             }, (err: Error) => {
                 console.error("Public Invitation Content listener failed:", err);
-                setPublicDataStatus(prev => ({...prev, invitation: true}));
+                setPublicDataStatus(prev => ({ ...prev, invitation: true }));
+            }),
+            db.collection('settings').doc('territory_responsible').onSnapshot((doc: any) => {
+                setTerritoryResponsible(doc.data() || null);
+                setPublicDataStatus(prev => ({ ...prev, territoryResponsible: true }));
+            }, (err: Error) => {
+                console.error("Territory Responsible listener failed:", err);
+                setPublicDataStatus(prev => ({ ...prev, territoryResponsible: true }));
+            }),
+            db.collection('daily_territory_assignments').orderBy('date', 'desc').onSnapshot((snapshot: any) => {
+                setDailyTerritoryAssignments(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setPublicDataStatus(prev => ({ ...prev, dailyAssignments: true }));
+            }, (err: Error) => {
+                console.error("Daily Territory Assignments listener failed:", err);
+                setPublicDataStatus(prev => ({ ...prev, dailyAssignments: true }));
+            }),
+            db.collection('territory_markers').onSnapshot((snapshot: any) => {
+                setTerritoryMarkers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setPublicDataStatus(prev => ({ ...prev, territoryMarkers: true }));
+            }, (err: Error) => {
+                console.error("Territory Markers listener failed:", err);
+                setPublicDataStatus(prev => ({ ...prev, territoryMarkers: true }));
             }),
         ];
 
@@ -546,13 +389,13 @@ const App: React.FC = () => {
             unsubscribers.forEach(unsub => unsub());
         };
     }, [user, loading]);
-    
+
     // --- Handlers for database mutations ---
 
     const handleLogout = () => {
         auth.signOut();
     };
-    
+
     const handleSaveAttendance = async (year: number, month: string, data: AsistenciaData) => {
         const docId = `${year}_${month}`;
         try {
@@ -579,27 +422,38 @@ const App: React.FC = () => {
             throw error;
         }
     };
-    
+
     const handleAddPublisher = async (publisher: Omit<Publisher, 'id'>) => {
         try {
             const { Foto, ['Carta de presentacion']: Carta, ...rest } = publisher;
             const dataToSave: any = { ...rest };
 
-            if (typeof Foto === 'string' && Foto.startsWith('data:')) {
-                const storageRef = storage.ref(`publisher_photos/${Date.now()}_photo.webp`);
-                const uploadTask = storageRef.putString(Foto, 'data_url', { contentType: 'image/webp' });
-                await uploadTask; // Wait for upload to complete
-                dataToSave.Foto = await uploadTask.snapshot.ref.getDownloadURL();
+            if (Foto instanceof Blob) {
+                try {
+                    const uniqueFileName = `${Date.now()}_photo.webp`;
+                    const storageRef = storage.ref(`publisher_photos/${uniqueFileName}`);
+                    const uploadTask = storageRef.put(Foto, { contentType: 'image/webp' });
+                    await uploadTask;
+                    dataToSave.Foto = await uploadTask.snapshot.ref.getDownloadURL();
+                } catch (e: any) {
+                    console.error("Error al subir Foto:", e);
+                    throw new Error(`Error al subir Foto: ${e.message || e.code || 'Error desconocido'}`);
+                }
             } else {
                 dataToSave.Foto = Foto || null;
             }
 
-            if (Carta instanceof File) {
-                const uniqueFileName = `${Date.now()}_letter.pdf`;
-                const storageRef = storage.ref(`publisher_letters/${uniqueFileName}`);
-                const uploadTask = storageRef.put(Carta, { contentType: 'application/pdf' });
-                await uploadTask; // Wait for upload to complete
-                dataToSave['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
+            if (Carta instanceof File || Carta instanceof Blob) {
+                try {
+                    const uniqueFileName = `${Date.now()}_letter.pdf`;
+                    const storageRef = storage.ref(`publisher_letters/${uniqueFileName}`);
+                    const uploadTask = storageRef.put(Carta, { contentType: 'application/pdf' });
+                    await uploadTask;
+                    dataToSave['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
+                } catch (e: any) {
+                    console.error("Error al subir Carta de presentación:", e);
+                    throw new Error(`Error al subir Carta de presentación: ${e.message || e.code || 'Error desconocido'}`);
+                }
             } else {
                 dataToSave['Carta de presentacion'] = Carta || null;
             }
@@ -607,7 +461,7 @@ const App: React.FC = () => {
             await db.collection('publishers').add(dataToSave);
         } catch (error) {
             setModalInfo({ type: 'error', title: 'Error', message: (error as Error).message });
-            throw error; // Re-throw to be caught in the component
+            throw error;
         }
     };
 
@@ -616,21 +470,32 @@ const App: React.FC = () => {
             const { id, Foto, ['Carta de presentacion']: Carta, ...rest } = publisher;
             const dataToUpdate: any = { ...rest };
 
-            if (typeof Foto === 'string' && Foto.startsWith('data:')) {
-                const storageRef = storage.ref(`publisher_photos/${Date.now()}_photo.webp`);
-                const uploadTask = storageRef.putString(Foto, 'data_url', { contentType: 'image/webp' });
-                await uploadTask; // Wait for upload to complete
-                dataToUpdate.Foto = await uploadTask.snapshot.ref.getDownloadURL();
+            if (Foto instanceof Blob) {
+                try {
+                    const uniqueFileName = `${Date.now()}_photo.webp`;
+                    const storageRef = storage.ref(`publisher_photos/${uniqueFileName}`);
+                    const uploadTask = storageRef.put(Foto, { contentType: 'image/webp' });
+                    await uploadTask;
+                    dataToUpdate.Foto = await uploadTask.snapshot.ref.getDownloadURL();
+                } catch (e: any) {
+                    console.error("Error al subir Foto (Update):", e);
+                    throw new Error(`Error al subir Foto: ${e.message || e.code || 'Error desconocido'}`);
+                }
             } else {
                 dataToUpdate.Foto = Foto || null;
             }
 
-            if (Carta instanceof File) {
-                const uniqueFileName = `${Date.now()}_letter.pdf`;
-                const storageRef = storage.ref(`publisher_letters/${uniqueFileName}`);
-                const uploadTask = storageRef.put(Carta, { contentType: 'application/pdf' });
-                await uploadTask; // Wait for upload to complete
-                dataToUpdate['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
+            if (Carta instanceof File || Carta instanceof Blob) {
+                try {
+                    const uniqueFileName = `${Date.now()}_letter.pdf`;
+                    const storageRef = storage.ref(`publisher_letters/${uniqueFileName}`);
+                    const uploadTask = storageRef.put(Carta, { contentType: 'application/pdf' });
+                    await uploadTask;
+                    dataToUpdate['Carta de presentacion'] = await uploadTask.snapshot.ref.getDownloadURL();
+                } catch (e: any) {
+                    console.error("Error al subir Carta de presentación (Update):", e);
+                    throw new Error(`Error al subir Carta de presentación: ${e.message || e.code || 'Error desconocido'}`);
+                }
             } else {
                 dataToUpdate['Carta de presentacion'] = Carta || null;
             }
@@ -638,7 +503,7 @@ const App: React.FC = () => {
             await db.collection('publishers').doc(id).update(dataToUpdate);
         } catch (error) {
             setModalInfo({ type: 'error', title: 'Error', message: (error as Error).message });
-            throw error; // Re-throw to be caught in the component
+            throw error;
         }
     };
 
@@ -647,35 +512,37 @@ const App: React.FC = () => {
     };
 
     const handleSaveServiceReport = async (report: Omit<ServiceReport, 'id'>) => {
+        const sanitizedReport = sanitizeForFirebase(report);
         const query = await db.collection('service_reports')
-            .where('idPublicador', '==', report.idPublicador)
-            .where('anioCalendario', '==', report.anioCalendario)
-            .where('mes', '==', report.mes)
+            .where('idPublicador', '==', sanitizedReport.idPublicador)
+            .where('anioCalendario', '==', sanitizedReport.anioCalendario)
+            .where('mes', '==', sanitizedReport.mes)
             .get();
 
         if (query.empty) {
-            await db.collection('service_reports').add(report);
+            await db.collection('service_reports').add(sanitizedReport);
         } else {
-            await db.collection('service_reports').doc(query.docs[0].id).update(report);
+            await db.collection('service_reports').doc(query.docs[0].id).update(sanitizedReport);
         }
     };
 
     const handleBatchUpdateServiceReports = async (reports: Omit<ServiceReport, 'id'>[]) => {
         const batch = db.batch();
         for (const report of reports) {
+            const sanitizedReport = sanitizeForFirebase(report);
             const query = await db.collection('service_reports')
-                .where('idPublicador', '==', report.idPublicador)
-                .where('anioCalendario', '==', report.anioCalendario)
-                .where('mes', '==', report.mes)
+                .where('idPublicador', '==', sanitizedReport.idPublicador)
+                .where('anioCalendario', '==', sanitizedReport.anioCalendario)
+                .where('mes', '==', sanitizedReport.mes)
                 .limit(1)
                 .get();
 
             if (query.empty) {
                 const newDocRef = db.collection('service_reports').doc();
-                batch.set(newDocRef, report);
+                batch.set(newDocRef, sanitizedReport);
             } else {
                 const docRef = db.collection('service_reports').doc(query.docs[0].id);
-                batch.update(docRef, report);
+                batch.update(docRef, sanitizedReport);
             }
         }
         await batch.commit();
@@ -690,7 +557,7 @@ const App: React.FC = () => {
     };
 
     const handleSaveTerritoryRecord = async (record: Omit<TerritoryRecord, 'id'>) => {
-         const query = await db.collection('territory_records')
+        const query = await db.collection('territory_records')
             .where('terrNum', '==', record.terrNum)
             .where('vueltaNum', '==', record.vueltaNum)
             .where('serviceYear', '==', record.serviceYear)
@@ -702,7 +569,7 @@ const App: React.FC = () => {
             await db.collection('territory_records').doc(query.docs[0].id).update(record);
         }
     };
-    
+
     const handleDeleteTerritoryRecord = async (record: Partial<TerritoryRecord>) => {
         if (record.id) {
             await db.collection('territory_records').doc(record.id).delete();
@@ -717,15 +584,21 @@ const App: React.FC = () => {
             }
         }
     };
-    
-    const handleUploadTerritoryMap = async (territoryId: string, imageDataUrl: string) => {
+
+    const handleUploadTerritoryMap = async (territoryId: string, imageFile: Blob) => {
         const fileName = `${territoryId}_${Date.now()}.webp`;
         const storageRef = storage.ref(`territory_maps/${fileName}`);
-        const uploadTask = storageRef.putString(imageDataUrl, 'data_url', { contentType: 'image/webp' });
-    
-        await uploadTask; // Wait for completion
+        const uploadTask = storageRef.put(imageFile, { contentType: 'image/webp' });
+
+        try {
+            await uploadTask; // Wait for completion
+        } catch (e: any) {
+            console.error("Error al subir Mapa de Territorio:", e);
+            throw new Error(`Error al subir Mapa: ${e.message || e.code || 'Error desconocido'}`);
+        }
+
         const mapUrl = await uploadTask.snapshot.ref.getDownloadURL();
-        
+
         const existingMapQuery = await db.collection('territory_maps').where('territoryId', '==', territoryId).get();
 
         if (!existingMapQuery.empty) {
@@ -748,7 +621,7 @@ const App: React.FC = () => {
             });
         }
     };
-    
+
     const handleDeleteTerritoryMap = async (mapId: string, mapUrl: string) => {
         if (mapUrl) {
             try {
@@ -758,6 +631,68 @@ const App: React.FC = () => {
             }
         }
         await db.collection('territory_maps').doc(mapId).delete();
+    };
+
+    const handleSaveTerritoryResponsible = async (publisherId: string, publisherName: string) => {
+        if (!user?.isCommitteeMember) {
+            setModalInfo({ type: 'error', title: 'Permiso Denegado', message: 'Solo los miembros del comité de servicio pueden asignar el responsable de territorio.' });
+            throw new Error('Permission denied');
+        }
+
+        const responsibleData: TerritoryResponsible = {
+            publisherId,
+            publisherName,
+            assignedDate: new Date().toISOString().split('T')[0],
+            assignedBy: user.id
+        };
+
+        await db.collection('settings').doc('territory_responsible').set(responsibleData);
+        setModalInfo({ type: 'success', title: 'Éxito', message: `${publisherName} ha sido asignado como responsable de territorio.` });
+    };
+
+    const handleSaveDailyAssignment = async (assignment: Omit<DailyTerritoryAssignment, 'id' | 'createdAt'>) => {
+        if (!user) {
+            setModalInfo({ type: 'error', title: 'Error', message: 'Debe iniciar sesión para crear asignaciones.' });
+            throw new Error('User not logged in');
+        }
+
+        const assignmentData = {
+            ...assignment,
+            createdBy: user.id,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('daily_territory_assignments').add(assignmentData);
+        setModalInfo({ type: 'success', title: 'Éxito', message: 'Asignación diaria guardada correctamente.' });
+    };
+
+    const handleUpdateDailyAssignment = async (id: string, assignment: Partial<DailyTerritoryAssignment>) => {
+        const { id: _, createdAt, createdBy, ...updateData } = assignment as any;
+        await db.collection('daily_territory_assignments').doc(id).update(updateData);
+        setModalInfo({ type: 'success', title: 'Éxito', message: 'Asignación actualizada correctamente.' });
+    };
+
+    const handleDeleteDailyAssignment = async (id: string) => {
+        await db.collection('daily_territory_assignments').doc(id).delete();
+        setModalInfo({ type: 'success', title: 'Éxito', message: 'Asignación eliminada correctamente.' });
+    };
+
+    const handleSaveTerritoryMarker = async (marker: Omit<TerritoryMarker, 'id'> & { id?: string }) => {
+        const { id, ...data } = marker;
+        const dataToSave = {
+            ...data,
+            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (id) {
+            await db.collection('territory_markers').doc(id).set(dataToSave, { merge: true });
+        } else {
+            await db.collection('territory_markers').add(dataToSave);
+        }
+    };
+
+    const handleDeleteTerritoryMarker = async (id: string) => {
+        await db.collection('territory_markers').doc(id).delete();
     };
 
     // --- Access Control Handlers ---
@@ -773,7 +708,7 @@ const App: React.FC = () => {
         batch.update(db.collection('publishers').doc(publisherId), { authUid: userId });
         await batch.commit();
     };
-     const handleUpdatePublicReportFormEnabled = (isEnabled: boolean) => {
+    const handleUpdatePublicReportFormEnabled = (isEnabled: boolean) => {
         return db.collection('settings').doc('config').set({ isPublicReportFormEnabled: isEnabled }, { merge: true });
     };
     const handleSaveMeetingConfig = (config: MeetingConfig) => {
@@ -781,27 +716,27 @@ const App: React.FC = () => {
     };
     const handleResetData = async () => {
         if (user?.role !== 'admin') {
-            setModalInfo({type: 'error', title: 'Permiso Denegado', message: 'Solo los administradores pueden realizar esta acción.'});
+            setModalInfo({ type: 'error', title: 'Permiso Denegado', message: 'Solo los administradores pueden realizar esta acción.' });
             return;
         }
         if (!window.confirm("¡ADVERTENCIA! ¿Está absolutamente seguro de que desea borrar TODOS los datos de la congregación? Esta acción es irreversible y eliminará informes, publicadores, asignaciones, etc.")) {
             return;
         }
-         if (!window.confirm("CONFIRMACIÓN FINAL: ¿Está 100% seguro? Todos los datos se perderrán para siempre.")) {
+        if (!window.confirm("CONFIRMACIÓN FINAL: ¿Está 100% seguro? Todos los datos se perderrán para siempre.")) {
             return;
         }
 
         // Renaming to avoid shadowing 'loading' state
         let isProcessing = true;
         // set a local loading state if needed, or just inform user
-        setModalInfo({type: 'info', title: 'Procesando', message: 'Eliminando todos los datos...'});
-        
+        setModalInfo({ type: 'info', title: 'Procesando', message: 'Eliminando todos los datos...' });
+
         try {
             const collectionsToDelete = [
-                'publishers', 'service_reports', 'attendance', 'territory_records', 
+                'publishers', 'service_reports', 'attendance', 'territory_records',
                 'pioneer_applications', 'meeting_schedules', 'lm_schedules'
             ];
-            
+
             for (const collectionName of collectionsToDelete) {
                 const snapshot = await db.collection(collectionName).get();
                 const batch = db.batch();
@@ -810,28 +745,28 @@ const App: React.FC = () => {
             }
             setModalInfo({ type: 'success', title: 'Éxito', message: 'Todos los datos de la congregación han sido eliminados.' });
         } catch (error) {
-             setModalInfo({ type: 'error', title: 'Error', message: `No se pudieron eliminar los datos: ${(error as Error).message}` });
+            setModalInfo({ type: 'error', title: 'Error', message: `No se pudieron eliminar los datos: ${(error as Error).message}` });
         } finally {
             isProcessing = false;
         }
     };
-    
-    const handleAddInvitation = async (imageDataUrl: string, phrase: string) => {
+
+    const handleAddInvitation = async (imageFile: Blob, phrase: string) => {
         const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
         const storageRef = storage.ref(`invitation_images/${uniqueFileName}`);
-        const uploadTask = storageRef.putString(imageDataUrl, 'data_url', { contentType: 'image/webp' });
-        
+        const uploadTask = storageRef.put(imageFile, { contentType: 'image/webp' });
+
         await uploadTask;
         const imageUrl = await uploadTask.snapshot.ref.getDownloadURL();
         await db.collection('invitation_content').add({ imageUrl, phrase, fileName: uniqueFileName });
     };
     const handleDeleteInvitation = (contentId: string) => db.collection('invitation_content').doc(contentId).delete();
 
-    const handleAddHomepageContent = async (imageDataUrl: string, title: string, phrase: string) => {
+    const handleAddHomepageContent = async (imageFile: Blob, title: string, phrase: string) => {
         const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
         const storageRef = storage.ref(`homepage_images/${uniqueFileName}`);
-        const uploadTask = storageRef.putString(imageDataUrl, 'data_url', { contentType: 'image/webp' });
-        
+        const uploadTask = storageRef.put(imageFile, { contentType: 'image/webp' });
+
         await uploadTask;
         const imageUrl = await uploadTask.snapshot.ref.getDownloadURL();
         await db.collection('homepage_content').add({ imageUrl, title, phrase, fileName: uniqueFileName });
@@ -866,7 +801,7 @@ const App: React.FC = () => {
         }
         return newObj;
     };
-    
+
     const handleSaveLMSchedule = (schedule: Omit<LMMeetingSchedule, 'id'> & { month: string; year: number }) => {
         const docId = `${schedule.year}-${schedule.month}`;
         const sanitizedSchedule = sanitizeForFirebase(schedule);
@@ -890,54 +825,90 @@ const App: React.FC = () => {
         await db.collection('vigilancia_schedules').doc(docId).set(dataToSave, { merge: true });
     };
 
+    const handleSaveVigilanciaConfig = (config: VigilanciaConfig) => {
+        return db.collection('settings').doc('vigilancia_config').set(config, { merge: true });
+    };
+
+    const handleDownload = async (url: string, fileName: string) => {
+        await downloadFile(url, fileName, (error) => {
+            setModalInfo({ type: 'error', title: 'Error de Descarga', message: 'No se pudo descargar el archivo. Por favor, intente de nuevo.' });
+        });
+    };
+
+    const canManageTerritories = useMemo(() => {
+        if (canManage) return true;
+        return (!!user?.publisherId && !!territoryResponsible && user.publisherId === territoryResponsible.publisherId);
+    }, [canManage, user, territoryResponsible]);
+
     const ALL_COMPONENTS: { [key in View]: React.ReactElement } = {
         home: <HomeDashboard
-                lmSchedules={lmSchedules}
-                schedules={schedules}
-                publicTalksSchedule={publicTalksSchedule}
-                publishers={publishers}
-                onShowModal={setModalInfo}
-                setActiveView={setActiveView}
-                meetingConfig={meetingConfig!}
-              />,
+            lmSchedules={lmSchedules}
+            schedules={schedules}
+            publicTalksSchedule={publicTalksSchedule}
+            publishers={publishers}
+            onShowModal={setModalInfo}
+            setActiveView={setActiveView}
+            meetingConfig={meetingConfig!}
+            homepageContent={homepageContent}
+        />,
         asistenciaForm: <AsistenciaForm attendanceRecords={attendanceRecords} onSave={handleSaveAttendance} />,
         asistenciaReporte: <AsistenciaReporte attendanceRecords={attendanceRecords} onBatchUpdateAttendance={handleBatchUpdateAttendance} canEdit={userPermissions.includes('editAsistenciaReporte')} />,
-        publicadores: <Publicadores publishers={publishers} onAdd={handleAddPublisher} onUpdate={handleUpdatePublisher} onDelete={handleDeletePublisher} onShowModal={setModalInfo} canManage={userPermissions.includes('managePublicadores')} />,
+        publicadores: <Publicadores publishers={publishers} serviceReports={serviceReports} onAdd={handleAddPublisher} onUpdate={handleUpdatePublisher} onDelete={handleDeletePublisher} onShowModal={setModalInfo} canManage={userPermissions.includes('managePublicadores')} onDownload={handleDownload} />,
         registrosServicio: <RegistrosServicio publishers={publishers} serviceReports={serviceReports} onBatchUpdateReports={handleBatchUpdateServiceReports} onDeleteServiceReport={handleDeleteServiceReport} canEdit={userPermissions.includes('editRegistrosServicio')} />,
         grupos: <Grupos publishers={publishers} onUpdateGroup={handleUpdateGroup} canManage={userPermissions.includes('manageGrupos')} />,
         informeServicio: <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => setActiveView('precursorAuxiliar')} invitationContent={invitationContent} isLoggedIn={true} />,
-        territorios: <Territorios records={territoryRecords} onSave={handleSaveTerritoryRecord} onDelete={handleDeleteTerritoryRecord} territoryMaps={territoryMaps} onUploadMap={handleUploadTerritoryMap} onDeleteMap={handleDeleteTerritoryMap} canManage={canManage} onShowModal={setModalInfo} />,
+        territorios: <Territorios
+            records={territoryRecords}
+            onSave={handleSaveTerritoryRecord}
+            onDelete={handleDeleteTerritoryRecord}
+            territoryMaps={territoryMaps}
+            onUploadMap={handleUploadTerritoryMap}
+            onDeleteMap={handleDeleteTerritoryMap}
+            canManage={canManageTerritories}
+            onShowModal={setModalInfo}
+            onDownload={handleDownload}
+            territoryResponsible={territoryResponsible}
+            onSaveTerritoryResponsible={handleSaveTerritoryResponsible}
+            dailyAssignments={dailyTerritoryAssignments}
+            onSaveDailyAssignment={handleSaveDailyAssignment}
+            onUpdateDailyAssignment={handleUpdateDailyAssignment}
+            onDeleteDailyAssignment={handleDeleteDailyAssignment}
+            territoryMarkers={territoryMarkers}
+            onSaveTerritoryMarker={handleSaveTerritoryMarker}
+            onDeleteTerritoryMarker={handleDeleteTerritoryMarker}
+            publishers={publishers}
+            isCommitteeMember={user?.isCommitteeMember || false}
+        />,
         precursorAuxiliar: <PrecursorAuxiliar userRole={user?.role || 'publisher'} isCommitteeMember={user?.isCommitteeMember || false} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} />,
         controlAcceso: <ControlAcceso users={users} publishers={publishers} committeeMembers={committeeMembers} onUpdateUserPermissions={handleUpdateUserPermissions} onUpdateServiceCommittee={handleUpdateServiceCommittee} onLinkUserToPublisher={handleLinkUserToPublisher} isPublicReportFormEnabled={appConfig?.isPublicReportFormEnabled || false} onUpdatePublicReportFormEnabled={handleUpdatePublicReportFormEnabled} onResetData={handleResetData} currentUserRole={user?.role || 'publisher'} canManage={canManage} meetingConfig={meetingConfig} onSaveMeetingConfig={handleSaveMeetingConfig} />,
         informeMensualGrupo: <InformeMensualGrupo publishers={publishers} serviceReports={serviceReports} onBatchUpdateReports={handleBatchUpdateServiceReports} />,
-        gestionContenidoInvitacion: <GestionContenidoInvitacion onShowModal={setModalInfo} invitationContent={invitationContent} onAddInvitation={handleAddInvitation} onDeleteInvitation={handleDeleteInvitation} homepageContent={homepageContent} onAddHomepageContent={handleAddHomepageContent} onDeleteHomepageContent={handleDeleteHomepageContent} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} onUpdate15HourOption={handleUpdate15HourOption} />,
+        gestionContenidoInvitacion: <GestionContenidoInvitacion onShowModal={setModalInfo} invitationContent={invitationContent} onAddInvitation={handleAddInvitation} onDeleteInvitation={handleDeleteInvitation} homepageContent={homepageContent} onAddHomepageContent={handleAddHomepageContent} onDeleteHomepageContent={handleDeleteHomepageContent} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} onUpdate15HourOption={handleUpdate15HourOption} onDownload={handleDownload} />,
         informeMensualConsolidado: <InformeMensualConsolidado publishers={publishers} serviceReports={serviceReports} />,
         dashboardCursos: <DashboardCursos publishers={publishers} serviceReports={serviceReports} />,
         dashboardPrecursores: <DashboardPrecursores publishers={publishers} serviceReports={serviceReports} pioneerApplications={pioneerApplications} />,
-        asignacionesReunion: <AsignacionesReunion 
-                                publishers={publishers} 
-                                schedules={schedules} 
-                                onSaveSchedule={handleSaveMeetingSchedule} 
-                                onShowModal={setModalInfo} 
-                                canManageSchedule={userPermissions.includes('manageMeetingAssignments')} 
-                                meetingConfig={meetingConfig!} 
-                            />,
+        asignacionesReunion: <AsignacionesReunion
+            publishers={publishers}
+            schedules={schedules}
+            onSaveSchedule={handleSaveMeetingSchedule}
+            onShowModal={setModalInfo}
+            canManageSchedule={userPermissions.includes('manageMeetingAssignments')}
+            meetingConfig={meetingConfig!}
+        />,
         programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} meetingConfig={meetingConfig!} />,
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
-        reunionPublica: <ReunionPublica schedule={publicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} />,
-        vigilancia: <Vigilancia schedules={vigilanciaSchedules} onSave={handleSaveVigilanciaSchedule} />,
+        reunionPublica: <ReunionPublica schedule={publicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} onUpdatePublisher={handleUpdatePublisher} />,
+        vigilancia: <Vigilancia schedules={vigilanciaSchedules} onSave={handleSaveVigilanciaSchedule} config={vigilanciaConfig!} onSaveConfig={handleSaveVigilanciaConfig} />,
     };
 
-    // FIX: Define NAV_ITEMS to resolve 'Cannot find name' error and get the label for the header.
-    const NAV_ITEMS: { view: View; label: string }[] = [
+    const NAV_ITEMS = useMemo<{ view: View; label: string }[]>(() => [
         { view: 'home', label: 'Inicio' },
         { view: 'informeServicio', label: 'Informar Servicio' },
         { view: 'precursorAuxiliar', label: 'Prec. Auxiliar' },
         { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
         { view: 'asignacionesReunion', label: 'Generar Prog. Acomodadores' },
         { view: 'reunionPublica', label: 'Reunión Pública' },
-        { view: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
+        { view: 'programaServiciosAuxiliares', label: 'Prog de Acomodadores' },
         { view: 'asistenciaForm', label: 'Form. Asistencia' },
         { view: 'asistenciaReporte', label: 'Reporte Anual Asistencia' },
         { view: 'publicadores', label: 'Publicadores' },
@@ -952,7 +923,7 @@ const App: React.FC = () => {
         { view: 'gestionContenidoInvitacion', label: 'Contenido Invitación' },
         { view: 'controlAcceso', label: 'Control de Acceso' },
         { view: 'registroTransaccion', label: 'Registro Transacción' },
-    ];
+    ], []);
 
     const activeViewLabel = useMemo(() => {
         const navItem = NAV_ITEMS.find(item => item.view === activeView);
@@ -970,15 +941,28 @@ const App: React.FC = () => {
         if (alwaysVisible.includes(activeView)) {
             return true;
         }
-    
+
         // Special case: 'Generar Prog. Acomodadores' is unlocked by the 'manageMeetingAssignments' permission.
         if (activeView === 'asignacionesReunion') {
             return userPermissions.includes('manageMeetingAssignments');
         }
-        
+
         // For all other views, check for a direct permission matching the view name.
         return userPermissions.includes(activeView);
     }, [activeView, userPermissions]);
+
+    const ErrorBanner = ({ message }: { message: string }) => (
+        <div className="bg-red-600 text-white text-center p-4 z-20 shadow-lg">
+            <h3 className="font-bold text-lg">Error Crítico de Carga de Datos</h3>
+            <p className="text-sm mt-1">{message}</p>
+            <button
+                onClick={() => window.location.reload()}
+                className="mt-3 px-4 py-1 border-2 border-white rounded-md font-semibold hover:bg-red-700 transition-colors"
+            >
+                Recargar Página
+            </button>
+        </div>
+    );
 
     if (loading) {
         return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div></div>;
@@ -987,37 +971,129 @@ const App: React.FC = () => {
     if (!user) {
         const PUBLIC_NAV_ITEMS: { view: string; label: string }[] = [
             { view: 'home', label: 'Inicio' },
-            { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
-            { view: 'reunionPublica', label: 'Reunión Pública' },
-            { view: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
-            { view: 'dashboardCursos', label: 'Dashboard Cursos' },
-            { view: 'territorios', label: 'Territorios' },
             { view: 'informeServicio', label: 'Informar Servicio' },
+            { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
+            { view: 'programaServiciosAuxiliares', label: 'Prog de Acomodadores' },
+            { view: 'territorios', label: 'Territorios' },
+            { view: 'reunionPublica', label: 'Reunión Pública' },
+            { view: 'dashboardCursos', label: 'Dashboard Cursos' },
         ];
-        
-        const PublicHome = ({ homepageContent }: { homepageContent: HomepageContent[] }) => {
-            if (homepageContent.length > 0) {
-                return <Carousel slides={homepageContent} />;
-            }
+
+        const PublicHome = ({ homepageContent, publicTalksSchedule }: { homepageContent: HomepageContent[]; publicTalksSchedule: PublicTalksSchedule }) => {
+            const isWithinReportRange = () => {
+                const today = new Date();
+                const day = today.getDate();
+                return day >= 25 || day <= 15;
+            };
+
+            const upcomingTalk = useMemo(() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                let nextTalk: (PublicTalkAssignment & { talkNumber: number }) | null = null;
+                let nextDate = new Date('9999-12-31');
+
+                const visibilityMap = publicTalksSchedule.publicVisibility || {};
+
+                Object.entries(publicTalksSchedule).forEach(([talkNumStr, assignments]) => {
+                    if (Array.isArray(assignments)) {
+                        assignments.forEach(a => {
+                            if (a && a.date) {
+                                const talkDate = new Date(a.date + 'T00:00:00');
+                                const yearMonthKey = `${talkDate.getFullYear()}-${MONTHS[talkDate.getMonth()]}`;
+
+                                // Only consider if the month is public
+                                if (visibilityMap[yearMonthKey] && talkDate >= today && talkDate < nextDate) {
+                                    nextDate = talkDate;
+                                    nextTalk = { ...a, talkNumber: parseInt(talkNumStr, 10) };
+                                }
+                            }
+                        });
+                    }
+                });
+                return nextTalk;
+            }, [publicTalksSchedule]);
+
             return (
-                 <div className="text-center p-4 sm:p-8 space-y-8 max-w-4xl mx-auto">
-                     <h2 className="text-2xl sm:text-3xl font-bold text-blue-800">Congregacion Cerro de la Silla-Guadalupe, Bienvenido</h2>
-                     <p className="mt-4 text-md sm:text-lg text-gray-600">Aquí puede ver los programas de las reuniones, consultar territorios y más.</p>
-                     <p className="mt-2 text-gray-500">Para acceder a todas las funciones, por favor inicie sesión.</p>
+                <div className="space-y-8 fade-in-up">
+                    {/* Carousel Section for Public View */}
+                    <div className="-mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-10">
+                        <Carousel slides={homepageContent} />
+                    </div>
+
+                    <div className="max-w-6xl mx-auto px-4 pb-12">
+                        {/* Upcoming Talk Section */}
+                        {upcomingTalk && (
+                            <div className="glass p-8 rounded-[2.5rem] shadow-xl mb-12 border border-white/50 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full -mr-20 -mt-20 blur-3xl group-hover:bg-purple-500/20 transition-all"></div>
+                                <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+                                    <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center text-4xl shadow-lg text-purple-600">
+                                        🎙️
+                                    </div>
+                                    <div className="text-center md:text-left flex-1">
+                                        <h3 className="text-sm font-bold text-purple-600 uppercase tracking-widest mb-1">Próxima Reunión Pública</h3>
+                                        <p className="text-3xl font-black text-slate-800 mb-2">
+                                            {new Date(upcomingTalk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                        </p>
+                                        <p className="text-xl text-slate-700 font-medium mb-1">
+                                            {upcomingTalk.talkNumber}. {DISCURSOS_PUBLICOS.find(t => t.number === upcomingTalk.talkNumber)?.title}
+                                        </p>
+                                        <p className="text-slate-500">
+                                            Orador: <span className="font-semibold">{upcomingTalk.speakerName}</span>
+                                        </p>
+                                        {upcomingTalk.song && (
+                                            <p className="text-slate-500 mt-1">
+                                                Canción: <span className="font-semibold text-purple-700">{upcomingTalk.song}</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {appConfig?.isPublicReportFormEnabled && isWithinReportRange() && (
+                            <div className="glass p-8 rounded-[2.5rem] shadow-xl text-center mb-12 border border-white/50 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-blue-500/20 transition-all"></div>
+                                <span className="inline-block p-4 bg-blue-600 text-white rounded-3xl text-3xl mb-4 shadow-lg shadow-blue-200">📝</span>
+                                <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">¡Tiempo de Informar!</h3>
+                                <p className="text-slate-600 mb-8 max-w-md mx-auto text-lg">Envía tu informe de servicio mensual ahora mismo de forma sencilla.</p>
+                                <button
+                                    onClick={() => setPublicView('informeServicio')}
+                                    className="px-12 py-5 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all transform hover:scale-[1.05] shadow-2xl shadow-blue-300 flex items-center justify-center mx-auto gap-3 uppercase tracking-widest text-sm"
+                                >
+                                    Enviar Mi Informe
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                            <div className="glass p-8 rounded-[2rem] border border-white/40 shadow-xl flex flex-col items-center text-center group hover:border-blue-300 transition-all">
+                                <div className="p-4 bg-orange-100 rounded-2xl mb-4 group-hover:scale-110 transition-transform">📅</div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Vida y Ministerio</h3>
+                                <p className="text-slate-500 text-sm mb-6">Consulta las asignaciones de la reunión de entre semana.</p>
+                                <button onClick={() => setPublicView('vidaYMinisterio')} className="text-blue-600 font-bold hover:underline">Ver Programa →</button>
+                            </div>
+                            <div className="glass p-8 rounded-[2rem] border border-white/40 shadow-xl flex flex-col items-center text-center group hover:border-blue-300 transition-all">
+                                <div className="p-4 bg-green-100 rounded-2xl mb-4 group-hover:scale-110 transition-transform">🛡️</div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Prog de Acomodadores</h3>
+                                <p className="text-slate-500 text-sm mb-6">Visualiza los turnos de acomodadores, micrófonos y aseo.</p>
+                                <button onClick={() => setPublicView('programaServiciosAuxiliares')} className="text-blue-600 font-bold hover:underline">Ver Programa →</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             );
         };
 
         let publicContent;
-        switch(publicView) {
+        switch (publicView) {
             case 'vidaYMinisterio':
-                publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onUpdatePublisherVyMAssignments={async () => {}} onShowModal={setModalInfo} canConfig={false} />;
+                publicContent = <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules.filter(s => s.isPublic)} onSaveSchedule={async () => { }} onUpdatePublisherVyMAssignments={async () => { }} onShowModal={setModalInfo} canConfig={false} />;
                 break;
             case 'asignacionesReunion':
-                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => {}} onShowModal={setModalInfo} canManageSchedule={false} meetingConfig={meetingConfig!} />;
+                publicContent = <AsignacionesReunion publishers={publishers} schedules={schedules.filter(s => s.isPublic)} onSaveSchedule={async () => { }} onShowModal={setModalInfo} canManageSchedule={false} meetingConfig={meetingConfig!} />;
                 break;
             case 'reunionPublica':
-                publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => {}} canManage={false} publishers={publishers} onShowModal={setModalInfo} />;
+                publicContent = <ReunionPublica schedule={publicTalksSchedule} onSave={async () => { }} canManage={false} publishers={publishers} onShowModal={setModalInfo} onUpdatePublisher={async () => { }} />;
                 break;
             case 'programaServiciosAuxiliares':
                 publicContent = <ProgramaServiciosAuxiliares schedules={schedules.filter(s => s.isPublic)} publishers={publishers} onShowModal={setModalInfo} meetingConfig={meetingConfig!} />;
@@ -1026,36 +1102,74 @@ const App: React.FC = () => {
                 publicContent = <DashboardCursos publishers={publishers} serviceReports={serviceReports} />;
                 break;
             case 'territorios':
-                publicContent = <Territorios records={territoryRecords} onSave={async () => {}} onDelete={async () => {}} territoryMaps={territoryMaps} onUploadMap={async () => {}} onDeleteMap={async () => {}} canManage={false} onShowModal={setModalInfo} />;
+                publicContent = <Territorios
+                    records={territoryRecords}
+                    onSave={handleSaveTerritoryRecord}
+                    onDelete={handleDeleteTerritoryRecord}
+                    territoryMaps={territoryMaps}
+                    onUploadMap={handleUploadTerritoryMap}
+                    onDeleteMap={handleDeleteTerritoryMap}
+                    canManage={false}
+                    onShowModal={setModalInfo}
+                    territoryResponsible={territoryResponsible}
+                    onSaveTerritoryResponsible={async () => { }}
+                    dailyAssignments={dailyTerritoryAssignments}
+                    onSaveDailyAssignment={async () => { }}
+                    onUpdateDailyAssignment={async () => { }}
+                    onDeleteDailyAssignment={async () => { }}
+                    territoryMarkers={territoryMarkers}
+                    onSaveTerritoryMarker={async () => { }}
+                    onDeleteTerritoryMarker={async () => { }}
+                    publishers={publishers}
+                    isCommitteeMember={false}
+                />;
+                break;
+            case 'precursorAuxiliar':
+                publicContent = <PrecursorAuxiliar userRole="publisher" isCommitteeMember={false} is15HourOptionEnabled={appConfig?.is15HourOptionEnabled || false} />;
                 break;
             case 'informeServicio':
-                publicContent = <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => {}} invitationContent={invitationContent} isLoggedIn={false} />;
+                publicContent = <InformeServicio publishers={publishers} serviceReports={serviceReports} onSaveReport={handleSaveServiceReport} onApplyForPioneer={() => setPublicView('precursorAuxiliar')} invitationContent={invitationContent} isLoggedIn={true} />;
                 break;
             case 'home':
             default:
-                publicContent = <PublicHome homepageContent={homepageContent} />;
+                publicContent = <PublicHome homepageContent={homepageContent} publicTalksSchedule={publicTalksSchedule} />;
         }
 
         return (
-            <div className="h-screen bg-gray-100 flex flex-col">
-                <header className="bg-white shadow-md p-4 flex justify-between items-center">
-                    <h1 className="text-xl font-bold text-blue-800">Congregación Cerro de la Silla</h1>
-                    <button onClick={() => setIsLoginModalOpen(true)} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
+            <div className="h-screen bg-[#f8fafc] flex flex-col font-['Inter']">
+                {dataLoadError && <ErrorBanner message={dataLoadError} />}
+
+                {/* Modern Public Header */}
+                <header className="bg-white/70 backdrop-blur-md sticky top-0 z-30 border-b border-slate-100 p-4 sm:px-8 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+                            <span className="text-white text-xl">🏠</span>
+                        </div>
+                        <h1 className="text-xl font-black text-slate-800 tracking-tight">Congregación <span className="text-blue-600">Cerro</span></h1>
+                    </div>
+                    <button
+                        onClick={() => setIsLoginModalOpen(true)}
+                        className="px-6 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200 flex items-center gap-2 text-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                        </svg>
                         Iniciar Sesión
                     </button>
                 </header>
-                <nav className="bg-white border-b overflow-x-auto">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex space-x-4">
+
+                {/* Styled Public Navigation */}
+                <nav className="bg-white border-b border-slate-100 sticky top-[73px] z-20 overflow-x-auto">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-8">
+                        <div className="flex space-x-2 py-2">
                             {PUBLIC_NAV_ITEMS.map(item => (
                                 <button
                                     key={item.view}
                                     onClick={() => setPublicView(item.view)}
-                                    className={`py-3 px-3 text-sm font-medium whitespace-nowrap ${
-                                        publicView === item.view
-                                            ? 'border-b-2 border-blue-500 text-blue-600'
-                                            : 'border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                    }`}
+                                    className={`py-2.5 px-5 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${publicView === item.view
+                                        ? 'bg-blue-50 text-blue-600 shadow-sm shadow-blue-100'
+                                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                        }`}
                                 >
                                     {item.label}
                                 </button>
@@ -1063,17 +1177,17 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 </nav>
-                <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc]">
                     {publicContent}
                 </main>
                 {isLoginModalOpen && <Login onClose={() => setIsLoginModalOpen(false)} />}
                 {modalInfo && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={() => setModalInfo(null)}>
                         <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                            <div className={`p-6 text-center border-t-8 rounded-lg ${
-                                modalInfo.type === 'success' ? 'border-green-500' :
+                            <div className={`p-6 text-center border-t-8 rounded-lg ${modalInfo.type === 'success' ? 'border-green-500' :
                                 modalInfo.type === 'error' ? 'border-red-500' : 'border-blue-500'
-                            }`}>
+                                }`}>
                                 <h3 className="text-xl font-bold mb-4">{modalInfo.title}</h3>
                                 <p className="text-gray-600 whitespace-pre-wrap">{modalInfo.message}</p>
                                 <button onClick={() => setModalInfo(null)} className="mt-6 px-6 py-2 bg-gray-200 rounded-md">Cerrar</button>
@@ -1084,7 +1198,7 @@ const App: React.FC = () => {
             </div>
         );
     }
-    
+
     const userProfileForHeader = {
         displayName: linkedPublisher ? `${linkedPublisher.Nombre} ${linkedPublisher.Apellido}` : user.email,
         email: user.email,
@@ -1096,6 +1210,7 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-gray-100">
             <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
             <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+                {dataLoadError && <ErrorBanner message={dataLoadError} />}
                 {connectionError && (
                     <div className="bg-red-600 text-white text-center p-2 text-sm animate-pulse z-10">
                         {connectionError}
@@ -1110,10 +1225,9 @@ const App: React.FC = () => {
             {modalInfo && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={() => setModalInfo(null)}>
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                        <div className={`p-6 text-center border-t-8 rounded-lg ${
-                            modalInfo.type === 'success' ? 'border-green-500' :
+                        <div className={`p-6 text-center border-t-8 rounded-lg ${modalInfo.type === 'success' ? 'border-green-500' :
                             modalInfo.type === 'error' ? 'border-red-500' : 'border-blue-500'
-                        }`}>
+                            }`}>
                             <h3 className="text-xl font-bold mb-4">{modalInfo.title}</h3>
                             <p className="text-gray-600 whitespace-pre-wrap">{modalInfo.message}</p>
                             <button onClick={() => setModalInfo(null)} className="mt-6 px-6 py-2 bg-gray-200 rounded-md">Cerrar</button>
