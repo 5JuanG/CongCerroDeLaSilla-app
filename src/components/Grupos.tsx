@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Publisher } from '../App';
+import { Publisher } from '../types';
 
 interface GruposProps {
     publishers: Publisher[];
@@ -17,14 +17,14 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
         const allGroups = activePublishers.map(p => p.Grupo).filter(Boolean) as string[];
         return [...new Set(allGroups)].sort();
     }, [publishers]);
-    
+
     const handleSaveChanges = async () => {
         if (editingPublisher && editingPublisher.id) {
             await onUpdateGroup(editingPublisher.id, editingPublisher.Grupo || '');
             setEditingPublisher(null);
         }
     };
-    
+
     const getPublisherFullName = (p: Publisher) => [p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ');
 
     const AdminView: React.FC = () => {
@@ -33,15 +33,15 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
         const statusFilters: Publisher['Estatus'][] = ['Inactivo', 'Se cambió de congregación', 'Falleció', 'Sacado de la congregación'];
 
         const filteredData = useMemo(() => {
-             let data = [...publishers];
-             if (statusFilters.includes(groupFilter as Publisher['Estatus'])) {
-                 data = data.filter(p => p.Estatus === groupFilter);
-             } else if (groupFilter === 'sin-grupo') {
-                 data = data.filter(p => p.Estatus === 'Activo' && !p.Grupo);
-             } else if (groupFilter !== 'todos') {
-                 data = data.filter(p => p.Grupo === groupFilter);
-             }
-             return data.sort((a,b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+            let data = [...publishers];
+            if (statusFilters.includes(groupFilter as Publisher['Estatus'])) {
+                data = data.filter(p => p.Estatus === groupFilter);
+            } else if (groupFilter === 'sin-grupo') {
+                data = data.filter(p => p.Estatus === 'Activo' && !p.Grupo);
+            } else if (groupFilter !== 'todos') {
+                data = data.filter(p => p.Grupo === groupFilter);
+            }
+            return data.sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
         }, [groupFilter, publishers]);
 
         const totalPages = Math.ceil(filteredData.length / ROWS_PER_PAGE);
@@ -49,7 +49,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
 
         return (
             <div>
-                 <div className="bg-white p-4 rounded-lg shadow-md mb-4 flex items-center gap-4">
+                <div className="bg-white p-4 rounded-lg shadow-md mb-4 flex items-center gap-4">
                     <label htmlFor="group-filter" className="font-bold">Ver:</label>
                     <select id="group-filter" value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setCurrentPage(1); }} className="p-2 border rounded-md">
                         <option value="todos">Todos los Registros</option>
@@ -58,11 +58,11 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                             <option value="sin-grupo">Activos Sin Grupo</option>
                         </optgroup>
                         <optgroup label="Estatus">
-                           {statusFilters.map(status => <option key={status} value={status}>{status}</option>)}
+                            {statusFilters.map(status => <option key={status} value={status}>{status}</option>)}
                         </optgroup>
                     </select>
-                 </div>
-                 <div className="overflow-x-auto bg-white rounded-lg shadow-md">
+                </div>
+                <div className="overflow-x-auto bg-white rounded-lg shadow-md">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-800 text-white">
                             <tr>
@@ -83,31 +83,30 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                                     </td>
                                     <td className="p-3">{p.Grupo || <em>Sin asignar</em>}</td>
                                     <td className="p-3">
-                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                            p.Estatus === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'
-                                        }`}>{p.Estatus}</span>
+                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${p.Estatus === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'
+                                            }`}>{p.Estatus}</span>
                                     </td>
                                     <td className="p-3"><button onClick={() => setEditingPublisher(p)} className="text-blue-600 hover:underline">Editar Grupo</button></td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                 </div>
-                 {totalPages > 1 && (
-                     <div className="flex justify-center items-center gap-2 mt-4">
-                        {Array.from({length: totalPages}, (_, i) => i + 1).map(page => (
+                </div>
+                {totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-2 mt-4">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                             <button key={page} onClick={() => setCurrentPage(page)} className={`px-3 py-1 border rounded ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-white'}`}>{page}</button>
                         ))}
                     </div>
-                 )}
+                )}
             </div>
         )
     };
-    
+
     const SummaryView: React.FC = () => {
         const activeGroupsData = useMemo(() => {
             const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
-            const data: {[key: string]: { members: Publisher[], prCount: number }} = {};
+            const data: { [key: string]: { members: Publisher[], prCount: number } } = {};
             [...groupNames, 'Sin Grupo'].forEach(name => { data[name] = { members: [], prCount: 0 }; });
 
             activePublishers.forEach(p => {
@@ -119,7 +118,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             });
 
             Object.values(data).forEach(group => {
-                group.members.sort((a,b) => a.Nombre.localeCompare(b.Nombre));
+                group.members.sort((a, b) => a.Nombre.localeCompare(b.Nombre));
             });
 
             return data;
@@ -133,7 +132,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                 const groupName = pub.Grupo!;
                 if (!acc[groupName]) acc[groupName] = [];
                 acc[groupName].push(pub);
-                acc[groupName].sort((a,b) => a.Nombre.localeCompare(b.Nombre));
+                acc[groupName].sort((a, b) => a.Nombre.localeCompare(b.Nombre));
                 return acc;
             }, {} as Record<string, Publisher[]>);
         }, [publishers]);
@@ -143,7 +142,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             const data: Partial<Record<Publisher['Estatus'], Publisher[]>> = {};
 
             statusesToTrack.forEach(status => {
-                const pubsWithStatus = publishers.filter(p => p.Estatus === status).sort((a,b) => a.Nombre.localeCompare(b.Nombre));
+                const pubsWithStatus = publishers.filter(p => p.Estatus === status).sort((a, b) => a.Nombre.localeCompare(b.Nombre));
                 if (pubsWithStatus.length > 0) data[status] = pubsWithStatus;
             });
             return data;
@@ -157,24 +156,25 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                         const groupData = data as { members: Publisher[]; prCount: number };
                         if (groupData.members.length === 0) return null;
                         return (
-                        <div key={name} className="bg-white rounded-lg shadow-md flex flex-col">
-                            <div className="bg-blue-600 text-white p-3 font-bold rounded-t-lg">{name}</div>
-                            <ul className="flex-grow p-2 overflow-y-auto max-h-96">
-                                {groupData.members.length > 0 ? groupData.members.map(p => (
-                                    <li key={p.id} className="p-2 border-b text-sm">
-                                        {getPublisherFullName(p)}
-                                        <span className="text-xs font-semibold text-gray-500 ml-1">
-                                            {p.Privilegio ? `(${p.Privilegio})` : (p['Priv Adicional'] ? `(${p['Priv Adicional']})` : '')}
-                                        </span>
-                                    </li>
-                                )) : <li className="p-2 text-gray-500 italic">Grupo vacío</li>}
-                            </ul>
-                            <div className="bg-gray-100 p-3 rounded-b-lg font-bold flex justify-between text-sm">
-                                <span>Total: {groupData.members.length}</span>
-                                <span>Precursores Reg.: {groupData.prCount}</span>
+                            <div key={name} className="bg-white rounded-lg shadow-md flex flex-col">
+                                <div className="bg-blue-600 text-white p-3 font-bold rounded-t-lg">{name}</div>
+                                <ul className="flex-grow p-2 overflow-y-auto max-h-96">
+                                    {groupData.members.length > 0 ? groupData.members.map(p => (
+                                        <li key={p.id} className="p-2 border-b text-sm">
+                                            {getPublisherFullName(p)}
+                                            <span className="text-xs font-semibold text-gray-500 ml-1">
+                                                {p.Privilegio ? `(${p.Privilegio})` : (p['Priv Adicional'] ? `(${p['Priv Adicional']})` : '')}
+                                            </span>
+                                        </li>
+                                    )) : <li className="p-2 text-gray-500 italic">Grupo vacío</li>}
+                                </ul>
+                                <div className="bg-gray-100 p-3 rounded-b-lg font-bold flex justify-between text-sm">
+                                    <span>Total: {groupData.members.length}</span>
+                                    <span>Precursores Reg.: {groupData.prCount}</span>
+                                </div>
                             </div>
-                        </div>
-                    )})}
+                        )
+                    })}
                 </div>
 
                 {inactiveByGroup && (
@@ -200,16 +200,16 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                     </div>
                 )}
 
-                 {Object.keys(otherStatusData).length > 0 && (
+                {Object.keys(otherStatusData).length > 0 && (
                     <div className="mt-12">
                         <h2 className="text-xl font-bold text-gray-700 mb-6 border-b-2 border-gray-300 pb-2">
                             Registros de Otros Estatus
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {Object.entries(otherStatusData).map(([status, members]) => (
-                                 <div key={status} className="bg-gray-100 border border-gray-200 rounded-lg shadow-sm flex flex-col">
+                                <div key={status} className="bg-gray-100 border border-gray-200 rounded-lg shadow-sm flex flex-col">
                                     <div className="bg-gray-300 text-gray-800 p-3 font-bold rounded-t-lg">{status}</div>
-                                     <ul className="flex-grow p-2 max-h-60 overflow-y-auto">
+                                    <ul className="flex-grow p-2 max-h-60 overflow-y-auto">
                                         {(members as Publisher[]).map(p => (
                                             <li key={p.id} className="p-2 border-b border-gray-200/50 text-sm">{getPublisherFullName(p)}</li>
                                         ))}
@@ -226,7 +226,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             </div>
         )
     };
-    
+
     return (
         <div className="p-4 sm:p-6">
             <div className="flex justify-between items-center mb-6">

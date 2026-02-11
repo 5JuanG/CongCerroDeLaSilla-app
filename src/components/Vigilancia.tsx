@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { VigilanciaConfig } from '../types';
 import Tooltip from './Tooltip';
-import { MONTHS } from '../App';
+import { MONTHS } from '../constants';
 
 interface VigilanciaEvent {
     id: string;
@@ -24,11 +25,10 @@ interface VigilanciaSchedule {
 interface VigilanciaProps {
     schedules: VigilanciaSchedule[];
     onSave: (schedule: VigilanciaSchedule) => Promise<void>;
+    config: VigilanciaConfig;
+    onSaveConfig: (config: VigilanciaConfig) => Promise<void>;
 }
 
-const TUESDAY_SLOTS = ["7:20-7:50pm", "7:50-8:20pm", "8:20-8:50pm", "8:50-9:20pm"];
-const SATURDAY_SLOTS = ["4:15-4:50pm", "4:50-5:20pm", "5:20-5:50pm", "5:50-6:20pm"];
-const CONGREGATIONS = ["Jardines de Andalucia", "Las Jacarandas", "Nacozari", "Cerro de la Silla", "Niños Heroes"];
 const MONTHS_GRID = [
     ["Enero", "Febrero", "Marzo"],
     ["Abril", "Mayo", "Junio"],
@@ -36,13 +36,17 @@ const MONTHS_GRID = [
     ["Octubre", "Noviembre", "Diciembre"],
 ];
 
-const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
+const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave, config, onSaveConfig }) => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isEditing, setIsEditing] = useState(false);
     const [editableTuesday, setEditableTuesday] = useState<VigilanciaSchedule | null>(null);
     const [editableSaturday, setEditableSaturday] = useState<VigilanciaSchedule | null>(null);
     const [status, setStatus] = useState('');
-    
+    const [editableConfig, setEditableConfig] = useState<VigilanciaConfig | null>(null);
+    const [newCongName, setNewCongName] = useState('');
+    const [newTuesdaySlot, setNewTuesdaySlot] = useState('');
+    const [newSaturdaySlot, setNewSaturdaySlot] = useState('');
+
     const [newEventDate, setNewEventDate] = useState('');
     const [newEventDesc, setNewEventDesc] = useState('');
     const [newEventCongregation, setNewEventCongregation] = useState('');
@@ -65,12 +69,17 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
         if (isEditing) {
             setEditableTuesday(JSON.parse(JSON.stringify(tuesdaySchedule || createEmptySchedule('tuesday', selectedYear))));
             setEditableSaturday(JSON.parse(JSON.stringify(saturdaySchedule || createEmptySchedule('saturday', selectedYear))));
+            setEditableConfig(JSON.parse(JSON.stringify(config)));
         } else {
             setEditableTuesday(null);
             setEditableSaturday(null);
+            setEditableConfig(null);
             setNewEventDate('');
             setNewEventDesc('');
             setNewEventCongregation('');
+            setNewCongName('');
+            setNewTuesdaySlot('');
+            setNewSaturdaySlot('');
         }
     }, [isEditing, tuesdaySchedule, saturdaySchedule, selectedYear]);
 
@@ -107,7 +116,7 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
         setNewEventDesc('');
         setNewEventCongregation('');
     };
-    
+
     const handleRemoveEvent = (day: 'tuesday' | 'saturday', eventId: string) => {
         const setter = day === 'tuesday' ? setEditableTuesday : setEditableSaturday;
         setter(prev => {
@@ -117,10 +126,14 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
     };
 
     const handleSave = async () => {
-        if (editableTuesday && editableSaturday) {
+        if (editableTuesday && editableSaturday && editableConfig) {
             setStatus('Guardando...');
             try {
-                await Promise.all([onSave(editableTuesday), onSave(editableSaturday)]);
+                await Promise.all([
+                    onSave(editableTuesday),
+                    onSave(editableSaturday),
+                    onSaveConfig(editableConfig)
+                ]);
                 setStatus('¡Guardado con éxito!');
                 setIsEditing(false);
                 setTimeout(() => setStatus(''), 3000);
@@ -130,7 +143,27 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
             }
         }
     };
-    
+
+    const handleConfigChange = (type: keyof VigilanciaConfig, action: 'add' | 'remove', value: string) => {
+        if (!editableConfig) return;
+        setEditableConfig(prev => {
+            if (!prev) return null;
+            const newConfig = { ...prev };
+            if (action === 'add') {
+                if (!value.trim()) return prev;
+                if (!newConfig[type].includes(value)) {
+                    newConfig[type] = [...newConfig[type], value];
+                }
+            } else {
+                newConfig[type] = (newConfig[type] as string[]).filter(v => v !== value);
+            }
+            return newConfig;
+        });
+        if (type === 'congregations') setNewCongName('');
+        if (type === 'tuesdaySlots') setNewTuesdaySlot('');
+        if (type === 'saturdaySlots') setNewSaturdaySlot('');
+    };
+
     const renderScheduleTable = (
         title: string,
         slots: string[],
@@ -178,7 +211,7 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
                                                         className="w-full p-1 border rounded"
                                                     >
                                                         <option value="">--</option>
-                                                        {CONGREGATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        {(editableConfig?.congregations || config.congregations).map(c => <option key={c} value={c}>{c}</option>)}
                                                     </select>
                                                 ) : (
                                                     scheduleData?.assignments[month]?.[slot] || ''
@@ -220,38 +253,38 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
 
             {renderScheduleTable(
                 "Programa de Vigilancia de Los Martes",
-                TUESDAY_SLOTS,
+                (editableConfig?.tuesdaySlots || config.tuesdaySlots),
                 dataForTuesday,
                 (month, slot, cong) => handleDataChange('tuesday', month, slot, cong)
             )}
 
             {renderScheduleTable(
                 "Programa de Vigilancia de Los Sábados",
-                SATURDAY_SLOTS,
+                (editableConfig?.saturdaySlots || config.saturdaySlots),
                 dataForSaturday,
                 (month, slot, cong) => handleDataChange('saturday', month, slot, cong)
             )}
-            
+
             {isEditing && (
-                 <div className="bg-white p-6 rounded-lg shadow-md mt-8">
+                <div className="bg-white p-6 rounded-lg shadow-md mt-8">
                     <h3 className="text-xl font-bold mb-4">Gestionar Eventos Especiales</h3>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mb-6">
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium">Descripción</label>
-                            <input type="text" value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)} className="w-full p-2 border rounded-md" placeholder="Ej: Visita del Superintendente"/>
+                            <input type="text" value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)} className="w-full p-2 border rounded-md" placeholder="Ej: Visita del Superintendente" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium">Fecha</label>
-                            <input type="date" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} className="w-full p-2 border rounded-md"/>
+                            <input type="date" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} className="w-full p-2 border rounded-md" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium">Congregación</label>
                             <select value={newEventCongregation} onChange={e => setNewEventCongregation(e.target.value)} className="w-full p-2 border rounded-md">
                                 <option value="">-- Seleccione --</option>
-                                {CONGREGATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                                {(editableConfig?.congregations || config.congregations).map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
-                         <div>
+                        <div>
                             <label className="block text-sm font-medium">Programa</label>
                             <select value={newEventDay} onChange={e => setNewEventDay(e.target.value as any)} className="w-full p-2 border rounded-md">
                                 <option value="tuesday">Martes</option>
@@ -281,7 +314,7 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
                         <div>
                             <h4 className="font-semibold mb-2">Eventos (Sábado)</h4>
                             <ul className="space-y-2">
-                                 {editableSaturday?.specialEvents.map(event => (
+                                {editableSaturday?.specialEvents.map(event => (
                                     <li key={event.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                                         <div>
                                             <p className="font-medium">{event.date} - <span className="font-normal text-gray-700">{event.congregation}</span></p>
@@ -293,7 +326,101 @@ const Vigilancia: React.FC<VigilanciaProps> = ({ schedules, onSave }) => {
                             </ul>
                         </div>
                     </div>
-                 </div>
+                    <hr className="my-8" />
+
+                    <h3 className="text-xl font-bold mb-6">Configuración del Programa</h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Congregations Management */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <h4 className="font-bold mb-4 flex items-center gap-2">
+                                <span className="text-blue-600">🏛️</span> Congregaciones
+                            </h4>
+                            <div className="flex gap-2 mb-4">
+                                <input
+                                    type="text"
+                                    value={newCongName}
+                                    onChange={e => setNewCongName(e.target.value)}
+                                    placeholder="Nombre..."
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                />
+                                <button
+                                    onClick={() => handleConfigChange('congregations', 'add', newCongName)}
+                                    className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold"
+                                >
+                                    +
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {editableConfig?.congregations.map(c => (
+                                    <span key={c} className="bg-white px-3 py-1 rounded-full border border-slate-200 text-sm flex items-center gap-2 shadow-sm">
+                                        {c}
+                                        <button onClick={() => handleConfigChange('congregations', 'remove', c)} className="text-red-400 hover:text-red-600 font-bold">×</button>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Tuesday Slots Management */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <h4 className="font-bold mb-4 flex items-center gap-2">
+                                <span className="text-blue-600">🕒</span> Turnos Martes
+                            </h4>
+                            <div className="flex gap-2 mb-4">
+                                <input
+                                    type="text"
+                                    value={newTuesdaySlot}
+                                    onChange={e => setNewTuesdaySlot(e.target.value)}
+                                    placeholder="Ej: 7:20-7:50pm"
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                />
+                                <button
+                                    onClick={() => handleConfigChange('tuesdaySlots', 'add', newTuesdaySlot)}
+                                    className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold"
+                                >
+                                    +
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {editableConfig?.tuesdaySlots.map(s => (
+                                    <span key={s} className="bg-white px-3 py-1 rounded-full border border-slate-200 text-sm flex items-center gap-2 shadow-sm">
+                                        {s}
+                                        <button onClick={() => handleConfigChange('tuesdaySlots', 'remove', s)} className="text-red-400 hover:text-red-600 font-bold">×</button>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Saturday Slots Management */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <h4 className="font-bold mb-4 flex items-center gap-2">
+                                <span className="text-blue-600">🕒</span> Turnos Sábados
+                            </h4>
+                            <div className="flex gap-2 mb-4">
+                                <input
+                                    type="text"
+                                    value={newSaturdaySlot}
+                                    onChange={e => setNewSaturdaySlot(e.target.value)}
+                                    placeholder="Ej: 4:15-4:50pm"
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                />
+                                <button
+                                    onClick={() => handleConfigChange('saturdaySlots', 'add', newSaturdaySlot)}
+                                    className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold"
+                                >
+                                    +
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {editableConfig?.saturdaySlots.map(s => (
+                                    <span key={s} className="bg-white px-3 py-1 rounded-full border border-slate-200 text-sm flex items-center gap-2 shadow-sm">
+                                        {s}
+                                        <button onClick={() => handleConfigChange('saturdaySlots', 'remove', s)} className="text-red-400 hover:text-red-600 font-bold">×</button>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -1,5 +1,11 @@
+
+
+
+
+
 import React, { useState, useMemo } from 'react';
-import { Publisher, ServiceReport, MONTHS } from '../App';
+import { Publisher, ServiceReport } from '../types';
+import { MONTHS } from '../constants';
 
 interface InformeMensualConsolidadoProps {
     publishers: Publisher[];
@@ -85,15 +91,15 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
         const auxHours = auxReports.reduce((sum, r) => sum + (r.horas || 0), 0);
         const auxCourses = auxReports.reduce((sum, r) => sum + (r.cursosBiblicos || 0), 0);
 
-        const regReports = participatingReports.filter(r => 
+        const regReports = participatingReports.filter(r =>
             !auxReportIds.has(r.id) && regularPioneerIds.has(r.idPublicador)
         );
         const regReportIds = new Set(regReports.map(r => r.id));
         const regCount = regReports.length;
         const regHours = regReports.reduce((sum, r) => sum + (r.horas || 0), 0);
         const regCourses = regReports.reduce((sum, r) => sum + (r.cursosBiblicos || 0), 0);
-        
-        const pubOnlyReports = participatingReports.filter(r => 
+
+        const pubOnlyReports = participatingReports.filter(r =>
             !auxReportIds.has(r.id) && !regReportIds.has(r.id)
         );
         const pubCount = pubOnlyReports.length;
@@ -113,7 +119,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
 
     const publishersWhoDidNotReport = useMemo(() => {
         const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
-        
+
         return activePublishers.filter(pub => {
             const hasReported = serviceReports.some(r =>
                 r.idPublicador === pub.id &&
@@ -124,10 +130,10 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
             return !hasReported;
         });
     }, [publishers, serviceReports, selectedYear, selectedMonth]);
-    
+
     const pendingByGroup = useMemo(() => {
         if (publishersWhoDidNotReport.length === 0) return {};
-        
+
         const sortedPublishers = [...publishersWhoDidNotReport].sort((a, b) => a.Nombre.localeCompare(b.Nombre));
 
         return sortedPublishers.reduce((acc, pub) => {
@@ -192,7 +198,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
         }
 
         const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
-        
+
         const irregulars = activePublishers.map(pub => {
             const missedMonths: string[] = [];
             for (const { month, year } of monthsToCheck) {
@@ -217,8 +223,8 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
 
     const irregularsByGroup = useMemo(() => {
         if (irregularPublishers.length === 0) return {};
-        
-        const sortedPublishers = [...irregularPublishers].sort((a, b) => 
+
+        const sortedPublishers = [...irregularPublishers].sort((a, b) =>
             a.publisher.Nombre.localeCompare(b.publisher.Nombre)
         );
 
@@ -240,7 +246,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
 
     return (
         <div className="container mx-auto max-w-5xl bg-white p-6 rounded-lg shadow-md">
-            
+
             <div className="mb-12 bg-gray-50 p-6 rounded-lg shadow-inner border">
                 <h2 className="text-xl font-bold text-gray-700 mb-4 text-center">Resumen de Actividad</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 max-w-lg mx-auto">
@@ -320,24 +326,25 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
                 <div>
                     <h2 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-3">Publicadores Pendientes de Informar ({publishersWhoDidNotReport.length})</h2>
                     {publishersWhoDidNotReport.length > 0 ? (
-                         <div className="border rounded-md divide-y max-h-64 overflow-y-auto">
+                        <div className="border rounded-md divide-y max-h-64 overflow-y-auto">
                             {Object.entries(pendingByGroup).map(([groupName, pendingPubs]) => {
                                 const typedPendingPubs = pendingPubs as Publisher[];
                                 return (
-                                <div key={groupName}>
-                                    <button onClick={() => toggleAccordion(groupName)} className="w-full flex justify-between items-center p-3 text-left hover:bg-gray-50 focus:outline-none">
-                                        <span className="font-semibold text-gray-800">{groupName} ({typedPendingPubs.length})</span>
-                                        <svg className={`w-5 h-5 text-gray-500 transition-transform transform ${openAccordion === groupName ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                                    </button>
-                                    {openAccordion === groupName && (
-                                        <ul className="pl-6 pr-3 pb-3 text-sm space-y-2 bg-gray-50/50">
-                                            {typedPendingPubs.map(pub => (
-                                                <li key={pub.id} className="text-gray-700 pt-1">{pub.Nombre} {pub.Apellido}</li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                            )})}
+                                    <div key={groupName}>
+                                        <button onClick={() => toggleAccordion(groupName)} className="w-full flex justify-between items-center p-3 text-left hover:bg-gray-50 focus:outline-none">
+                                            <span className="font-semibold text-gray-800">{groupName} ({typedPendingPubs.length})</span>
+                                            <svg className={`w-5 h-5 text-gray-500 transition-transform transform ${openAccordion === groupName ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                        </button>
+                                        {openAccordion === groupName && (
+                                            <ul className="pl-6 pr-3 pb-3 text-sm space-y-2 bg-gray-50/50">
+                                                {typedPendingPubs.map(pub => (
+                                                    <li key={pub.id} className="text-gray-700 pt-1">{pub.Nombre} {pub.Apellido}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                )
+                            })}
                         </div>
                     ) : (
                         <p className="text-sm text-gray-500">Todos los publicadores activos han informado.</p>
@@ -346,28 +353,29 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
                 <div>
                     <h2 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-3">Publicadores Irregulares ({irregularPublishers.length})</h2>
                     <p className="text-xs font-normal text-gray-500 -mt-2 mb-3">Faltan 1 o más informes en el período de 6 meses seleccionado arriba.</p>
-                     {irregularPublishers.length > 0 ? (
+                    {irregularPublishers.length > 0 ? (
                         <div className="border rounded-md divide-y max-h-64 overflow-y-auto">
                             {Object.entries(irregularsByGroup).map(([groupName, irregularPubs]) => {
                                 const typedIrregularPubs = irregularPubs as { publisher: Publisher; missed: string[] }[];
                                 return (
-                                <div key={groupName}>
-                                    <button onClick={() => toggleIrregularAccordion(groupName)} className="w-full flex justify-between items-center p-3 text-left hover:bg-gray-50 focus:outline-none">
-                                        <span className="font-semibold text-gray-800">{groupName} ({typedIrregularPubs.length})</span>
-                                        <svg className={`w-5 h-5 text-gray-500 transition-transform transform ${openIrregularAccordion === groupName ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                                    </button>
-                                    {openIrregularAccordion === groupName && (
-                                        <ul className="pl-6 pr-3 pb-3 text-sm space-y-2 bg-gray-50/50">
-                                            {typedIrregularPubs.map(item => (
-                                                <li key={item.publisher.id} className="text-gray-700 pt-1">
-                                                    {item.publisher.Nombre} {item.publisher.Apellido}
-                                                    <span className="block text-xs text-red-600">Meses faltantes: {item.missed.join(', ')}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                            )})}
+                                    <div key={groupName}>
+                                        <button onClick={() => toggleIrregularAccordion(groupName)} className="w-full flex justify-between items-center p-3 text-left hover:bg-gray-50 focus:outline-none">
+                                            <span className="font-semibold text-gray-800">{groupName} ({typedIrregularPubs.length})</span>
+                                            <svg className={`w-5 h-5 text-gray-500 transition-transform transform ${openIrregularAccordion === groupName ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                        </button>
+                                        {openIrregularAccordion === groupName && (
+                                            <ul className="pl-6 pr-3 pb-3 text-sm space-y-2 bg-gray-50/50">
+                                                {typedIrregularPubs.map(item => (
+                                                    <li key={item.publisher.id} className="text-gray-700 pt-1">
+                                                        {item.publisher.Nombre} {item.publisher.Apellido}
+                                                        <span className="block text-xs text-red-600">Meses faltantes: {item.missed.join(', ')}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                )
+                            })}
                         </div>
                     ) : (
                         <p className="text-sm text-gray-500">No hay publicadores irregulares en el período seleccionado.</p>
@@ -375,7 +383,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
                 </div>
             </div>
 
-             <div className="mt-8">
+            <div className="mt-8">
                 <h2 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-3">Publicadores que se Hicieron Inactivos este Mes ({publishersWhoBecameInactive.length})</h2>
                 {publishersWhoBecameInactive.length > 0 ? (
                     <ul className="space-y-2 text-sm max-h-48 overflow-y-auto">

@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-// FIX: Use `import type` to break circular dependency for the type checker.
-import type { Publisher, ServiceReport } from '../App';
-import { MONTHS } from '../App';
+import { Publisher, ServiceReport } from '../types';
+import { MONTHS } from '../constants';
 import Tooltip from './Tooltip';
 
 type EditableReport = Omit<ServiceReport, 'id'>;
@@ -60,20 +59,19 @@ const ChartModal: React.FC<{
                     </div>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-3xl font-light">&times;</button>
                 </div>
-                
+
                 {chartData.length > 0 ? (
                     <div className="h-96 bg-gray-50 p-4 rounded-lg border">
                         <div className="flex items-end h-full w-full gap-2 px-2">
                             {chartData.map((d, index) => (
                                 <div key={index} className="flex-grow flex flex-col items-center justify-end h-full relative group">
-                                    <div 
-                                        className={`w-full rounded-t-md transition-all ${
-                                            d.isAux
+                                    <div
+                                        className={`w-full rounded-t-md transition-all ${d.isAux
                                                 ? 'bg-green-500 hover:bg-green-600'
                                                 : d.isReg
                                                     ? 'bg-yellow-400 hover:bg-yellow-500'
                                                     : 'bg-blue-500 hover:bg-blue-600'
-                                        }`}
+                                            }`}
                                         style={{ height: `${(d.courses / maxCourses) * 90}%` }} /* 90% to leave space for value */
                                     >
                                         <span className="absolute top-0 left-1/2 -translate-x-1/2 text-white font-bold text-sm bg-black px-1 rounded-sm">{d.courses}</span>
@@ -151,20 +149,20 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
             return { publisher: pub, report };
         });
     }, [filteredPublishers, serviceReports, selectedYear, selectedMonth]);
-    
+
     const informedCount = useMemo(() => reportData.filter(d => d.report && d.report.participacion).length, [reportData]);
     const pendingCount = filteredPublishers.length - informedCount;
 
     const chartHeaderStats = useMemo(() => {
         const totalCourses = reportData.reduce((sum, item) => sum + (item.report?.cursosBiblicos || 0), 0);
-    
+
         const publishersWithCourses = new Set(
             reportData.filter(item => (item.report?.cursosBiblicos || 0) > 0).map(item => item.publisher.id)
         ).size;
-        
+
         // filteredPublishers are already the active ones for the group.
         const publishersWithoutCourses = filteredPublishers.length - publishersWithCourses;
-    
+
         return { totalCourses, publishersWithoutCourses };
     }, [reportData, filteredPublishers]);
 
@@ -192,7 +190,7 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                 else if (field === 'precursorAuxiliar') newReport.precursorAuxiliar = value ? 'PA' : '';
                 else if (field === 'cursosBiblicos' || field === 'horas') (newReport as any)[field] = value === '' ? undefined : Number(value);
                 else (newReport as any)[field] = value || undefined;
-                
+
                 return { ...item, report: newReport };
             });
         });
@@ -219,28 +217,28 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
         if (!report || !report.participacion) {
             return 'bg-red-200 hover:bg-red-300';
         }
-    
+
         // Si ya informó, se revisan los siguientes casos:
-    
+
         // 2. Informó como Precursor Auxiliar -> Verde brillante
         if (report.precursorAuxiliar === 'PA') {
             return 'bg-green-200 hover:bg-green-300';
         }
-    
+
         // 3. Es Precursor Regular (y ya informó) -> Amarillo brillante
         if (publisher['Priv Adicional'] === 'Precursor Regular') {
             return 'bg-yellow-200 hover:bg-yellow-300';
         }
-        
+
         // 4. Es publicador regular que ya informó -> Verde suave
         return 'bg-green-50 hover:bg-green-100';
     };
-    
+
     const dataForView = isEditing ? editableData : reportData;
 
     return (
         <div className="container mx-auto max-w-6xl bg-white p-6 rounded-lg shadow-md">
-            <ChartModal 
+            <ChartModal
                 isOpen={isChartModalOpen}
                 onClose={() => setIsChartModalOpen(false)}
                 data={reportData}
@@ -251,7 +249,7 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                 publishersWithoutCourses={chartHeaderStats.publishersWithoutCourses}
             />
             <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Informe Mensual por Grupo de Servicio</h1>
-    
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
                 <div>
                     <label htmlFor="year-select" className="block text-sm font-medium text-gray-700">Año:</label>
@@ -284,20 +282,20 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                 <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-yellow-200 border border-yellow-300"></div>
                     <span>Prec. Regular</span>
-                     <Tooltip text="El publicador es precursor regular y ya ha entregado su informe." />
+                    <Tooltip text="El publicador es precursor regular y ya ha entregado su informe." />
                 </div>
                 <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-green-200 border border-green-300"></div>
                     <span>Prec. Auxiliar</span>
-                     <Tooltip text="El publicador sirvió como precursor auxiliar este mes y ya entregó su informe." />
+                    <Tooltip text="El publicador sirvió como precursor auxiliar este mes y ya entregó su informe." />
                 </div>
                 <div className="relative group flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-green-50 border border-green-200"></div>
                     <span>Publicador</span>
-                     <Tooltip text="El publicador ya entregó su informe del mes." />
+                    <Tooltip text="El publicador ya entregó su informe del mes." />
                 </div>
             </div>
-    
+
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
                 <div className="flex gap-4 text-sm font-semibold">
                     <span className="text-green-600">Informaron: {informedCount}</span>
@@ -322,9 +320,9 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                     )}
                 </div>
             </div>
-    
+
             {status && <div className="text-center mb-4 font-semibold text-blue-700">{status}</div>}
-    
+
             {/* --- Desktop Table View --- */}
             <div className="overflow-x-auto hidden md:block">
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -344,35 +342,35 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                                 <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900">{[item.publisher.Nombre, item.publisher.Apellido].join(' ')}</td>
                                 <td className="px-2 py-3 text-center">
                                     {isEditing ? (
-                                        <input type="checkbox" checked={item.report?.participacion || false} onChange={e => handleDataChange(item.publisher.id, 'participacion', e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
+                                        <input type="checkbox" checked={item.report?.participacion || false} onChange={e => handleDataChange(item.publisher.id, 'participacion', e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                                     ) : (
                                         item.report?.participacion ? 'Sí' : 'No'
                                     )}
                                 </td>
                                 <td className="px-2 py-3 text-center">
                                     {isEditing ? (
-                                         <input type="checkbox" checked={item.report?.precursorAuxiliar === 'PA'} onChange={e => handleDataChange(item.publisher.id, 'precursorAuxiliar', e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
+                                        <input type="checkbox" checked={item.report?.precursorAuxiliar === 'PA'} onChange={e => handleDataChange(item.publisher.id, 'precursorAuxiliar', e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                                     ) : (
                                         item.report?.precursorAuxiliar === 'PA' ? 'Sí' : 'No'
                                     )}
                                 </td>
                                 <td className="px-2 py-3 text-center">
                                     {isEditing ? (
-                                        <input type="number" value={item.report?.cursosBiblicos ?? ''} onChange={e => handleDataChange(item.publisher.id, 'cursosBiblicos', e.target.value)} className="w-16 p-1 text-center border rounded"/>
+                                        <input type="number" value={item.report?.cursosBiblicos ?? ''} onChange={e => handleDataChange(item.publisher.id, 'cursosBiblicos', e.target.value)} className="w-16 p-1 text-center border rounded" />
                                     ) : (
                                         item.report?.cursosBiblicos ?? ''
                                     )}
                                 </td>
                                 <td className="px-2 py-3 text-center">
                                     {isEditing ? (
-                                         <input type="number" step="0.1" value={item.report?.horas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'horas', e.target.value)} className="w-20 p-1 text-center border rounded"/>
+                                        <input type="number" step="0.1" value={item.report?.horas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'horas', e.target.value)} className="w-20 p-1 text-center border rounded" />
                                     ) : (
                                         item.report?.horas ?? ''
                                     )}
                                 </td>
                                 <td className="px-4 py-3">
                                     {isEditing ? (
-                                         <input type="text" value={item.report?.notas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'notas', e.target.value)} className="w-full p-1 border rounded"/>
+                                        <input type="text" value={item.report?.notas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'notas', e.target.value)} className="w-full p-1 border rounded" />
                                     ) : (
                                         item.report?.notas ?? ''
                                     )}
@@ -388,13 +386,13 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                 {dataForView.map(item => (
                     <div key={item.publisher.id} className={`p-4 rounded-lg shadow-md ${isEditing ? 'bg-white border' : getRowClassName(item.publisher, item.report)}`}>
                         <h3 className="font-bold text-lg text-gray-800 mb-3">{[item.publisher.Nombre, item.publisher.Apellido].join(' ')}</h3>
-                        
+
                         <div className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
                             {/* Participó & Prec Aux */}
                             <div className="flex items-center justify-between col-span-2">
                                 <label className="font-semibold text-gray-600">Participó</label>
                                 {isEditing ? (
-                                    <input type="checkbox" checked={item.report?.participacion || false} onChange={e => handleDataChange(item.publisher.id, 'participacion', e.target.checked)} className="h-6 w-6 rounded border-gray-400 text-blue-600 focus:ring-blue-500"/>
+                                    <input type="checkbox" checked={item.report?.participacion || false} onChange={e => handleDataChange(item.publisher.id, 'participacion', e.target.checked)} className="h-6 w-6 rounded border-gray-400 text-blue-600 focus:ring-blue-500" />
                                 ) : (
                                     <span className="font-semibold">{item.report?.participacion ? 'Sí' : 'No'}</span>
                                 )}
@@ -402,7 +400,7 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                             <div className="flex items-center justify-between col-span-2">
                                 <label className="font-semibold text-gray-600">Prec. Aux.</label>
                                 {isEditing ? (
-                                    <input type="checkbox" checked={item.report?.precursorAuxiliar === 'PA'} onChange={e => handleDataChange(item.publisher.id, 'precursorAuxiliar', e.target.checked)} className="h-6 w-6 rounded border-gray-400 text-blue-600 focus:ring-blue-500"/>
+                                    <input type="checkbox" checked={item.report?.precursorAuxiliar === 'PA'} onChange={e => handleDataChange(item.publisher.id, 'precursorAuxiliar', e.target.checked)} className="h-6 w-6 rounded border-gray-400 text-blue-600 focus:ring-blue-500" />
                                 ) : (
                                     <span className="font-semibold">{item.report?.precursorAuxiliar === 'PA' ? 'Sí' : 'No'}</span>
                                 )}
@@ -412,29 +410,29 @@ export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publis
                             <div className="flex flex-col">
                                 <label htmlFor={`cursos-${item.publisher.id}`} className="font-semibold text-gray-600">Cursos</label>
                                 {isEditing ? (
-                                    <input id={`cursos-${item.publisher.id}`} type="number" value={item.report?.cursosBiblicos ?? ''} onChange={e => handleDataChange(item.publisher.id, 'cursosBiblicos', e.target.value)} className="w-full mt-1 p-2 text-center border rounded-md"/>
+                                    <input id={`cursos-${item.publisher.id}`} type="number" value={item.report?.cursosBiblicos ?? ''} onChange={e => handleDataChange(item.publisher.id, 'cursosBiblicos', e.target.value)} className="w-full mt-1 p-2 text-center border rounded-md" />
                                 ) : (
                                     <span className="font-bold text-lg mt-1">{item.report?.cursosBiblicos ?? '—'}</span>
                                 )}
                             </div>
-                           
+
                             {/* Horas */}
                             <div className="flex flex-col">
                                 <label htmlFor={`horas-${item.publisher.id}`} className="font-semibold text-gray-600">Horas</label>
                                 {isEditing ? (
-                                    <input id={`horas-${item.publisher.id}`} type="number" step="0.1" value={item.report?.horas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'horas', e.target.value)} className="w-full mt-1 p-2 text-center border rounded-md"/>
+                                    <input id={`horas-${item.publisher.id}`} type="number" step="0.1" value={item.report?.horas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'horas', e.target.value)} className="w-full mt-1 p-2 text-center border rounded-md" />
                                 ) : (
                                     <span className="font-bold text-lg mt-1">{item.report?.horas ?? '—'}</span>
                                 )}
                             </div>
                         </div>
-                        
+
                         {/* Notas (full width) */}
                         <div className="mt-4">
-                             <label htmlFor={`notas-${item.publisher.id}`} className="font-semibold text-gray-600 text-sm">Notas</label>
-                             <div className="mt-1">
-                                 {isEditing ? (
-                                    <input id={`notas-${item.publisher.id}`} type="text" value={item.report?.notas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'notas', e.target.value)} className="w-full p-2 border rounded-md"/>
+                            <label htmlFor={`notas-${item.publisher.id}`} className="font-semibold text-gray-600 text-sm">Notas</label>
+                            <div className="mt-1">
+                                {isEditing ? (
+                                    <input id={`notas-${item.publisher.id}`} type="text" value={item.report?.notas ?? ''} onChange={e => handleDataChange(item.publisher.id, 'notas', e.target.value)} className="w-full p-2 border rounded-md" />
                                 ) : (
                                     <p className="text-sm text-gray-800">{item.report?.notas || '—'}</p>
                                 )}

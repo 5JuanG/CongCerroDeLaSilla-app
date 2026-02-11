@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Publisher, ServiceReport, SERVICE_YEAR_MONTHS } from '../App';
+import { Publisher, ServiceReport } from '../types';
+import { SERVICE_YEAR_MONTHS } from '../constants';
 
 type Report = Omit<ServiceReport, 'id'>;
 type GlobalReportType = 'global_regulares' | 'global_auxiliares' | 'global_publicadores';
@@ -7,7 +8,7 @@ type ItemToPrint = { type: 'publisher' | 'global'; id: string };
 
 
 // Custom styled checkbox for display purposes, as per user request
-const CheckboxDisplay: React.FC<{label: string; checked: boolean;}> = ({ label, checked }) => (
+const CheckboxDisplay: React.FC<{ label: string; checked: boolean; }> = ({ label, checked }) => (
     <div className="flex items-center whitespace-nowrap">
         <div className={`h-4 w-4 rounded border flex-shrink-0 flex items-center justify-center mr-1.5 ${checked ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-400'}`}>
             {checked && (
@@ -41,11 +42,10 @@ const StyledCheckbox: React.FC<{
             />
             <label
                 htmlFor={uniqueId}
-                className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    checked
+                className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${checked
                         ? 'bg-blue-600 border-blue-600'
                         : 'bg-white border-gray-400'
-                } ${editable ? 'cursor-pointer' : 'cursor-default'}`}
+                    } ${editable ? 'cursor-pointer' : 'cursor-default'}`}
             >
                 {checked && (
                     <svg className="w-4 h-4 text-white fill-current" viewBox="0 0 20 20">
@@ -73,13 +73,13 @@ interface RecordCardProps {
     };
 }
 
-const RecordCard: React.FC<RecordCardProps> = ({ 
+const RecordCard: React.FC<RecordCardProps> = ({
     publisher,
-    serviceYearEnd, 
-    reportsData = [], 
-    editable, 
+    serviceYearEnd,
+    reportsData = [],
+    editable,
     onDataChange,
-    globalReport 
+    globalReport
 }) => {
     const isGlobal = !!globalReport;
 
@@ -96,7 +96,7 @@ const RecordCard: React.FC<RecordCardProps> = ({
             return acc + (Number(report?.horas) || 0);
         }, 0);
     }, [reportsData, publisher, serviceYearEnd, isGlobal, globalReport]);
-    
+
     if (!isGlobal && !publisher) return <p>Publicador no encontrado.</p>;
 
     const serviceYearStart = serviceYearEnd - 1;
@@ -104,17 +104,17 @@ const RecordCard: React.FC<RecordCardProps> = ({
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, month: string, year: number) => {
         if (isGlobal || !publisher || !onDataChange) return;
-    
+
         const { dataset, value, type, checked } = e.target;
         const field = dataset.field as keyof Report;
         if (!field) return;
-    
+
         const existingReport = reportsData.find(r => r.idPublicador === publisher!.id && r.mes === month && r.anioCalendario === year) || {
             idPublicador: publisher!.id, mes: month, anioCalendario: year, participacion: false, precursorAuxiliar: ''
         };
-        
+
         let updatedReport: Report = { ...existingReport };
-    
+
         switch (field) {
             case 'participacion':
                 updatedReport.participacion = checked;
@@ -132,14 +132,14 @@ const RecordCard: React.FC<RecordCardProps> = ({
                 updatedReport.notas = value; // value will be '' if empty
                 break;
         }
-    
+
         onDataChange(updatedReport);
     };
 
     return (
         <div className="record-card bg-white p-4 w-full max-w-4xl border border-gray-300 shadow-lg my-4 mx-auto text-sm">
             <h3 className="text-center font-bold text-lg mb-4">REGISTRO DE PUBLICADOR DE LA CONGREGACIÓN</h3>
-            
+
             <div className="border-b-2 border-black py-2 mb-2 text-base">
                 <div className="flex items-center mb-2">
                     <p><span className="font-bold">Nombre:</span> {fullName}</p>
@@ -179,17 +179,17 @@ const RecordCard: React.FC<RecordCardProps> = ({
                                 AÑO DE SERVICIO
                                 <span className="block font-bold text-lg text-blue-700 mt-1">{serviceYearEnd}</span>
                             </th>
-                            <th className="p-2 border border-black text-center w-28 align-top">Participación<br/>en el ministerio</th>
-                            <th className="p-2 border border-black text-center w-24 align-top">Cursos<br/>bíblicos</th>
-                            <th className="p-2 border border-black text-center w-24 align-top">Precursor<br/>auxiliar</th>
+                            <th className="p-2 border border-black text-center w-28 align-top">Participación<br />en el ministerio</th>
+                            <th className="p-2 border border-black text-center w-24 align-top">Cursos<br />bíblicos</th>
+                            <th className="p-2 border border-black text-center w-24 align-top">Precursor<br />auxiliar</th>
                             <th className="px-1 py-2 border border-black text-center align-top">
                                 Horas
-                                <br/>
+                                <br />
                                 <span className="font-normal text-xs">
                                     (Si es precursor o
-                                    <br/>
+                                    <br />
                                     misionero que
-                                    <br/>
+                                    <br />
                                     sirve en el campo)
                                 </span>
                             </th>
@@ -229,7 +229,7 @@ const RecordCard: React.FC<RecordCardProps> = ({
                                     </tr>
                                 );
                             }
-                            
+
                             if (!isGlobal && publisher && reportsData) {
                                 const report = reportsData.find(r => r.idPublicador === publisher.id && r.mes === month && r.anioCalendario === yearToSearch);
                                 return (
@@ -265,7 +265,7 @@ const RecordCard: React.FC<RecordCardProps> = ({
                             }
                             return null;
                         })}
-                         <tr className="font-bold bg-gray-100">
+                        <tr className="font-bold bg-gray-100">
                             <td className="p-2 border border-black text-right" colSpan={4}>Total</td>
                             <td className="p-2 border border-black text-center">{totalHoras > 0 ? totalHoras.toFixed(1) : ''}</td>
                             <td className="p-2 border border-black"></td>
@@ -289,12 +289,12 @@ interface RegistrosServicioProps {
 // Main Component
 const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, serviceReports, onBatchUpdateReports, onDeleteServiceReport, canEdit }) => {
     const [years, setYears] = useState<number[]>([]);
-    
+
     // State for filters
     const [selectedFilter, setSelectedFilter] = useState(''); // Can be group name or global report key
     const [selectedPublisherId, setSelectedPublisherId] = useState('');
     const [selectedYear, setSelectedYear] = useState(new Date().getMonth() >= 8 ? new Date().getFullYear() + 1 : new Date().getFullYear());
-    
+
     // State for editing and special views
     const [isEditing, setIsEditing] = useState(false);
     const [editableReports, setEditableReports] = useState<Report[] | null>(null);
@@ -309,7 +309,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
     const groups = useMemo(() => {
         return [...new Set(publishers.map(p => p.Grupo).filter(Boolean) as string[])].sort();
     }, [publishers]);
-    
+
     const filteredPublishers = useMemo(() => {
         if (isGlobalView || !selectedFilter) return [];
         return publishers
@@ -332,17 +332,17 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
     // Effect to initialize filters on first load
     useEffect(() => {
         const currentServiceYearEnd = new Date().getMonth() >= 8 ? new Date().getFullYear() + 1 : new Date().getFullYear();
-        setYears(Array.from({length: 10}, (_, i) => currentServiceYearEnd - i));
-        
+        setYears(Array.from({ length: 10 }, (_, i) => currentServiceYearEnd - i));
+
         if (groups.length > 0 && !selectedFilter) {
             // Set initial filter and first publisher atomically
             const initialGroup = groups[0];
             const initialPublishers = publishers
                 .filter(p => p.Grupo === initialGroup)
                 .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
-            
+
             setSelectedFilter(initialGroup);
-            if(initialPublishers.length > 0) {
+            if (initialPublishers.length > 0) {
                 setSelectedPublisherId(initialPublishers[0].id);
             }
         }
@@ -359,7 +359,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
             const newPublishersInGroup = publishers
                 .filter(p => p.Grupo === newFilter)
                 .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
-            
+
             if (newPublishersInGroup.length > 0) {
                 setSelectedPublisherId(newPublishersInGroup[0].id);
             } else {
@@ -371,7 +371,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
     const globalReportData = useMemo(() => {
         const serviceYearStart = selectedYear - 1;
         const regularPioneerIds = new Set(publishers.filter(p => p['Priv Adicional'] === 'Precursor Regular').map(p => p.id));
-        
+
         const data: { [key in GlobalReportType]: { [month: string]: { count: number; hours?: number; cursos?: number } } } = {
             global_regulares: {}, global_auxiliares: {}, global_publicadores: {}
         };
@@ -380,7 +380,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
         SERVICE_YEAR_MONTHS.forEach((month, index) => {
             const yearToSearch = index < 4 ? serviceYearStart : selectedYear;
             const monthReports = serviceReports.filter(r => r.anioCalendario === yearToSearch && r.mes === month);
-            
+
             // Publicadores
             const informedReports = monthReports.filter(r => r.participacion);
             data.global_publicadores[month] = {
@@ -394,7 +394,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
                 count: auxReports.length,
                 cursos: auxReports.reduce((sum, r) => sum + (r.cursosBiblicos || 0), 0),
             };
-            
+
             // Regulares
             const regularReports = monthReports.filter(r => r.participacion && regularPioneerIds.has(r.idPublicador));
             const monthHours = regularReports.reduce((sum, r) => sum + (r.horas || 0), 0);
@@ -425,7 +425,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
             return newReports;
         });
     }, []);
-    
+
     const handleEditClick = () => {
         setEditableReports(JSON.parse(JSON.stringify(serviceReports)));
         setIsEditing(true);
@@ -502,12 +502,12 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
             setTimeout(() => setStatus(""), 3000);
             return;
         }
-        
+
         setStatus("Preparando tarjeta para PDF...");
         const type = isGlobalView ? 'global' : 'publisher';
         setItemsToPrint([{ type, id: idToPrint }]);
     };
-    
+
     const handleExportAllReportsCSV = () => {
         if (serviceReports.length === 0) {
             alert("No hay informes de servicio para exportar.");
@@ -563,19 +563,19 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
             const container = printContainerRef.current;
-            
+
             // Short delay to ensure React has rendered the items
             await new Promise(resolve => setTimeout(resolve, 200));
-            
+
             const cardElements = container.querySelectorAll<HTMLElement>('.record-card');
-            
+
             for (let i = 0; i < cardElements.length; i++) {
                 const card = cardElements[i];
                 setStatus(`Generando PDF: Página ${i + 1} de ${cardElements.length}...`);
                 // @ts-ignore
                 const canvas = await html2canvas(card, { scale: 2, useCORS: true });
                 const imgData = canvas.toDataURL('image/png');
-                
+
                 if (i > 0) {
                     pdf.addPage();
                 }
@@ -586,7 +586,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
                 const ratio = imgProps.width / imgProps.height;
                 let imgWidth = pdfWidth - 20;
                 let imgHeight = imgWidth / ratio;
-                if(imgHeight > pdfHeight - 20){
+                if (imgHeight > pdfHeight - 20) {
                     imgHeight = pdfHeight - 20;
                     imgWidth = imgHeight * ratio;
                 }
@@ -616,8 +616,8 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
     return (
         <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
             <h1 className="text-2xl font-bold text-center mb-6">Registro de Publicador</h1>
-            
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
                 <div>
                     <label>Grupo / Informe:</label>
                     <select value={selectedFilter} onChange={e => handleFilterChange(e.target.value)} className="p-2 w-full border rounded-md" disabled={showPublicSubmissions}>
@@ -625,7 +625,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
                         <optgroup label="Grupos de Servicio">
                             {groups.map(g => <option key={g} value={g}>{g}</option>)}
                         </optgroup>
-                         <optgroup label="Informes Globales">
+                        <optgroup label="Informes Globales">
                             <option value="global_regulares">Precursores Regulares</option>
                             <option value="global_auxiliares">Precursores Auxiliares</option>
                             <option value="global_publicadores">Publicadores de la Congregación</option>
@@ -651,7 +651,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
             </div>
 
             <div className="flex flex-wrap justify-center items-center gap-4 mb-4">
-                 {isEditing ? (
+                {isEditing ? (
                     <>
                         <button onClick={handleSaveClick} className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 font-semibold">Guardar Cambios</button>
                         <button onClick={handleCancelClick} className="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600 font-semibold">Cancelar</button>
@@ -667,10 +667,10 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
             </div>
 
             <div className="min-h-[20px] text-center font-bold text-blue-600 mb-4">{status}</div>
-            
+
             {/* Main display area */}
             <div>
-                 {showPublicSubmissions ? (
+                {showPublicSubmissions ? (
                     <div className="border p-4 rounded-lg">
                         <h2 className="text-xl font-bold text-yellow-700 mb-2">Informes Públicos No Vinculados</h2>
                         <p className="text-sm text-gray-600 mb-4">Esta es una lista de informes enviados a través del formulario público que no corresponden a ningún publicador registrado. Puede eliminarlos para mantener la base de datos limpia.</p>
@@ -704,27 +704,27 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
                             {publicSubmissions.length === 0 && <p className="text-center text-gray-500 p-4">No se encontraron informes públicos no vinculados.</p>}
                         </div>
                     </div>
-                 ) : (
+                ) : (
                     <>
-                         {!selectedFilter && (
-                             <p className="text-center text-gray-500 p-6">Seleccione un grupo o informe global para ver su registro.</p>
-                         )}
-                         {globalType && (
+                        {!selectedFilter && (
+                            <p className="text-center text-gray-500 p-6">Seleccione un grupo o informe global para ver su registro.</p>
+                        )}
+                        {globalType && (
                             <RecordCard
                                 serviceYearEnd={selectedYear}
                                 editable={false}
                                 globalReport={{
                                     title:
                                         globalType === 'global_regulares' ? 'Precursores Regulares' :
-                                        globalType === 'global_auxiliares' ? 'Precursores Auxiliares' :
-                                        'Publicadores de la Congregación',
+                                            globalType === 'global_auxiliares' ? 'Precursores Auxiliares' :
+                                                'Publicadores de la Congregación',
                                     data: globalReportData[globalType],
                                     totalHorasAnual: globalType === 'global_regulares' ? globalReportData.totalHorasAnualRegulares : undefined
                                 }}
                             />
-                         )}
-                         {!isGlobalView && selectedPublisher && reportsToDisplay && (
-                            <RecordCard 
+                        )}
+                        {!isGlobalView && selectedPublisher && reportsToDisplay && (
+                            <RecordCard
                                 key={selectedPublisher.id}
                                 publisher={selectedPublisher}
                                 serviceYearEnd={selectedYear}
@@ -734,7 +734,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
                             />
                         )}
                     </>
-                 )}
+                )}
             </div>
 
             {/* Export Buttons Section */}
@@ -756,30 +756,30 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
 
                     if (globalTypeItem) {
                         return <RecordCard
-                                    key={item.id}
-                                    serviceYearEnd={selectedYear}
-                                    editable={false}
-                                    globalReport={{
-                                        title:
-                                            globalTypeItem === 'global_regulares' ? 'Precursores Regulares' :
-                                            globalTypeItem === 'global_auxiliares' ? 'Precursores Auxiliares' :
+                            key={item.id}
+                            serviceYearEnd={selectedYear}
+                            editable={false}
+                            globalReport={{
+                                title:
+                                    globalTypeItem === 'global_regulares' ? 'Precursores Regulares' :
+                                        globalTypeItem === 'global_auxiliares' ? 'Precursores Auxiliares' :
                                             'Publicadores de la Congregación',
-                                        data: globalReportData[globalTypeItem],
-                                        totalHorasAnual: globalTypeItem === 'global_regulares' ? globalReportData.totalHorasAnualRegulares : undefined
-                                    }}
-                                />;
+                                data: globalReportData[globalTypeItem],
+                                totalHorasAnual: globalTypeItem === 'global_regulares' ? globalReportData.totalHorasAnualRegulares : undefined
+                            }}
+                        />;
                     }
-                    
+
                     if (!isGlobalItem) {
                         const publisher = publishers.find(p => p.id === item.id);
                         if (publisher) {
-                             return <RecordCard 
-                                        key={item.id}
-                                        publisher={publisher}
-                                        serviceYearEnd={selectedYear}
-                                        reportsData={serviceReports}
-                                        editable={false}
-                                    />;
+                            return <RecordCard
+                                key={item.id}
+                                publisher={publisher}
+                                serviceYearEnd={selectedYear}
+                                reportsData={serviceReports}
+                                editable={false}
+                            />;
                         }
                     }
                     return null;

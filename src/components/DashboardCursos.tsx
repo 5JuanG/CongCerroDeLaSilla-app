@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Publisher, ServiceReport, MONTHS } from '../App';
+import { Publisher, ServiceReport } from '../types';
+import { MONTHS } from '../constants';
 
 interface StatCardProps {
     title: string;
@@ -26,7 +27,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, isAlertC
                 <p className="text-sm font-medium text-gray-500">{title}</p>
                 {isZeroAndAlert ? (
                     <div className="mt-1 flex items-center text-green-500">
-                       <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </div>
@@ -51,19 +52,19 @@ const DashboardCursos: React.FC<{ publishers: Publisher[], serviceReports: Servi
     // Memoized calculation for all dashboard stats
     const allStats = useMemo(() => {
         const calendarYearForSelectedMonth = MONTHS.indexOf(selectedMonth) >= 8 ? selectedYear - 1 : selectedYear;
-        
+
         // --- Stats for selected month ---
         const monthlyReports = serviceReports.filter(r =>
             r.anioCalendario === calendarYearForSelectedMonth && r.mes === selectedMonth && r.participacion
         );
         const reportsWithCourses = monthlyReports.filter(r => (Number(r.cursosBiblicos) || 0) > 0);
-        
+
         const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
         const activeRegularPioneers = activePublishers.filter(p => p['Priv Adicional'] === 'Precursor Regular');
         const activeRegularPioneerIds = new Set(activeRegularPioneers.map(p => p.id));
-        
+
         const totalCourses = reportsWithCourses.reduce((sum, r) => sum + (Number(r.cursosBiblicos) || 0), 0);
-        
+
         const uniquePublishersWithCourses = new Set(reportsWithCourses.map(r => r.idPublicador));
 
         const auxPioneerReports = reportsWithCourses.filter(r => r.precursorAuxiliar === 'PA');
@@ -136,10 +137,10 @@ const DashboardCursos: React.FC<{ publishers: Publisher[], serviceReports: Servi
                 isHighlighted: monthName === selectedMonth,
             });
         });
-        
+
         return data;
     }, [selectedYear, selectedMonth, serviceReports]);
-    
+
     const maxChartValue = Math.max(5, ...chartData.map(d => d.value));
     const hasData = useMemo(() => chartData.some(d => d.value > 0), [chartData]);
 
@@ -164,59 +165,59 @@ const DashboardCursos: React.FC<{ publishers: Publisher[], serviceReports: Servi
             </div>
 
             {/* Stat Cards */}
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
-                    title={`Total de Cursos Bíblicos (${selectedMonth})`} 
-                    value={allStats.totalCourses} 
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard
+                    title={`Total de Cursos Bíblicos (${selectedMonth})`}
+                    value={allStats.totalCourses}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M12 6.25278C12 6.25278 5.72266 10 3 10C3 18 12 22 12 22C12 22 21 18 21 10C18.2773 10 12 6.25278 12 6.25278Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M12 12L3 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                     color="border-blue-500"
                 />
-                <StatCard 
-                    title={`Total de Personas con Cursos (${selectedMonth})`} 
-                    value={`${allStats.uniquePublishersWithCourses} / ${allStats.totalActivePublishers}`} 
+                <StatCard
+                    title={`Total de Personas con Cursos (${selectedMonth})`}
+                    value={`${allStats.uniquePublishersWithCourses} / ${allStats.totalActivePublishers}`}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
                     color="border-teal-500"
                 />
-                 <StatCard 
-                    title="Prec. Aux. Distintos (Últ. 6m)" 
-                    value={allStats.uniqueAuxPioneersLast6Months} 
+                <StatCard
+                    title="Prec. Aux. Distintos (Últ. 6m)"
+                    value={allStats.uniqueAuxPioneersLast6Months}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
                     color="border-indigo-500"
                 />
-                <StatCard 
-                    title={`Cursos por Publicadores (no prec.) (${selectedMonth})`} 
-                    value={allStats.publisherCourses} 
+                <StatCard
+                    title={`Cursos por Publicadores (no prec.) (${selectedMonth})`}
+                    value={allStats.publisherCourses}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
                     color="border-green-500"
                 />
-                <StatCard 
-                    title={`Cursos por Prec. Aux. (${selectedMonth})`} 
-                    value={allStats.auxPioneerCourses} 
+                <StatCard
+                    title={`Cursos por Prec. Aux. (${selectedMonth})`}
+                    value={allStats.auxPioneerCourses}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
                     color="border-yellow-500"
                 />
-                <StatCard 
-                    title={`Cursos por Prec. Reg. (${selectedMonth})`} 
-                    value={allStats.regPioneerCourses} 
+                <StatCard
+                    title={`Cursos por Prec. Reg. (${selectedMonth})`}
+                    value={allStats.regPioneerCourses}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
                     color="border-purple-500"
                 />
-                 <StatCard 
-                    title={`Prec. Regulares sin Cursos (${selectedMonth})`} 
-                    value={allStats.regularPioneersWithoutCourses} 
+                <StatCard
+                    title={`Prec. Regulares sin Cursos (${selectedMonth})`}
+                    value={allStats.regularPioneersWithoutCourses}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                     color="border-orange-500"
                     isAlertCard={true}
                 />
-                <StatCard 
-                    title={`Publicadores sin Cursos (${selectedMonth})`} 
-                    value={allStats.publishersWithoutCourses} 
+                <StatCard
+                    title={`Publicadores sin Cursos (${selectedMonth})`}
+                    value={allStats.publishersWithoutCourses}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
                     color="border-red-500"
                     isAlertCard={true}
                 />
             </div>
-            
+
             {/* Trend Chart */}
             <div className="bg-white p-6 rounded-xl shadow-lg">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Tendencia de Cursos (Año de Servicio {selectedYear})</h2>

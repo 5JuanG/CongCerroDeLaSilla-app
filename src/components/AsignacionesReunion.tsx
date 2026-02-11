@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Publisher, MeetingAssignmentSchedule, ModalInfo, DayAssignment, MeetingConfig } from '../App';
+import { Publisher, MeetingAssignmentSchedule, ModalInfo, DayAssignment, MeetingConfig } from '../types';
 import ShareModal from './ShareModal';
 
 interface AsignacionesReunionProps {
@@ -137,20 +137,20 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 setIsLoading(false);
                 return;
             }
-            
+
             const getDatesForMonthProgram = (month: number, year: number, dayOfWeek: number) => {
                 const dates: Date[] = [];
                 // Start on the first day of the month and go back to the start of that week (Sunday).
                 const firstDayOfMonth = new Date(Date.UTC(year, month, 1));
                 const currentDay = new Date(firstDayOfMonth);
                 currentDay.setUTCDate(currentDay.getUTCDate() - currentDay.getUTCDay()); // Go back to Sunday
-            
+
                 // Loop for 6 weeks to cover all possible weeks related to the month.
                 for (let week = 0; week < 6; week++) {
                     // Find the Thursday of the current week to check which month this week belongs to.
                     const thursdayOfWeek = new Date(currentDay);
                     thursdayOfWeek.setUTCDate(currentDay.getUTCDate() + 4);
-            
+
                     // Only proceed if this week belongs to the target month and year.
                     if (thursdayOfWeek.getUTCMonth() === month && thursdayOfWeek.getUTCFullYear() === year) {
                         // This week belongs to the target month. Find the specific day we need.
@@ -158,37 +158,37 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         targetDate.setUTCDate(currentDay.getUTCDate() + dayOfWeek);
                         dates.push(targetDate);
                     }
-            
+
                     // Move to the next week.
                     currentDay.setUTCDate(currentDay.getUTCDate() + 7);
 
                     // Optimization: if we've moved far enough that the next week's Thursday is in the next month, we can stop.
                     if (currentDay.getUTCMonth() !== month && currentDay > firstDayOfMonth) {
-                         const nextThursday = new Date(currentDay);
-                         nextThursday.setUTCDate(currentDay.getUTCDate() + 4);
-                         if (nextThursday.getUTCMonth() !== month) {
-                             break;
-                         }
+                        const nextThursday = new Date(currentDay);
+                        nextThursday.setUTCDate(currentDay.getUTCDate() + 4);
+                        if (nextThursday.getUTCMonth() !== month) {
+                            break;
+                        }
                     }
                 }
-                
+
                 return dates; // Dates will already be sorted.
             };
 
             const specialEventDates = new Set(meetingConfig.specialEvents.map(e => e.date));
             const monthIndex = MONTHS.indexOf(selectedMonth);
-            
+
             const midweekMeetings = getDatesForMonthProgram(monthIndex, selectedYear, meetingConfig.midweekDay);
             const weekendMeetings = getDatesForMonthProgram(monthIndex, selectedYear, meetingConfig.weekendDay);
 
             const allMeetingDates = [...midweekMeetings, ...weekendMeetings]
                 .filter(date => !specialEventDates.has(date.toISOString().slice(0, 10)))
-                .sort((a,b) => a.getTime() - b.getTime());
+                .sort((a, b) => a.getTime() - b.getTime());
 
             const assignmentCounters: { [role: string]: number } = {};
             ALL_ASSIGNMENT_ROLES.forEach(role => { assignmentCounters[role] = 0; });
             const groupCounters = { midweekAseo: 0, weekendAseo: 0, weekendHospitality: 0 };
-            
+
             const newScheduleData: MeetingAssignmentSchedule['schedule'] = {};
             const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
@@ -203,27 +203,27 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 const getNextAvailable = (role: string, count: number): (string | null)[] => {
                     const candidates = eligible[role];
                     if (!candidates || candidates.length === 0) return Array(count).fill(null);
-                
+
                     const result: (string | null)[] = [];
                     let attempts = 0;
                     let currentOffset = assignmentCounters[role];
-                
+
                     while (result.length < count && attempts < candidates.length * 2) {
                         const person = candidates[currentOffset % candidates.length];
                         if (!assignedThisDay.has(person.id)) {
-                             result.push(person.id);
-                             assignedThisDay.add(person.id);
+                            result.push(person.id);
+                            assignedThisDay.add(person.id);
                         }
                         currentOffset++;
                         attempts++;
                     }
-                
+
                     assignmentCounters[role] = currentOffset;
-                    
-                     while (result.length < count) {
+
+                    while (result.length < count) {
                         result.push(null);
                     }
-                
+
                     return result;
                 };
 
@@ -244,7 +244,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                     assignmentsForDay.acomodadoresPrincipal = getNextAvailable('Acomodador en la puerta Principal', 1);
                     assignmentsForDay.acomodadoresAuditorio = getNextAvailable('Acomodador de la puerta del Auditorio', 1);
                     assignmentsForDay.aseo = getNextGroup('midweekAseo');
-                } else { 
+                } else {
                     assignmentsForDay.fechaReunion = `${dayNames[meetingConfig.weekendDay]} ${meetingDate.getUTCDate()}`;
                     assignmentsForDay.reunionHorario = formatTime(meetingConfig.weekendTime);
                     assignmentsForDay.vigilanciaHorario = '4:15-4:50 p. m.';
@@ -272,7 +272,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 schedule: newScheduleData,
                 isPublic: false,
             };
-            
+
             setDraftSchedule(generatedScheduleObject);
             onShowModal({ type: 'success', title: 'Borrador Generado', message: 'El borrador del programa se ha generado. Revíselo y guárdelo. Luego podrá publicarlo.' });
 
@@ -302,7 +302,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             setIsLoading(false);
         }
     };
-    
+
     const handleDiscardDraft = () => {
         setDraftSchedule(null);
     };
@@ -327,7 +327,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             setIsLoading(false);
         }
     };
-    
+
     const handleCancelEdit = () => {
         setEditableSchedule(null);
     };
@@ -341,9 +341,9 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
         try {
             const newVisibility = !scheduleForSelectedMonth.isPublic;
             const { id, ...dataToSave } = { ...scheduleForSelectedMonth, isPublic: newVisibility };
-            
+
             await onSaveSchedule(dataToSave as Omit<MeetingAssignmentSchedule, 'id'>);
-            
+
             onShowModal({ type: 'success', title: 'Visibilidad Actualizada', message: `El programa ahora está ${newVisibility ? 'público' : 'oculto'}.` });
         } catch (error) {
             onShowModal({ type: 'error', title: 'Error', message: 'No se pudo actualizar la visibilidad.' });
@@ -351,7 +351,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             setIsLoading(false);
         }
     };
-    
+
     const checkForConflicts = useCallback((schedule: MeetingAssignmentSchedule, dateKey: string, publisherId: string) => {
         if (!publisherId) return;
 
@@ -364,15 +364,15 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
 
         let assignmentsThisDay = 0;
         for (const assigned of Object.values(dayAssignments)) {
-             const publisherIds = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
-             assignmentsThisDay += publisherIds.filter(id => id === publisherId).length;
+            const publisherIds = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
+            assignmentsThisDay += publisherIds.filter(id => id === publisherId).length;
         }
 
         if (assignmentsThisDay > 1) {
             conflictMessages.push(`Tiene más de una asignación en la misma reunión.`);
         }
-        
-        const sortedDateKeys = Object.keys(schedule.schedule).sort((a, b) => 
+
+        const sortedDateKeys = Object.keys(schedule.schedule).sort((a, b) =>
             new Date(a.substring(a.indexOf('-') + 1)).getTime() - new Date(b.substring(b.indexOf('-') + 1)).getTime()
         );
         const currentIndex = sortedDateKeys.indexOf(dateKey);
@@ -382,10 +382,10 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 const adjacentDateKey = sortedDateKeys[adjacentIndex];
                 const adjacentDayAssignments = schedule.schedule[adjacentDateKey];
                 if (!adjacentDayAssignments) return;
-                
+
                 for (const assigned of Object.values(adjacentDayAssignments)) {
                     const publisherIds = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
-                    if(publisherIds.includes(publisherId)) {
+                    if (publisherIds.includes(publisherId)) {
                         conflictMessages.push(`Tiene una asignación en la reunión ${meetingLabel} (${adjacentDayAssignments.fechaReunion}).`);
                         return;
                     }
@@ -395,7 +395,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
 
         checkAdjacentMeeting(currentIndex - 1, 'anterior');
         checkAdjacentMeeting(currentIndex + 1, 'siguiente');
-        
+
         if (conflictMessages.length > 0) {
             onShowModal({
                 type: 'info',
@@ -407,24 +407,24 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
 
     const handleEditChange = (dateKey: string, role: AssignmentKey, value: string, index: number = 0) => {
         if (!editableSchedule) return;
-    
+
         setEditableSchedule(prev => {
             if (!prev) return null;
             const newSchedule = JSON.parse(JSON.stringify(prev));
             const dayAssignments = newSchedule.schedule[dateKey] || {};
-    
+
             if (Array.isArray(dayAssignments[role])) {
                 (dayAssignments[role] as (string | null)[])[index] = value || null;
             } else {
                 (dayAssignments as any)[role] = value || null;
             }
             newSchedule.schedule[dateKey] = dayAssignments;
-            
+
             setTimeout(() => checkForConflicts(newSchedule, dateKey, value), 0);
             return newSchedule;
         });
     };
-    
+
     const generateShareText = useCallback((assignment: DayAssignment) => {
         if (!assignment) return ''; // Robustness check
         const parts: string[] = [];
@@ -434,7 +434,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
         parts.push(`*${assignment.fechaReunion || ''} de ${selectedMonth}*`);
         parts.push(`*Horario:* ${assignment.reunionHorario || ''}`);
 
-        const addAssignment = (label: string, id: string | (string|null)[] | undefined | null) => {
+        const addAssignment = (label: string, id: string | (string | null)[] | undefined | null) => {
             if (!id) return;
             const names = Array.isArray(id) ? id.map(getPublisherName).filter(Boolean).join(', ') : getPublisherName(id);
             if (names) parts.push(`*${label}:* ${names}`);
@@ -448,13 +448,13 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             addAssignment('Conductor de La Atalaya', assignment.conductorAtalaya);
             addAssignment('Lector de La Atalaya', assignment.lectorAtalaya);
         }
-        
+
         addAssignment('Acomodador (P. Principal)', assignment.acomodadoresPrincipal);
         addAssignment('Acomodador (P. Auditorio)', assignment.acomodadoresAuditorio);
         addAssignment('Acomodadores (Asistentes)', assignment.acomodadoresSala);
         addAssignment('Micrófonos', assignment.microfonos);
         addAssignment('Vigilantes', assignment.vigilantes);
-        
+
         if (assignment.aseo) parts.push(`*Aseo:* Grupo ${assignment.aseo}`);
         if (!isMidweek && assignment.hospitalidad) {
             parts.push(`*Hospitalidad:* Grupo ${assignment.hospitalidad}`);
@@ -470,11 +470,11 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             text: text
         });
     };
-    
+
     const ScheduleView = ({ schedule, isEditing }: { schedule: MeetingAssignmentSchedule | null, isEditing: boolean }) => {
         const tableData = useMemo(() => {
             if (!schedule?.schedule || !meetingConfig) return [];
-            
+
             const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
             const weekendDayName = dayNames[meetingConfig.weekendDay];
             const midweekDayName = dayNames[meetingConfig.midweekDay];
@@ -482,7 +482,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             const weekendMeetings = Object.entries(schedule.schedule)
                 .filter(([key]) => key.startsWith('weekend'))
                 .sort((a, b) => new Date(a[0].substring(8)).getTime() - new Date(b[0].substring(8)).getTime());
-            
+
             const ROLE_COUNTS: Record<string, number> = {
                 acomodadoresPrincipal: 1,
                 acomodadoresAuditorio: 1,
@@ -492,31 +492,31 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
             };
 
             const getAssignmentsWithRole = (roleKey: keyof DayAssignment, roleAbbr: string, dateKeyForRole: string, assignment: DayAssignment | undefined) => {
-                let ids = (assignment as any)?.[roleKey] as (string|null)[] | string | undefined;
+                let ids = (assignment as any)?.[roleKey] as (string | null)[] | string | undefined;
 
                 if (typeof ids === 'string') ids = [ids];
                 else if (!Array.isArray(ids)) ids = [];
-                
+
                 const requiredCount = ROLE_COUNTS[roleKey as string] || 1;
                 const paddedIds = [...ids];
                 while (paddedIds.length < requiredCount) {
                     paddedIds.push(null);
                 }
-                
+
                 return paddedIds.map((id, index) => ({ id, name: getPublisherName(id), role: roleAbbr, originalRoleKey: roleKey, originalIndex: index, dateKey: dateKeyForRole }));
             };
 
             return weekendMeetings.map(([dateKey, assignmentUntyped]) => {
                 const assignment = assignmentUntyped as DayAssignment;
                 const weekendMeetDate = new Date(dateKey.substring(dateKey.indexOf('-') + 1) + 'T12:00:00Z');
-                
+
                 const dayDiff = meetingConfig.weekendDay - meetingConfig.midweekDay;
                 const midweekMeetDate = new Date(weekendMeetDate);
                 midweekMeetDate.setUTCDate(weekendMeetDate.getUTCDate() - (dayDiff >= 0 ? dayDiff : dayDiff + 7));
-                
+
                 const midweekDateKey = `midweek-${midweekMeetDate.toISOString().slice(0, 10)}`;
                 const midweekAssignment = schedule.schedule[midweekDateKey];
-                
+
                 const midweekAssignments = midweekAssignment ? [
                     ...getAssignmentsWithRole('acomodadoresPrincipal', 'AP', midweekDateKey, midweekAssignment),
                     ...getAssignmentsWithRole('acomodadoresAuditorio', 'APA', midweekDateKey, midweekAssignment),
@@ -525,7 +525,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                     ...getAssignmentsWithRole('vigilantes', 'V', midweekDateKey, midweekAssignment),
                 ] : [];
 
-                 const weekendAssignments = [
+                const weekendAssignments = [
                     ...getAssignmentsWithRole('acomodadoresPrincipal', 'AP', dateKey, assignment),
                     ...getAssignmentsWithRole('acomodadoresAuditorio', 'APA', dateKey, assignment),
                     ...getAssignmentsWithRole('acomodadoresSala', 'AA', dateKey, assignment),
@@ -557,7 +557,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
 
         const WhatsAppIcon = () => (
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 hover:text-green-700" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.315 1.731 6.086l.287.468-1.125 4.089 4.16-1.087.436.26z"/>
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.315 1.731 6.086l.287.468-1.125 4.089 4.16-1.087.436.26z" />
             </svg>
         );
 
@@ -604,13 +604,13 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                             {tableData.map((week) => (
                                 <tr key={week.weekDateRange} className="align-top">
                                     <td className="p-3 border-2 border-gray-300 font-bold text-white bg-blue-700 whitespace-pre-line text-center">
-                                         <div className="flex justify-center items-center gap-2">
-                                            {week.midweekAssignment && (
-                                                <button onClick={() => handleShareClick(week.midweekAssignment)} title={`Compartir asignaciones para ${week.midweekAssignment.fechaReunion}`} className="p-1 bg-white/20 rounded-full"><WhatsAppIcon/></button>
+                                        <div className="flex justify-center items-center gap-2">
+                                            {week.midweekAssignment && canManageSchedule && (
+                                                <button onClick={() => handleShareClick(week.midweekAssignment)} title={`Compartir asignaciones para ${week.midweekAssignment.fechaReunion}`} className="p-1 px-2 bg-white/20 rounded text-[10px] uppercase font-bold hover:bg-white/30 transition-colors">Compartir</button>
                                             )}
                                             <span className="flex-grow">{week.weekDateRange}</span>
-                                            {week.weekendAssignment && (
-                                                <button onClick={() => handleShareClick(week.weekendAssignment)} title={`Compartir asignaciones para ${week.weekendAssignment.fechaReunion}`} className="p-1 bg-white/20 rounded-full"><WhatsAppIcon/></button>
+                                            {week.weekendAssignment && canManageSchedule && (
+                                                <button onClick={() => handleShareClick(week.weekendAssignment)} title={`Compartir asignaciones para ${week.weekendAssignment.fechaReunion}`} className="p-1 px-2 bg-white/20 rounded text-[10px] uppercase font-bold hover:bg-white/30 transition-colors">Compartir</button>
                                             )}
                                         </div>
                                     </td>
@@ -627,7 +627,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                             <div key={`${item.originalRoleKey}-${item.originalIndex}-${item.dateKey}`} className="flex items-center gap-1 mb-1">
                                                 <span className="font-semibold w-8">({item.role})</span>
                                                 {isEditing ? (
-                                                     <select value={item.id || ''} onChange={e => handleEditChange(item.dateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs bg-yellow-50">
+                                                    <select value={item.id || ''} onChange={e => handleEditChange(item.dateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs bg-yellow-50">
                                                         <option value="">--</option>
                                                         {getEligiblePublishers(ROLE_KEY_TO_NAME[item.originalRoleKey]).map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
                                                     </select>
@@ -635,12 +635,12 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                             </div>
                                         ))}
                                     </td>
-                                     <td className="p-2 border-2 border-gray-300">
+                                    <td className="p-2 border-2 border-gray-300">
                                         {week.weekendAssignments.map(item => (
                                             <div key={`${item.originalRoleKey}-${item.originalIndex}-${item.dateKey}`} className="flex items-center gap-1 mb-1">
                                                 <span className="font-semibold w-8">({item.role})</span>
                                                 {isEditing ? (
-                                                     <select value={item.id || ''} onChange={e => handleEditChange(item.dateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs bg-yellow-50">
+                                                    <select value={item.id || ''} onChange={e => handleEditChange(item.dateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs bg-yellow-50">
                                                         <option value="">--</option>
                                                         {getEligiblePublishers(ROLE_KEY_TO_NAME[item.originalRoleKey]).map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
                                                     </select>
@@ -649,7 +649,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                         ))}
                                     </td>
                                     <td className="p-2 border-2 border-gray-300 text-center">
-                                         {isEditing ? (
+                                        {isEditing ? (
                                             <select value={week.lectorAtalaya.id || ''} onChange={e => handleEditChange(week.weekendDateKey, 'lectorAtalaya', e.target.value)} className="w-full p-1 border rounded text-xs bg-yellow-50">
                                                 <option value="">--</option>
                                                 {getEligiblePublishers('Lector de la Atalaya').map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}
@@ -685,12 +685,12 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         <div key={week.weekDateRange} className="bg-white p-4 rounded-lg shadow-md border">
                             <div className="bg-blue-700 text-white font-bold p-3 rounded-t-lg -m-4 mb-4">
                                 <div className="flex justify-between items-center gap-2">
-                                    {week.midweekAssignment && (<button onClick={() => handleShareClick(week.midweekAssignment)} title={`Compartir asignaciones para ${week.midweekAssignment.fechaReunion}`} className="p-1"><WhatsAppIcon/></button>)}
+                                    {week.midweekAssignment && canManageSchedule && (<button onClick={() => handleShareClick(week.midweekAssignment)} title={`Compartir asignaciones para ${week.midweekAssignment.fechaReunion}`} className="p-1 px-2 bg-white/20 rounded text-[10px] uppercase font-bold">Compartir</button>)}
                                     <h3 className="whitespace-pre-line text-center flex-grow text-sm">{week.weekDateRange}</h3>
-                                    {week.weekendAssignment && (<button onClick={() => handleShareClick(week.weekendAssignment)} title={`Compartir asignaciones para ${week.weekendAssignment.fechaReunion}`} className="p-1"><WhatsAppIcon/></button>)}
+                                    {week.weekendAssignment && canManageSchedule && (<button onClick={() => handleShareClick(week.weekendAssignment)} title={`Compartir asignaciones para ${week.weekendAssignment.fechaReunion}`} className="p-1 px-2 bg-white/20 rounded text-[10px] uppercase font-bold">Compartir</button>)}
                                 </div>
                             </div>
-                            
+
                             <div className="mb-4">
                                 <h4 className="font-bold text-gray-700 border-b pb-1 mb-2">Fin de Semana</h4>
                                 <div className="space-y-1 text-sm">
@@ -705,13 +705,13 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                     <CardAssignmentRow label="Hospitalidad">{isEditing ? <select value={week.hospitalidad.id || ''} onChange={e => handleEditChange(week.weekendDateKey, 'hospitalidad', e.target.value)} className="w-full p-1 border rounded text-xs bg-yellow-50"><option value="">--</option>{groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}</select> : week.hospitalidad.name}</CardAssignmentRow>
                                 </div>
                             </div>
-                             
+
                             {week.midweekAssignment && (
                                 <div>
                                     <h4 className="font-bold text-gray-700 border-b pb-1 mb-2">Entre Semana</h4>
                                     <div className="space-y-1 text-sm">
                                         {week.midweekAssignments.map(item => (
-                                             <CardAssignmentRow key={`${item.dateKey}-${item.originalRoleKey}-${item.originalIndex}`} label={`${ABBR_TO_ROLE_NAME[item.role] || item.role}`}>
+                                            <CardAssignmentRow key={`${item.dateKey}-${item.originalRoleKey}-${item.originalIndex}`} label={`${ABBR_TO_ROLE_NAME[item.role] || item.role}`}>
                                                 {isEditing ? <select value={item.id || ''} onChange={e => handleEditChange(item.dateKey, item.originalRoleKey as AssignmentKey, e.target.value, item.originalIndex)} className="w-full p-1 border rounded text-xs bg-yellow-50"><option value="">--</option>{getEligiblePublishers(ROLE_KEY_TO_NAME[item.originalRoleKey]).map(p => <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>)}</select> : item.name}
                                             </CardAssignmentRow>
                                         ))}
@@ -733,7 +733,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
                     <h1 className="text-3xl font-bold text-gray-800">Generar Programa de Acomodadores</h1>
                     <div className="flex flex-wrap justify-center gap-2">
-                         {editableSchedule ? (
+                        {editableSchedule ? (
                             <>
                                 <button onClick={handleSaveChanges} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                                     {isLoading ? 'Guardando...' : 'Guardar Cambios'}
@@ -742,16 +742,16 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                     Cancelar
                                 </button>
                             </>
-                         ) : draftSchedule ? (
+                        ) : draftSchedule ? (
                             <>
-                               <button onClick={handleSaveDraft} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
+                                <button onClick={handleSaveDraft} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                                     {isLoading ? 'Guardando...' : 'Guardar Borrador'}
                                 </button>
                                 <button onClick={handleDiscardDraft} disabled={isLoading || !canManageSchedule} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 disabled:bg-gray-400">
                                     Descartar
                                 </button>
                             </>
-                         ) : (
+                        ) : (
                             <>
                                 {canManageSchedule && (
                                     <button onClick={handleGenerateSchedule} disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
@@ -764,7 +764,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                                     </button>
                                 )}
                             </>
-                         )}
+                        )}
                     </div>
                 </div>
 
@@ -776,9 +776,9 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                 </div>
-                
+
                 {canManageSchedule && !draftSchedule && !editableSchedule && scheduleForSelectedMonth && (
-                     <div className="flex justify-center items-center gap-4 mb-6 p-3 bg-gray-100 rounded-lg">
+                    <div className="flex justify-center items-center gap-4 mb-6 p-3 bg-gray-100 rounded-lg">
                         <span className="font-semibold">Estado del Programa:</span>
                         <span className={`px-3 py-1 text-sm font-bold rounded-full ${scheduleForSelectedMonth.isPublic ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {scheduleForSelectedMonth.isPublic ? 'Visible' : 'Oculto'}
@@ -788,7 +788,7 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
                         </button>
                     </div>
                 )}
-                
+
                 <div className="mt-6">
                     <ScheduleView schedule={currentSchedule} isEditing={!!editableSchedule} />
                 </div>

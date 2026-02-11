@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Publisher, ServiceReport, MONTHS, PioneerApplication } from '../App';
+import { Publisher, ServiceReport, PioneerApplication } from '../types';
+import { MONTHS } from '../constants';
 
 interface StatCardProps {
     title: string;
@@ -37,18 +38,18 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
 
     const stats = useMemo(() => {
         const regularPioneersCount = publishers.filter(p => p.Estatus === 'Activo' && p['Priv Adicional'] === 'Precursor Regular').length;
-        
+
         const calendarYearForSelectedMonth = MONTHS.indexOf(selectedMonth) >= 8 ? selectedYear - 1 : selectedYear;
 
-        const auxiliaryPioneersForSelectedMonth = serviceReports.filter(r => 
-            r.anioCalendario === calendarYearForSelectedMonth && 
-            r.mes === selectedMonth && 
+        const auxiliaryPioneersForSelectedMonth = serviceReports.filter(r =>
+            r.anioCalendario === calendarYearForSelectedMonth &&
+            r.mes === selectedMonth &&
             r.precursorAuxiliar === 'PA'
         ).length;
 
-        const pioneerNamesForSelectedMonth = serviceReports.filter(r => 
-            r.anioCalendario === calendarYearForSelectedMonth && 
-            r.mes === selectedMonth && 
+        const pioneerNamesForSelectedMonth = serviceReports.filter(r =>
+            r.anioCalendario === calendarYearForSelectedMonth &&
+            r.mes === selectedMonth &&
             r.precursorAuxiliar === 'PA'
         ).map(report => {
             const pub = publishers.find(p => p.id === report.idPublicador);
@@ -62,14 +63,14 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
         };
     }, [publishers, serviceReports, selectedYear, selectedMonth]);
 
-     const approvedPioneers = useMemo(() => {
+    const approvedPioneers = useMemo(() => {
         const calendarYearForSelectedMonth = MONTHS.indexOf(selectedMonth) >= 8 ? selectedYear - 1 : selectedYear;
         const referenceDate = new Date(calendarYearForSelectedMonth, MONTHS.indexOf(selectedMonth), 1);
-        
+
         const currentMonthIndex = referenceDate.getMonth();
         const currentYear = referenceDate.getFullYear();
         const currentMonthName = MONTHS[currentMonthIndex].toLowerCase();
-        
+
         const nextMonthDate = new Date(currentYear, currentMonthIndex + 1, 1);
         const nextMonthName = MONTHS[nextMonthDate.getMonth()].toLowerCase();
 
@@ -87,7 +88,7 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
                 names.add(app.nombre);
             }
         });
-        
+
         return {
             count: names.size,
             names: Array.from(names).sort(),
@@ -98,7 +99,7 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
 
     const chartData = useMemo(() => {
         const data = [];
-        const serviceYearStart = selectedYear -1;
+        const serviceYearStart = selectedYear - 1;
 
         const serviceYearMonths = [...MONTHS.slice(8), ...MONTHS.slice(0, 8)];
 
@@ -117,13 +118,13 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
                 isHighlighted: monthName === selectedMonth,
             });
         });
-        
+
         return data;
     }, [selectedYear, selectedMonth, serviceReports]);
 
     const maxChartValue = Math.max(5, ...chartData.map(d => d.value));
     const hasData = useMemo(() => chartData.some(d => d.value > 0), [chartData]);
-    
+
     return (
         <div className="container mx-auto max-w-7xl p-4 space-y-8">
             <h1 className="text-3xl font-bold text-center text-gray-800">Dashboard de Precursores</h1>
@@ -142,22 +143,22 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
                     </select>
                 </div>
             </div>
-            
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <StatCard 
-                    title="Precursores Regulares Activos" 
-                    value={stats.regularPioneersCount} 
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <StatCard
+                    title="Precursores Regulares Activos"
+                    value={stats.regularPioneersCount}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
                     color="border-purple-500"
                 />
-                 <StatCard 
-                    title={`Precursores Auxiliares (${selectedMonth})`} 
-                    value={stats.auxiliaryPioneersForSelectedMonth} 
+                <StatCard
+                    title={`Precursores Auxiliares (${selectedMonth})`}
+                    value={stats.auxiliaryPioneersForSelectedMonth}
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
                     color="border-yellow-500"
                 />
             </div>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg">
                     <h2 className="text-xl font-semibold text-gray-900 mb-4">Tendencia de Prec. Auxiliares (Año de Servicio {selectedYear})</h2>
@@ -166,7 +167,7 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
                             <div className="flex items-end h-64 space-x-2 min-w-[600px]">
                                 {chartData.map((data, index) => (
                                     <div key={index} className="flex-1 h-full flex flex-col justify-end items-center">
-                                        <div 
+                                        <div
                                             className={`w-full ${data.isHighlighted ? 'bg-orange-500 hover:bg-orange-600' : 'bg-yellow-400 hover:bg-yellow-500'} rounded-t-md transition-all flex justify-center items-start pt-1`}
                                             style={{ height: `${(data.value / maxChartValue) * 100}%` }}
                                             title={`${data.label}: ${data.value} precursores`}
@@ -182,13 +183,13 @@ const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers,
                         <p className="text-center text-gray-500 py-8">No hay datos de precursores auxiliares para mostrar en este período.</p>
                     )}
                 </div>
-                 <div className="space-y-6">
-                     <div className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="space-y-6">
+                    <div className="bg-white p-6 rounded-xl shadow-lg">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">
                             Próximos Aprobados ({approvedPioneers.count})
                             <span className="block text-sm font-normal text-gray-500">{approvedPioneers.currentMonth} y {approvedPioneers.nextMonth}</span>
                         </h2>
-                         {approvedPioneers.names.length > 0 ? (
+                        {approvedPioneers.names.length > 0 ? (
                             <ul className="space-y-2 max-h-40 overflow-y-auto">
                                 {approvedPioneers.names.map(name => (
                                     <li key={name} className="flex items-center space-x-3 p-2 bg-blue-50 rounded-md">

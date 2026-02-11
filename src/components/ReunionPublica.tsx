@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DISCURSOS_PUBLICOS } from './discursos';
-import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment, MONTHS } from '../App';
+import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment } from '../types';
+import { MONTHS } from '../constants';
 
 interface ReunionPublicaProps {
     schedule: PublicTalksSchedule;
@@ -8,6 +9,7 @@ interface ReunionPublicaProps {
     canManage: boolean;
     publishers: Publisher[];
     onShowModal: (info: ModalInfo) => void;
+    onUpdatePublisher?: (publisher: Publisher) => Promise<void>;
 }
 
 const TALK_CATEGORIES: Record<string, number[]> = {
@@ -24,7 +26,7 @@ const TALK_CATEGORIES: Record<string, number[]> = {
 };
 const CATEGORY_NAMES = Object.keys(TALK_CATEGORIES);
 
-const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canManage, publishers, onShowModal }) => {
+const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canManage, publishers, onShowModal, onUpdatePublisher }) => {
     const [localSchedule, setLocalSchedule] = useState<PublicTalksSchedule>({});
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSlot, setEditingSlot] = useState<{ talkNumber: number; slotIndex: number; data: Partial<PublicTalkAssignment> } | null>(null);
@@ -235,6 +237,9 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                             {talk.talkInfo.number}. {talk.talkInfo.title}
                                         </p>
                                         <p className="text-sm text-gray-600 mt-1">
+                                            Canción: {talk.song}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">
                                             Orador: {talk.speakerName}
                                         </p>
                                     </div>
@@ -249,6 +254,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Fecha</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Tema del Discurso</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Canción</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Orador</th>
                                     </tr>
                                 </thead>
@@ -260,6 +266,9 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-700">
                                                 {talk.talkInfo.number}. {talk.talkInfo.title}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                                {talk.song}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                                 {talk.speakerName}
@@ -410,7 +419,12 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
 
     const displayedYears = Array.from({ length: YEARS_PER_PAGE }, (_, i) => START_YEAR + yearPage * YEARS_PER_PAGE + i);
 
-    const OutgoingSpeakersView = () => {
+    const LocalSpeakersView = () => {
+        const [selectedSpeakerId, setSelectedSpeakerId] = useState<string | null>(null);
+        const [filterText, setFilterText] = useState('');
+        const [talkSearch, setTalkSearch] = useState('');
+
+        // --- State for Global View (when no speaker selected) ---
         const [monthFilter, setMonthFilter] = useState('');
         const [yearFilter, setYearFilter] = useState<number | ''>('');
         const [speakerFilter, setSpeakerFilter] = useState('');
@@ -420,12 +434,23 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                 .sort((a, b) => a.Nombre.localeCompare(b.Nombre)),
             [publishers]);
 
+        const filteredSpeakers = useMemo(() =>
+            speakers.filter(s => `${s.Nombre} ${s.Apellido}`.toLowerCase().includes(filterText.toLowerCase())),
+            [speakers, filterText]
+        );
+
+        const selectedSpeaker = useMemo(() =>
+            publishers.find(p => p.id === selectedSpeakerId),
+            [publishers, selectedSpeakerId]
+        );
+
+        // --- Logic for Global View ---
         const getSpeakerName = (id: string) => {
             const speaker = speakers.find(s => s.id === id);
             return speaker ? `${speaker.Nombre} ${speaker.Apellido}` : 'Desconocido';
         };
 
-        const filteredAssignments = useMemo(() => {
+        const globalFilteredAssignments = useMemo(() => {
             return localOutgoingSchedule.filter(assignment => {
                 const date = new Date(assignment.date + 'T00:00:00');
                 const monthMatch = monthFilter ? MONTHS[date.getMonth()] === monthFilter : true;
@@ -435,94 +460,323 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         }, [localOutgoingSchedule, monthFilter, speakerFilter, yearFilter]);
 
-        const handleAddClick = () => {
-            setEditingOutgoingTalk({ id: crypto.randomUUID() });
-            setIsOutgoingModalOpen(true);
-        };
 
-        const handleEditClick = (talk: OutgoingTalkAssignment) => {
-            setEditingOutgoingTalk(talk);
-            setIsOutgoingModalOpen(true);
-        };
+        // --- Logic for Selected Speaker ---
+        const handleAddPreparedTalk = async (talkNumber: number) => {
+            if (!selectedSpeaker || !onUpdatePublisher) return;
+            const currentTalks = selectedSpeaker.preparedTalks || [];
+            if (currentTalks.includes(talkNumber)) return;
 
-        const handleDeleteClick = (talkId: string) => {
-            if (window.confirm("¿Está seguro de que desea eliminar esta asignación?")) {
-                setLocalOutgoingSchedule(prev => prev.filter(t => t.id !== talkId));
+            const updatedTalks = [...currentTalks, talkNumber].sort((a, b) => a - b);
+            try {
+                await onUpdatePublisher({ ...selectedSpeaker, preparedTalks: updatedTalks });
+            } catch (error) {
+                console.error("Error updating prepared talks", error);
+                onShowModal({ type: 'error', title: 'Error', message: 'No se pudo guardar el tema preparado.' });
             }
         };
 
+        const handleRemovePreparedTalk = async (talkNumber: number) => {
+            if (!selectedSpeaker || !onUpdatePublisher) return;
+            const currentTalks = selectedSpeaker.preparedTalks || [];
+            const updatedTalks = currentTalks.filter(t => t !== talkNumber);
+            try {
+                await onUpdatePublisher({ ...selectedSpeaker, preparedTalks: updatedTalks });
+            } catch (error) {
+                console.error("Error updating prepared talks", error);
+                onShowModal({ type: 'error', title: 'Error', message: 'No se pudo eliminar el tema preparado.' });
+            }
+        };
+
+        const handleAddAssignmentForSpeaker = () => {
+            if (!selectedSpeaker) return;
+            // Pre-fill modal with speaker
+            setEditingOutgoingTalk({ id: crypto.randomUUID(), speakerId: selectedSpeaker.id });
+            setIsOutgoingModalOpen(true);
+        };
+
+        // Filter assignments for selected speaker
+        const speakerAssignments = useMemo(() => {
+            if (!selectedSpeaker) return [];
+            return localOutgoingSchedule
+                .filter(a => a.speakerId === selectedSpeaker.id)
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }, [localOutgoingSchedule, selectedSpeaker]);
+
+
+        const availableTalksToAdd = useMemo(() => {
+            if (!talkSearch) return [];
+            const searchLower = talkSearch.toLowerCase();
+            return DISCURSOS_PUBLICOS.filter(d =>
+                (d.number.toString().startsWith(searchLower) || d.title.toLowerCase().includes(searchLower)) &&
+                !selectedSpeaker?.preparedTalks?.includes(d.number)
+            ).slice(0, 5);
+        }, [talkSearch, selectedSpeaker]);
+
+
         return (
-            <div>
-                <div className="flex flex-col xl:flex-row justify-between items-end mb-6 gap-4 bg-gray-50 p-4 rounded-lg border">
-                    <div className="flex flex-wrap gap-4 w-full xl:w-auto">
-                        <div className="w-full sm:w-32">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Año</label>
-                            <select
-                                value={yearFilter}
-                                onChange={(e) => setYearFilter(e.target.value ? Number(e.target.value) : '')}
-                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
-                            >
-                                <option value="">Todos</option>
-                                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
-                        </div>
-                        <div className="w-full sm:w-40">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Mes</label>
-                            <select
-                                value={monthFilter}
-                                onChange={(e) => setMonthFilter(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
-                            >
-                                <option value="">Todos</option>
-                                {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                        </div>
-                        <div className="w-full sm:w-64">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Orador</label>
-                            <select
-                                value={speakerFilter}
-                                onChange={(e) => setSpeakerFilter(e.target.value)}
-                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
-                            >
-                                <option value="">Todos</option>
-                                {speakers.map(s => (
-                                    <option key={s.id} value={s.id}>{s.Nombre} {s.Apellido}</option>
-                                ))}
-                            </select>
-                        </div>
+            <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-220px)] min-h-[600px]">
+                {/* LEFT PANEL: Speaker List */}
+                <div className="w-full md:w-1/3 flex flex-col bg-white rounded-lg shadow border overflow-hidden">
+                    <div className="p-4 border-b bg-gray-50">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Oradores Locales</label>
+                        <input
+                            type="text"
+                            placeholder="Buscar orador..."
+                            value={filterText}
+                            onChange={e => setFilterText(e.target.value)}
+                            className="w-full p-2 border rounded-md text-sm"
+                        />
                     </div>
-                    <button onClick={handleAddClick} disabled={!canManage} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 whitespace-nowrap">
-                        Añadir Asignación
-                    </button>
+                    <div className="flex-1 overflow-y-auto">
+                        {filteredSpeakers.map(speaker => (
+                            <button
+                                key={speaker.id}
+                                onClick={() => setSelectedSpeakerId(speaker.id)}
+                                className={`w-full text-left p-4 border-b hover:bg-gray-50 transition-colors flex items-center justify-between ${selectedSpeakerId === speaker.id ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''}`}
+                            >
+                                <div>
+                                    <p className={`font-semibold ${selectedSpeakerId === speaker.id ? 'text-blue-800' : 'text-gray-800'}`}>{speaker.Nombre} {speaker.Apellido}</p>
+                                    <p className="text-xs text-gray-500">{speaker.Privilegio}</p>
+                                </div>
+                                <span className="text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                </span>
+                            </button>
+                        ))}
+                        {filteredSpeakers.length === 0 && (
+                            <p className="text-center text-gray-500 p-4 text-sm">No se encontraron oradores.</p>
+                        )}
+                    </div>
                 </div>
 
-                <div className="space-y-4">
-                    {filteredAssignments.length > 0 ? filteredAssignments.map(talk => {
-                        const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talk.talkNumber);
-                        return (
-                            <div key={talk.id} className="bg-gray-50 p-4 rounded-lg flex flex-wrap justify-between items-center gap-4 hover:shadow-md transition-shadow">
+                {/* RIGHT PANEL: Details or Global View */}
+                <div className="w-full md:w-2/3 bg-white rounded-lg shadow border flex flex-col overflow-hidden">
+                    {selectedSpeaker ? (
+                        <div className="flex-1 overflow-y-auto p-6">
+                            <div className="flex justify-between items-start mb-6">
                                 <div>
-                                    <p className="font-bold text-lg text-gray-800">{getSpeakerName(talk.speakerId)}</p>
-                                    <p className="text-sm text-gray-600 flex items-center gap-2">
-                                        <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded">{new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                        <span>en <span className="font-semibold">{talk.congregation}</span></span>
-                                    </p>
-                                    <p className="text-sm text-gray-800 mt-2">
-                                        <span className="font-semibold text-gray-600">Tema: </span>
-                                        {talkInfo ? `${talkInfo.number}. ${talkInfo.title}` : 'Tema no encontrado'}
-                                    </p>
+                                    <h2 className="text-2xl font-bold text-gray-800">{selectedSpeaker.Nombre} {selectedSpeaker.Apellido}</h2>
+                                    <p className="text-sm text-gray-600">{selectedSpeaker.Privilegio} • {selectedSpeaker.preparedTalks?.length || 0} temas preparados</p>
                                 </div>
+                                <button onClick={() => setSelectedSpeakerId(null)} className="text-sm text-blue-600 hover:underline md:hidden">
+                                    ← Volver a la lista
+                                </button>
+                            </div>
+
+                            {/* SECTION 1: Temas Preparados */}
+                            <div className="mb-8">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Temas Preparados</h3>
+
                                 {canManage && (
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleEditClick(talk)} className="text-sm px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors">Editar</button>
-                                        <button onClick={() => handleDeleteClick(talk.id)} className="text-sm px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">Eliminar</button>
+                                    <div className="mb-4 relative">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar por número o título para añadir..."
+                                                value={talkSearch}
+                                                onChange={e => setTalkSearch(e.target.value)}
+                                                className="flex-1 p-2 border rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        {/* Autocomplete Dropdown */}
+                                        {talkSearch && availableTalksToAdd.length > 0 && (
+                                            <div className="absolute top-full left-0 w-full bg-white border rounded-md shadow-lg z-20 mt-1 max-h-60 overflow-y-auto">
+                                                {availableTalksToAdd.map(talk => (
+                                                    <button
+                                                        key={talk.number}
+                                                        onClick={() => {
+                                                            handleAddPreparedTalk(talk.number);
+                                                            setTalkSearch('');
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                                                    >
+                                                        <span className="font-bold text-blue-600 w-8 inline-block">{talk.number}</span>
+                                                        <span>{talk.title}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    {selectedSpeaker.preparedTalks && selectedSpeaker.preparedTalks.length > 0 ? (
+                                        selectedSpeaker.preparedTalks.map(talkNum => {
+                                            const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talkNum);
+                                            return (
+                                                <div key={talkNum} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-sm w-10 text-center">{talkNum}</span>
+                                                        <span className="text-gray-800 text-sm font-medium">{talkInfo?.title || 'Tema desconocido'}</span>
+                                                    </div>
+                                                    {canManage && (
+                                                        <button
+                                                            onClick={() => handleRemovePreparedTalk(talkNum)}
+                                                            className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50 transition-colors"
+                                                            title="Eliminar de temas preparados"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 000-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-gray-500 italic">No hay temas preparados registrados.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* SECTION 2: Asignaciones Salientes */}
+                            <div>
+                                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                    <h3 className="text-lg font-bold text-gray-800">Historial de Salidas</h3>
+                                    {canManage && (
+                                        <button
+                                            onClick={handleAddAssignmentForSpeaker}
+                                            className="px-3 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 flex items-center gap-1"
+                                        >
+                                            <span>+</span> Nueva Salida
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="space-y-3">
+                                    {speakerAssignments.length > 0 ? (
+                                        speakerAssignments.map(assignment => {
+                                            const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === assignment.talkNumber);
+                                            const isPast = new Date(assignment.date) < new Date();
+                                            return (
+                                                <div key={assignment.id} className="p-3 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <p className="font-bold text-gray-800">{assignment.congregation}</p>
+                                                            <p className="text-sm text-gray-600">
+                                                                {new Date(assignment.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${isPast ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-700'}`}>
+                                                            {isPast ? 'Completado' : 'Programado'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-2 text-sm text-gray-700">
+                                                        <span className="font-semibold text-blue-700">{assignment.talkNumber}.</span> {talkInfo?.title}
+                                                    </div>
+                                                    {canManage && (
+                                                        <div className="mt-3 flex gap-2 justify-end">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingOutgoingTalk(assignment);
+                                                                    setIsOutgoingModalOpen(true);
+                                                                }}
+                                                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                                            >
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (window.confirm("¿Está seguro de eliminar esta asignación?")) {
+                                                                        setLocalOutgoingSchedule(prev => prev.filter(t => t.id !== assignment.id));
+                                                                    }
+                                                                }}
+                                                                className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                                            >
+                                                                Eliminar
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-gray-500 italic">No hay salidas registradas.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        // NO SPEAKER SELECTED - GLOBAL SUMMARY VIEW (Old OutgoingSpeakersView logic)
+                        <div className="flex flex-col h-full bg-gray-50">
+                            <div className="p-6 border-b bg-white">
+                                <h2 className="text-xl font-bold text-gray-800 mb-4">Resumen de Oradores Locales</h2>
+                                <p className="text-sm text-gray-600 mb-6">Seleccione un orador de la lista para gestionar sus temas y asignaciones individuales, o utilice los filtros abajo para ver el historial global.</p>
+
+                                <div className="flex flex-wrap gap-4">
+                                    <div className="w-full sm:w-32">
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Año</label>
+                                        <select
+                                            value={yearFilter}
+                                            onChange={(e) => setYearFilter(e.target.value ? Number(e.target.value) : '')}
+                                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                                        >
+                                            <option value="">Todos</option>
+                                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="w-full sm:w-40">
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mes</label>
+                                        <select
+                                            value={monthFilter}
+                                            onChange={(e) => setMonthFilter(e.target.value)}
+                                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                                        >
+                                            <option value="">Todos</option>
+                                            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="w-full sm:w-64">
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Orador</label>
+                                        <select
+                                            value={speakerFilter}
+                                            onChange={(e) => setSpeakerFilter(e.target.value)}
+                                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                                        >
+                                            <option value="">Todos</option>
+                                            {speakers.map(s => (
+                                                <option key={s.id} value={s.id}>{s.Nombre} {s.Apellido}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6">
+                                {globalFilteredAssignments.length > 0 ? (
+                                    <div className="grid grid-cols-1 gap-4">
+                                        {globalFilteredAssignments.map(talk => {
+                                            const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talk.talkNumber);
+                                            return (
+                                                <div key={talk.id} className="bg-white p-4 rounded-lg border shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                                    <div>
+                                                        <p className="font-bold text-gray-800">{getSpeakerName(talk.speakerId)}</p>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            <span className="font-medium text-blue-700">{new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                            <span className="mx-2">•</span>
+                                                            <span>{talk.congregation}</span>
+                                                        </div>
+                                                        <p className="text-sm text-gray-800 mt-2">
+                                                            <span className="font-semibold text-gray-600">Tema: </span>
+                                                            <span className="italic">{talkInfo ? `${talkInfo.number}. ${talkInfo.title}` : 'Tema no encontrado'}</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        <p>No se encontraron asignaciones con los filtros seleccionados.</p>
                                     </div>
                                 )}
                             </div>
-                        );
-                    }) : (
-                        <div className="text-center text-gray-500 py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                            <p>No se encontraron asignaciones con los filtros seleccionados.</p>
                         </div>
                     )}
                 </div>
@@ -712,19 +966,30 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-100">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Fecha</th>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tema del Discurso</th>
-                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Orador</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Fecha</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Tema del Discurso</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Canción</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Orador</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {monthlyTalks.map((talk, index) => (
                                     <tr key={index} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{talk.talkInfo.number}. {talk.talkInfo.title}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{talk.speakerName}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            {new Date(talk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-700">
+                                            {talk.talkInfo.number}. {talk.talkInfo.title}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                            {talk.song}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                            {talk.speakerName}
+                                        </td>
                                     </tr>
                                 ))}
+
                             </tbody>
                         </table>
                     </div>
@@ -757,7 +1022,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             </div>
 
             <div className="mb-6 border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                <nav className="-mb-px flex space-x-8 overflow-x-auto scrollbar-hide pb-0.5" aria-label="Tabs">
                     <button onClick={() => setActiveTab('planner')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'planner' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                         Planificador Anual
                     </button>
@@ -765,7 +1030,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                         Programa Mensual
                     </button>
                     <button onClick={() => setActiveTab('outgoing')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'outgoing' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        Oradores Salientes
+                        Oradores Locales
                     </button>
                 </nav>
             </div>
@@ -858,7 +1123,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                 </>
             )}
             {activeTab === 'monthly' && <MonthlyView />}
-            {activeTab === 'outgoing' && <OutgoingSpeakersView />}
+            {activeTab === 'outgoing' && <LocalSpeakersView />}
         </div>
     );
 };

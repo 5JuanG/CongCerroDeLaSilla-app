@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { InvitationContent, HomepageContent, compressImage, ModalInfo } from '../App';
+import { InvitationContent, HomepageContent, ModalInfo } from '../types';
+import { compressImage } from '../utils';
 
 interface GestionContenidoProps {
     invitationContent: InvitationContent[];
@@ -13,13 +14,14 @@ interface GestionContenidoProps {
     is15HourOptionEnabled: boolean;
     onUpdate15HourOption: (isEnabled: boolean) => Promise<void>;
     onShowModal: (info: ModalInfo) => void;
+    onDownload?: (url: string, fileName: string) => Promise<void>;
 }
 
 const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
     invitationContent, onAddInvitation, onDeleteInvitation,
     homepageContent, onAddHomepageContent, onDeleteHomepageContent,
     is15HourOptionEnabled, onUpdate15HourOption,
-    onShowModal
+    onShowModal, onDownload
 }) => {
     const [activeTab, setActiveTab] = useState<'homepage' | 'invitation' | 'settings'>('homepage');
 
@@ -151,7 +153,7 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
 
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <nav className="-mb-px flex space-x-8 overflow-x-auto scrollbar-hide pb-0.5" aria-label="Tabs">
                         <TabButton tabName="homepage" label="Imágenes de Inicio (Carrusel)" />
                         <TabButton tabName="invitation" label="Invitación Prec. Auxiliar" />
                         <TabButton tabName="settings" label="Configuración Campaña" />
@@ -190,7 +192,18 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {homepageContent.map(item => (
                                         <div key={item.id} className="bg-gray-50 rounded-lg shadow-md overflow-hidden group relative">
-                                            <img src={item.imageUrl} alt={item.title} className="w-full h-48 object-cover" /><div className="p-4"><h4 className="font-bold">{item.title}</h4><p className="text-gray-700 text-sm italic">"{item.phrase}"</p></div><button onClick={() => onDeleteHomepageContent(item.id)} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-2 opacity-0 group-hover:opacity-100"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg></button>
+                                            <img src={item.imageUrl} alt={item.title} className="w-full h-48 object-cover" />
+                                            <div className="p-4"><h4 className="font-bold">{item.title}</h4><p className="text-gray-700 text-sm italic">"{item.phrase}"</p></div>
+                                            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {onDownload && (
+                                                    <button onClick={() => onDownload(item.imageUrl, `carrusel_${item.title.replace(/\s+/g, '_')}.webp`)} className="bg-blue-600 text-white rounded-full p-2 shadow-md hover:bg-blue-700">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                                                    </button>
+                                                )}
+                                                <button onClick={() => onDeleteHomepageContent(item.id)} className="bg-red-600 text-white rounded-full p-2 shadow-md hover:bg-red-700">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -224,7 +237,18 @@ const GestionContenidoInvitacion: React.FC<GestionContenidoProps> = ({
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {invitationContent.map(item => (
                                         <div key={item.id} className="bg-gray-50 rounded-lg shadow-md overflow-hidden group relative">
-                                            <img src={item.imageUrl} alt="Contenido de invitación" className="w-full h-48 object-cover" /><div className="p-4"><p className="text-gray-700 text-sm italic">"{item.phrase}"</p></div><button onClick={() => onDeleteInvitation(item.id)} className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-2 opacity-0 group-hover:opacity-100"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg></button>
+                                            <img src={item.imageUrl} alt="Contenido de invitación" className="w-full h-48 object-cover" />
+                                            <div className="p-4"><p className="text-gray-700 text-sm italic">"{item.phrase}"</p></div>
+                                            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {onDownload && (
+                                                    <button onClick={() => onDownload(item.imageUrl, `invitacion_${Date.now()}.webp`)} className="bg-blue-600 text-white rounded-full p-2 shadow-md hover:bg-blue-700">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                                                    </button>
+                                                )}
+                                                <button onClick={() => onDeleteInvitation(item.id)} className="bg-red-600 text-white rounded-full p-2 shadow-md hover:bg-red-700">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

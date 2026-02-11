@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { UserRole, View, Permission } from '../App';
+import { UserRole, View, Permission } from '../types';
 import Tooltip from './Tooltip';
 
 interface SidebarProps {
@@ -29,11 +29,10 @@ const NavLink: React.FC<{
                 setActiveView(view);
                 setSidebarOpen(false); // Close sidebar on mobile after navigation
             }}
-            className={`w-full flex items-center p-3 my-1 rounded-lg transition-colors duration-200 ${isCollapsed ? 'justify-center' : ''} ${
-                activeView === view
+            className={`w-full flex items-center p-3 my-1 rounded-lg transition-colors duration-200 ${isCollapsed ? 'justify-center' : ''} ${activeView === view
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-200 hover:bg-blue-800 hover:text-white'
-            }`}
+                }`}
             title={isCollapsed && !tooltip ? label : ''}
         >
             {icon}
@@ -79,7 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
         { view: 'controlAcceso', label: 'Control de Acceso', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> },
         { view: 'registroTransaccion', label: 'Registro Transacción', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, tooltip: "Formulario para registrar donaciones y otras transacciones financieras de la congregación." },
     ];
-    
+
     const navItems = useMemo(() => {
         const role = userRole.toLowerCase();
         // A privileged user has full access to all navigation items.
@@ -97,7 +96,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
         if (userPermissions.includes('manageMeetingAssignments')) {
             allowedViews.add('asignacionesReunion');
         }
-        
+
         // Define views that should always be visible to any logged-in user.
         const alwaysVisible: View[] = ['home', 'informeServicio', 'precursorAuxiliar', 'programaServiciosAuxiliares'];
 
@@ -114,11 +113,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
             </div>
             <nav className="mt-10 px-2 flex-1 overflow-y-auto">
                 {navItems.map(item => (
-                    <NavLink key={item.view} {...item} activeView={activeView} setActiveView={setActiveView} setSidebarOpen={setSidebarOpen} isCollapsed={isCollapsed}/>
+                    <NavLink key={item.view} {...item} activeView={activeView} setActiveView={setActiveView} setSidebarOpen={setSidebarOpen} isCollapsed={isCollapsed} />
                 ))}
             </nav>
             <div className="px-2 pb-4">
-                 <div className="relative group">
+                <div className="relative group">
                     <button
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         className={`hidden lg:flex w-full items-center p-3 my-1 rounded-lg transition-colors duration-200 text-gray-200 hover:bg-blue-800 hover:text-white ${isCollapsed ? 'justify-center' : ''}`}
@@ -131,8 +130,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
                         <span className={`mx-4 font-medium whitespace-nowrap ${isCollapsed ? 'hidden' : 'block'}`}>Contraer</span>
                     </button>
                     <Tooltip text={isCollapsed ? 'Expandir menú' : 'Contraer menú'} position="right" />
-                 </div>
-                 <button
+                </div>
+                <button
                     onClick={onLogout}
                     className={`w-full flex items-center p-3 my-1 rounded-lg transition-colors duration-200 text-red-300 hover:bg-red-800 hover:text-white ${isCollapsed ? 'justify-center' : ''}`}
                 >
@@ -158,9 +157,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout, 
             <aside className={`flex flex-col bg-blue-900 fixed h-full z-20 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'} lg:translate-x-0 ${isCollapsed ? 'lg:w-20' : 'lg:w-64'}`}>
                 {sidebarContent}
             </aside>
-            
+
             {/* Overlay for mobile */}
-             {isSidebarOpen && <div className="fixed inset-0 bg-black opacity-50 z-10 lg:hidden" onClick={() => setSidebarOpen(false)}></div>}
+            {isSidebarOpen && <div className="fixed inset-0 bg-black opacity-50 z-10 lg:hidden" onClick={() => setSidebarOpen(false)}></div>}
         </>
     );
 };

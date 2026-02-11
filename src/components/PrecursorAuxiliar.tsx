@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react';
-import { UserRole, MONTHS } from '../App';
+import { UserRole } from '../types';
+import { MONTHS } from '../constants';
 import { GoogleGenAI } from "@google/genai";
 import Tooltip from './Tooltip';
 
@@ -86,10 +87,10 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
 
         setIsLoading(true);
         setStatus('Enviando...');
-        
+
         try {
             const firmaDataURL = signaturePadRef.current.toDataURL("image/png");
-            
+
             const newApplication = {
                 horas,
                 nombre,
@@ -118,13 +119,13 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
             setIsLoading(false);
         }
     };
-    
+
     return (
         <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 md:p-12 rounded-2xl shadow-lg">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-center text-gray-800 mb-8">Solicitud para el Servicio de Precursor Auxiliar</h2>
             <p className="text-gray-600 text-base md:text-lg mb-6 leading-relaxed">Debido a mi amor por Jehová y mi deseo de ayudar a mi prójimo a aprender acerca de él y sus propósitos amorosos, me gustaría aumentar mi participación en el servicio del campo siendo precursor auxiliar durante el período que se indica a continuación:</p>
             <form onSubmit={handleSubmit} noValidate>
-                 <div className="mb-8">
+                <div className="mb-8">
                     <label className="block text-lg font-bold text-gray-700 mb-3">Requisito de Horas</label>
                     <div className="flex flex-col sm:flex-row gap-4 rounded-xl border-2 border-gray-200 p-4 bg-gray-50">
                         <div className="flex-1 relative group">
@@ -150,7 +151,7 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
                                 15 Horas
                                 {!is15HourOptionEnabled && <span className="block text-xs font-normal mt-1">(No disponible actualmente)</span>}
                             </label>
-                             <Tooltip text={!is15HourOptionEnabled ? 'Esta opción solo está disponible durante meses de campaña especial, según lo anuncie la sucursal.' : 'Seleccione si aplicará para el requisito de 15 horas.'} />
+                            <Tooltip text={!is15HourOptionEnabled ? 'Esta opción solo está disponible durante meses de campaña especial, según lo anuncie la sucursal.' : 'Seleccione si aplicará para el requisito de 15 horas.'} />
                         </div>
                         <div className="flex-1">
                             <input type="radio" id="horas30" name="horas" value="30" checked={horas === '30'} onChange={() => setHoras('30')} className="hidden peer" />
@@ -168,7 +169,7 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
                     <Tooltip text="Si marca esta casilla, su solicitud se renovará automáticamente cada mes hasta que notifique lo contrario al comité de servicio." />
                 </div>
                 <p className="text-gray-600 text-base md:text-lg my-6 leading-relaxed">Disfruto de una buena reputación moral y tengo buenos hábitos. He hecho planes para cumplir con el requisito de horas.</p>
-                 <div className="mb-6">
+                <div className="mb-6">
                     <label htmlFor="nombre" className="block text-lg font-bold text-gray-700 mb-2">Nombre (en imprenta):</label>
                     <input type="text" id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required className="w-full p-4 text-lg border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition" />
                 </div>
@@ -221,8 +222,8 @@ const SolicitudPreview = forwardRef<HTMLDivElement, { solicitud: Solicitud }>(({
             <div className="mt-4">
                 <div className="flex flex-row justify-between items-end gap-x-12">
                     <div className="w-1/2 flex items-baseline">
-                         <span className="text-[9pt] mr-2">Fecha:</span>
-                         <span className="flex-grow border-b border-dotted border-black text-center pb-1 h-12 flex items-end justify-center">{solicitud.fecha}</span>
+                        <span className="text-[9pt] mr-2">Fecha:</span>
+                        <span className="flex-grow border-b border-dotted border-black text-center pb-1 h-12 flex items-end justify-center">{solicitud.fecha}</span>
                     </div>
                     <div className="w-1/2">
                         <div className="border-b border-dotted border-black h-20 flex justify-center items-center">
@@ -371,7 +372,12 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
         const [showPreview, setShowPreview] = useState(false);
         const [signingSolicitud, setSigningSolicitud] = useState<Solicitud | null>(null);
         const [deletingId, setDeletingId] = useState<string | null>(null);
-        
+
+        // Filter states
+        const [filterType, setFilterType] = useState<'all' | 'continuous' | 'monthly'>('all');
+        const [filterMonth, setFilterMonth] = useState<string>('all');
+        const [filterYear, setFilterYear] = useState<string>('all');
+
         const previewRef = useRef<HTMLDivElement>(null);
 
         useEffect(() => {
@@ -386,14 +392,32 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
             return () => unsubscribe();
         }, []);
 
-        const continuos = useMemo(() => solicitudes.filter(s => s.deContinuo), [solicitudes]);
-        const mensuales = useMemo(() => solicitudes.filter(s => !s.deContinuo), [solicitudes]);
+        const filteredSolicitudes = useMemo(() => {
+            return solicitudes.filter(s => {
+                const matchesType = filterType === 'all' || (filterType === 'continuous' ? s.deContinuo : !s.deContinuo);
+                const matchesMonth = filterMonth === 'all' || s.mes.toLowerCase().includes(filterMonth.toLowerCase());
+                const matchesYear = filterYear === 'all' || s.fecha.startsWith(filterYear);
+                return matchesType && matchesMonth && matchesYear;
+            });
+        }, [solicitudes, filterType, filterMonth, filterYear]);
+
+        const availableYears = useMemo(() => {
+            const years = new Set<string>();
+            solicitudes.forEach(s => {
+                const year = s.fecha.split('-')[0];
+                if (year) years.add(year);
+            });
+            return Array.from(years).sort((a, b) => b.localeCompare(a));
+        }, [solicitudes]);
+
+        const continuos = useMemo(() => filteredSolicitudes.filter(s => s.deContinuo), [filteredSolicitudes]);
+        const mensuales = useMemo(() => filteredSolicitudes.filter(s => !s.deContinuo), [filteredSolicitudes]);
 
         const handleSaveSignatureAndApprove = async (signatureDataUrl: string) => {
             if (!signingSolicitud) return;
-        
+
             const updateData: Partial<Solicitud> = {};
-        
+
             if (!signingSolicitud.firma1) {
                 updateData.firma1 = signatureDataUrl;
             } else if (!signingSolicitud.firma2) {
@@ -406,7 +430,7 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
                 setSigningSolicitud(null);
                 return;
             }
-        
+
             await db.collection('pioneer_applications').doc(signingSolicitud.id).update(updateData);
             setSigningSolicitud(null);
         };
@@ -435,21 +459,21 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
             setSelectedSolicitud(solicitud);
             setShowPreview(true);
         };
-        
+
         const handleExportPdf = async () => {
             if (!previewRef.current || !selectedSolicitud) return;
             // @ts-ignore
             const { jsPDF } = jspdf;
             const canvas = await html2canvas(previewRef.current, { scale: 2 });
             const imgData = canvas.toDataURL('image/png');
-            
+
             const pdf = new jsPDF({ orientation: 'landscape', unit: 'in', format: 'letter' });
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
 
-            const imgProps= pdf.getImageProperties(imgData);
+            const imgProps = pdf.getImageProperties(imgData);
             const imgRatio = imgProps.width / imgProps.height;
-            
+
             let imgWidth = pdfWidth;
             let imgHeight = imgWidth / imgRatio;
 
@@ -483,8 +507,8 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
                                 <button onClick={() => setSigningSolicitud(s)} className="px-3 py-1 bg-green-500 text-white rounded text-sm">Firmar</button>
                             )}
                             <button onClick={() => handlePreview(s)} className="px-3 py-1 bg-blue-500 text-white rounded text-sm">Vista Previa</button>
-                            <button 
-                                onClick={() => handleDelete(s.id)} 
+                            <button
+                                onClick={() => handleDelete(s.id)}
                                 disabled={isDeleting}
                                 className="px-3 py-1 bg-red-500 text-white rounded text-sm disabled:bg-red-300 disabled:cursor-wait"
                             >
@@ -522,8 +546,46 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
                         onSave={handleSaveSignatureAndApprove}
                     />
                 )}
-                 <div className="mb-6">
+                <div className="mb-6">
                     <h1 className="text-2xl font-bold text-gray-800 text-center">Gestionar Solicitudes de Prec. Auxiliar</h1>
+                </div>
+
+                {/* Filters Section */}
+                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tipo de Solicitud</label>
+                        <select
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value as any)}
+                            className="w-full p-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none transition-colors"
+                        >
+                            <option value="all">Todas las Solicitudes</option>
+                            <option value="continuous">Solo Continuos</option>
+                            <option value="monthly">Solo Temporales (Mensuales)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Mes</label>
+                        <select
+                            value={filterMonth}
+                            onChange={(e) => setFilterMonth(e.target.value)}
+                            className="w-full p-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none transition-colors"
+                        >
+                            <option value="all">Todos los Meses</option>
+                            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Año</label>
+                        <select
+                            value={filterYear}
+                            onChange={(e) => setFilterYear(e.target.value)}
+                            className="w-full p-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none transition-colors"
+                        >
+                            <option value="all">Todos los Años</option>
+                            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="mb-10">
@@ -532,7 +594,7 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
                         {renderSolicitudList(continuos)}
                     </div>
                 </div>
-                
+
                 <div>
                     <h2 className="text-xl font-semibold border-b-2 border-gray-200 pb-2 mb-4 text-gray-800">Solicitudes Mensuales</h2>
                     <div className="space-y-4">
@@ -553,7 +615,7 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
             </div>
         );
     }
-    
+
     if (!librariesReady) {
         return (
             <div className="flex items-center justify-center h-full p-4">
@@ -564,33 +626,31 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
 
     return (
         <div className="container mx-auto p-4">
-             {isPrivilegedUser && !forceFormView && (
+            {isPrivilegedUser && !forceFormView && (
                 <div className="mb-4 border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <nav className="-mb-px flex space-x-8 overflow-x-auto scrollbar-hide pb-0.5" aria-label="Tabs">
                         <button
                             onClick={() => setView('list')}
-                            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-                                view === 'list'
-                                    ? 'border-indigo-500 text-indigo-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
+                            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${view === 'list'
+                                ? 'border-indigo-500 text-indigo-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
                         >
                             Gestionar Solicitudes
                         </button>
                         <button
                             onClick={() => setView('form')}
-                             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-                                view === 'form'
-                                    ? 'border-indigo-500 text-indigo-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
+                            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${view === 'form'
+                                ? 'border-indigo-500 text-indigo-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
                         >
                             Enviar Nueva Solicitud
                         </button>
                     </nav>
                 </div>
             )}
-            
+
             <div className="bg-white p-0 sm:p-6 rounded-lg shadow-md">
                 {view === 'list' ? <SolicitudesList /> : <Formulario is15HourOptionEnabled={is15HourOptionEnabled} />}
             </div>

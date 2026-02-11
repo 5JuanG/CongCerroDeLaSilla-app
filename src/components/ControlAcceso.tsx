@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { UserRole, View, Publisher, UserData, Permission, ALL_PERMISSIONS, MeetingConfig, SpecialEvent } from '../App';
+import { UserRole, View, Publisher, UserData, Permission } from '../types';
+import { ALL_PERMISSIONS, MeetingConfig, SpecialEvent } from '../constants';
 
 declare const db: any;
 declare const firebase: any;
@@ -140,7 +141,7 @@ const LinkPublisherModal: React.FC<{
             onClose();
         }
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
@@ -172,12 +173,12 @@ const LinkPublisherModal: React.FC<{
 };
 
 
-const ControlAcceso: React.FC<ControlAccesoProps> = ({ 
+const ControlAcceso: React.FC<ControlAccesoProps> = ({
     users,
     publishers,
     committeeMembers: initialCommitteeMembers,
-    onUpdateUserPermissions, 
-    onUpdateServiceCommittee, 
+    onUpdateUserPermissions,
+    onUpdateServiceCommittee,
     onLinkUserToPublisher,
     isPublicReportFormEnabled,
     onUpdatePublicReportFormEnabled,
@@ -190,7 +191,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
     const [status, setStatus] = useState('');
     const [committeeMembers, setCommitteeMembers] = useState<string[]>(initialCommitteeMembers);
     const [committeeCandidates, setCommitteeCandidates] = useState<UserData[]>([]);
-    
+
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
     const [linkingUser, setLinkingUser] = useState<UserData | null>(null);
     const [enableReset, setEnableReset] = useState(false);
@@ -221,7 +222,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
             setLocalMeetingConfig(JSON.parse(JSON.stringify(meetingConfig)));
         }
     }, [meetingConfig]);
-    
+
     const handleMeetingConfigChange = (field: keyof MeetingConfig, value: any) => {
         if (!localMeetingConfig) return;
         setLocalMeetingConfig(prev => prev ? { ...prev, [field]: value } : null);
@@ -245,7 +246,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
         try {
             await onSaveMeetingConfig(localMeetingConfig);
             setStatus('¡Configuración de reuniones guardada!');
-        } catch(e) {
+        } catch (e) {
             setStatus('Error al guardar la configuración.');
         } finally {
             setTimeout(() => setStatus(''), 3000);
@@ -257,15 +258,15 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
         try {
             const userToUpdate = users.find(u => u.id === userId);
             const oldRole = userToUpdate?.role;
-    
+
             const userRef = db.collection('users').doc(userId);
-            
+
             const isNowPrivileged = newRole === 'admin' || newRole === 'secretario';
             const wasPrivileged = oldRole?.toLowerCase() === 'admin' || oldRole?.toLowerCase() === 'secretario';
-    
+
             // Always update the role
             const updatePayload: { role: UserRole; permissions?: Permission[] } = { role: newRole };
-    
+
             if (isNowPrivileged) {
                 // If promoting to admin/secretario, always grant all permissions
                 updatePayload.permissions = ALL_PERMISSIONS;
@@ -274,9 +275,9 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                 updatePayload.permissions = [];
             }
             // In other cases (e.g., publisher to helper), permissions are not touched here.
-            
+
             await userRef.update(updatePayload);
-    
+
             setStatus('¡Rol y permisos actualizados con éxito!');
         } catch (err) {
             console.error("Error updating role:", err);
@@ -285,7 +286,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
             setTimeout(() => setStatus(''), 3000);
         }
     };
-    
+
     const handleCommitteeMemberChange = (index: number, value: string) => {
         const newMembers = [...committeeMembers];
         newMembers[index] = value;
@@ -298,13 +299,13 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
             const finalMembers = [...new Set(committeeMembers.filter(id => id))];
             await onUpdateServiceCommittee(finalMembers);
             setStatus('¡Comité de Servicio actualizado con éxito!');
-        } catch(e) {
+        } catch (e) {
             setStatus('Error al guardar el comité.');
         } finally {
             setTimeout(() => setStatus(''), 3000);
         }
     };
-    
+
     const handleSavePermissions = async (userId: string, permissions: Permission[]) => {
         setStatus(`Guardando permisos...`);
         try {
@@ -317,13 +318,13 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
             setTimeout(() => setStatus(''), 3000);
         }
     };
-    
+
     const handleLink = async (userId: string, publisherId: string) => {
         setStatus('Enlazando usuario con publicador...');
         try {
             await onLinkUserToPublisher(userId, publisherId);
             setStatus('¡Usuario enlazado correctamente!');
-        } catch(err) {
+        } catch (err) {
             setStatus('Error al enlazar el usuario.');
         } finally {
             setTimeout(() => setStatus(''), 3000);
@@ -356,16 +357,16 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                                     <select value={localMeetingConfig.midweekDay} onChange={e => handleMeetingConfigChange('midweekDay', Number(e.target.value))} className="p-2 border rounded-md w-full">
                                         {dayOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                                     </select>
-                                    <input type="time" value={localMeetingConfig.midweekTime} onChange={e => handleMeetingConfigChange('midweekTime', e.target.value)} className="p-2 border rounded-md"/>
+                                    <input type="time" value={localMeetingConfig.midweekTime} onChange={e => handleMeetingConfigChange('midweekTime', e.target.value)} className="p-2 border rounded-md" />
                                 </div>
                             </div>
                             <div>
                                 <h3 className="font-semibold text-gray-800 mb-2">Reunión de fin de semana</h3>
                                 <div className="flex gap-4">
-                                     <select value={localMeetingConfig.weekendDay} onChange={e => handleMeetingConfigChange('weekendDay', Number(e.target.value))} className="p-2 border rounded-md w-full">
+                                    <select value={localMeetingConfig.weekendDay} onChange={e => handleMeetingConfigChange('weekendDay', Number(e.target.value))} className="p-2 border rounded-md w-full">
                                         {dayOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                                     </select>
-                                    <input type="time" value={localMeetingConfig.weekendTime} onChange={e => handleMeetingConfigChange('weekendTime', e.target.value)} className="p-2 border rounded-md"/>
+                                    <input type="time" value={localMeetingConfig.weekendTime} onChange={e => handleMeetingConfigChange('weekendTime', e.target.value)} className="p-2 border rounded-md" />
                                 </div>
                             </div>
                         </div>
@@ -373,8 +374,8 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                         <div>
                             <h3 className="font-semibold text-gray-800 mb-2">Eventos Especiales (sin reunión)</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-4">
-                                <input type="date" value={newEvent.date} onChange={e => setNewEvent(p => ({...p, date: e.target.value}))} className="p-2 border rounded-md"/>
-                                <input type="text" value={newEvent.description} onChange={e => setNewEvent(p => ({...p, description: e.target.value}))} placeholder="Descripción (Ej: Asamblea)" className="p-2 border rounded-md"/>
+                                <input type="date" value={newEvent.date} onChange={e => setNewEvent(p => ({ ...p, date: e.target.value }))} className="p-2 border rounded-md" />
+                                <input type="text" value={newEvent.description} onChange={e => setNewEvent(p => ({ ...p, description: e.target.value }))} placeholder="Descripción (Ej: Asamblea)" className="p-2 border rounded-md" />
                                 <button onClick={handleAddEvent} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Añadir Evento</button>
                             </div>
                             <ul className="space-y-2 max-h-40 overflow-y-auto">
@@ -446,7 +447,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                     </label>
                 </div>
             </div>
-            
+
             <div>
                 <h2 className="text-xl font-bold text-blue-700 mb-2">Roles y Permisos de Usuarios</h2>
                 <p className="text-sm text-gray-500 mb-4">Asigne roles y permisos. Solo Administradores y Secretarios pueden hacer cambios.</p>
@@ -476,7 +477,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-center space-x-4">
                                                 {!linkedPublisher && <button onClick={() => setLinkingUser(user)} disabled={!canManage} className="font-medium text-green-600 hover:underline disabled:text-gray-400">Enlazar con Publicador</button>}
-                                                
+
                                                 {isPrivileged ? (
                                                     <span className="text-xs italic text-gray-500">Todos los permisos (automático)</span>
                                                 ) : (
@@ -496,17 +497,17 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
 
             {currentUserRole === 'admin' && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg shadow-md">
-                     <h2 className="text-xl font-bold text-red-800 mb-2">Zona de Peligro</h2>
-                     <p className="text-sm text-red-700 mb-4">Esta acción es irreversible y borrará permanentemente todos los datos de la congregación.</p>
-                     <div className="flex items-center space-x-4">
-                         <label className="flex items-center space-x-2 cursor-pointer">
-                             <input type="checkbox" checked={enableReset} onChange={e => setEnableReset(e.target.checked)} className="h-5 w-5 rounded" />
-                             <span className="font-medium text-red-800">Habilitar borrado de datos</span>
-                         </label>
-                         <button onClick={onResetData} disabled={!enableReset} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed">
+                    <h2 className="text-xl font-bold text-red-800 mb-2">Zona de Peligro</h2>
+                    <p className="text-sm text-red-700 mb-4">Esta acción es irreversible y borrará permanentemente todos los datos de la congregación.</p>
+                    <div className="flex items-center space-x-4">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" checked={enableReset} onChange={e => setEnableReset(e.target.checked)} className="h-5 w-5 rounded" />
+                            <span className="font-medium text-red-800">Habilitar borrado de datos</span>
+                        </label>
+                        <button onClick={onResetData} disabled={!enableReset} className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed">
                             Limpiar Todos los Datos
-                         </button>
-                     </div>
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

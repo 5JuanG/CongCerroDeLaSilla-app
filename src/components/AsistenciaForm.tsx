@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AsistenciaData, AttendanceRecord, MONTHS } from '../App';
+import { AsistenciaData, AttendanceRecord } from '../types';
+import { MONTHS } from '../constants';
 
 interface AsistenciaFormProps {
     attendanceRecords: AttendanceRecord[];
@@ -22,7 +23,7 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
         const { name, value } = e.target;
         setAttendance(prev => ({ ...prev, [name]: value }));
     };
-    
+
     const calculateTotals = useCallback(() => {
         const calculateRow = (prefix: 'es' | 'fs') => {
             let total = 0;
@@ -48,7 +49,7 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
             fs_promedio: fs.average
         });
     }, [attendance]);
-    
+
     useEffect(() => {
         calculateTotals();
     }, [calculateTotals]);
@@ -81,11 +82,11 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
             clearForm();
         }
     }, [ano, mes, attendanceRecords, clearForm]);
-    
+
     useEffect(() => {
         loadDataForMonth();
     }, [loadDataForMonth]);
-    
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!mes || !ano) {
@@ -104,7 +105,7 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
             setIsSaving(false);
         }
     };
-    
+
     const inputClasses = "w-full p-2 box-border border border-gray-300 rounded-md text-center";
     const readonlyInputClasses = `${inputClasses} bg-gray-200 font-bold border-gray-300 cursor-not-allowed`;
 
@@ -112,12 +113,12 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
         <div className="container mx-auto max-w-4xl bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">INFORME DE ASISTENCIA A LAS REUNIONES</h2>
             <p className="text-center text-gray-600 text-sm mb-6">(La asistencia se contará una sola vez a mitad de cada reunión. Recuerden contar también a las personas aisladas o confinadas en casa que estén conectadas).</p>
-            
+
             <div className="mb-4">
                 <label className="block mb-1 font-bold text-gray-700">Nombre de la congregación:</label>
                 <input type="text" value="Cong. Cerro de La Silla Guadalupe" readOnly className={readonlyInputClasses.replace('text-center', 'text-left')} />
             </div>
-            
+
             <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>
@@ -146,20 +147,20 @@ const AsistenciaForm: React.FC<AsistenciaFormProps> = ({ attendanceRecords, onSa
                         <tbody>
                             <tr>
                                 <td className="p-2 border border-gray-300 font-bold">Reunión de entre semana</td>
-                                {([...Array(5)] as number[]).map((_, i) => <td key={i} className="p-1 border border-gray-300"><input type="number" name={`es_sem${i+1}`} value={attendance[`es_sem${i+1}` as keyof AsistenciaData]} onChange={handleInputChange} className={inputClasses} /></td>)}
+                                {([...Array(5)] as number[]).map((_, i) => <td key={i} className="p-1 border border-gray-300"><input type="number" name={`es_sem${i + 1}`} value={attendance[`es_sem${i + 1}` as keyof AsistenciaData]} onChange={handleInputChange} className={inputClasses} /></td>)}
                                 <td className="p-1 border border-gray-300"><input type="text" value={totals.es_total} readOnly className={readonlyInputClasses} /></td>
                                 <td className="p-1 border border-gray-300"><input type="text" value={totals.es_promedio} readOnly className={readonlyInputClasses} /></td>
                             </tr>
                             <tr>
                                 <td className="p-2 border border-gray-300 font-bold">Reunión del fin de semana</td>
-                                {([...Array(5)] as number[]).map((_, i) => <td key={i} className="p-1 border border-gray-300"><input type="number" name={`fs_sem${i+1}`} value={attendance[`fs_sem${i+1}` as keyof AsistenciaData]} onChange={handleInputChange} className={inputClasses} /></td>)}
+                                {([...Array(5)] as number[]).map((_, i) => <td key={i} className="p-1 border border-gray-300"><input type="number" name={`fs_sem${i + 1}`} value={attendance[`fs_sem${i + 1}` as keyof AsistenciaData]} onChange={handleInputChange} className={inputClasses} /></td>)}
                                 <td className="p-1 border border-gray-300"><input type="text" value={totals.fs_total} readOnly className={readonlyInputClasses} /></td>
                                 <td className="p-1 border border-gray-300"><input type="text" value={totals.fs_promedio} readOnly className={readonlyInputClasses} /></td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                
+
                 <div className="text-center mt-8">
                     <button type="submit" disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 disabled:bg-gray-400">
                         {isSaving ? 'Guardando...' : 'Guardar / Actualizar'}

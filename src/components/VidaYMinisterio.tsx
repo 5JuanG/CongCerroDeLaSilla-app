@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, forwardRef } from 'react';
-import { Publisher, LMMeetingSchedule, ModalInfo, LMWeekAssignment, MONTHS } from '../App';
+import { Publisher, LMMeetingSchedule, ModalInfo, LMWeekAssignment } from '../types';
+import { MONTHS } from '../constants';
 
 declare const jspdf: any;
 declare const html2canvas: any;
@@ -858,7 +859,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
     };
 
     const ReminderButton = ({ publisherId, details }: { publisherId: string, details: any }) => {
-        if (!publisherId) return null;
+        if (!publisherId || !canConfig) return null;
         return (
             <button
                 onClick={() => handleSendReminder(publisherId, details)}
@@ -961,7 +962,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             <div className="bg-white p-6 rounded-lg shadow-md">
                 {canConfig && (
                     <div className="mb-4 border-b border-gray-200">
-                        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                        <nav className="-mb-px flex space-x-8 overflow-x-auto scrollbar-hide pb-0.5" aria-label="Tabs">
                             <button onClick={() => setActiveTab('schedule')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'schedule' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Programa</button>
                             <button onClick={() => setActiveTab('config')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'config' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Configuración</button>
                         </nav>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AttendanceRecord, AsistenciaData, SERVICE_YEAR_MONTHS, MONTHS as CALENDAR_YEAR_MONTHS } from '../App';
+import { AttendanceRecord, AsistenciaData } from '../types';
+import { SERVICE_YEAR_MONTHS, MONTHS as CALENDAR_YEAR_MONTHS } from '../constants';
 
 // Define month orders as constants to prevent typos and ensure consistency.
 
@@ -49,19 +50,19 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
     useEffect(() => {
         if (selectedYear > 0 && attendanceRecords) {
             setStatus('Procesando datos...');
-            
+
             const processDataForServiceYear = (endYear: number): YearData => {
                 const startYear = endYear - 1;
-                
+
                 const data: YearData = { entreSemana: {}, finDeSemana: {} };
 
                 SERVICE_YEAR_MONTHS.forEach((month, index) => {
                     const calendarYear = index < 4 ? startYear : endYear;
                     const record = attendanceRecords.find(r => r.ano === calendarYear && r.mes === month);
-                    
+
                     const calculateMonthData = (prefix: 'es' | 'fs'): MonthData => {
                         if (!record) return { numReuniones: 0, asistenciaTotal: 0, promedioSemanal: '' };
-                        
+
                         let total = 0;
                         let count = 0;
                         for (let i = 1; i <= 5; i++) {
@@ -93,12 +94,12 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                 year1Data: processDataForServiceYear(selectedYear),
                 year2Data: processDataForServiceYear(selectedYear + 1)
             };
-            
+
             setReportData(newReportData);
             setStatus('');
         }
     }, [selectedYear, attendanceRecords]);
-    
+
     const handleEdit = () => {
         setEditableData(JSON.parse(JSON.stringify(reportData)));
         setIsEditing(true);
@@ -115,7 +116,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
             const newData = JSON.parse(JSON.stringify(prev));
             const numValue = parseInt(value, 10);
             newData[yearKey][type][month][field] = isNaN(numValue) || numValue < 0 ? 0 : numValue;
-            
+
             const { numReuniones, asistenciaTotal } = newData[yearKey][type][month];
             newData[yearKey][type][month].promedioSemanal = numReuniones > 0 ? (asistenciaTotal / numReuniones).toFixed(2) : '';
 
@@ -150,14 +151,14 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                     const monthData = editableData.year1Data[type][month];
                     const prefix = type === 'entreSemana' ? 'es' : 'fs';
 
-                    const originalTotal = [1,2,3,4,5].reduce((sum, i) => sum + (parseInt(newRecordData[`${prefix}_sem${i}` as keyof AsistenciaData]) || 0), 0);
+                    const originalTotal = [1, 2, 3, 4, 5].reduce((sum, i) => sum + (parseInt(newRecordData[`${prefix}_sem${i}` as keyof AsistenciaData]) || 0), 0);
                     if (originalTotal !== monthData.asistenciaTotal) hasChanged = true;
 
                     const numMeetings = monthData.numReuniones;
                     const total = monthData.asistenciaTotal;
                     const baseAttendance = numMeetings > 0 ? Math.floor(total / numMeetings) : 0;
                     let remainder = numMeetings > 0 ? total % numMeetings : 0;
-                    
+
                     for (let i = 1; i <= 5; i++) {
                         const key = `${prefix}_sem${i}` as keyof AsistenciaData;
                         if (i <= numMeetings) {
@@ -188,15 +189,15 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                 (['entreSemana', 'finDeSemana'] as const).forEach(type => {
                     const monthData = editableData.year2Data[type][month];
                     const prefix = type === 'entreSemana' ? 'es' : 'fs';
-                    
-                    const originalTotal = [1,2,3,4,5].reduce((sum, i) => sum + (parseInt(newRecordData[`${prefix}_sem${i}` as keyof AsistenciaData]) || 0), 0);
+
+                    const originalTotal = [1, 2, 3, 4, 5].reduce((sum, i) => sum + (parseInt(newRecordData[`${prefix}_sem${i}` as keyof AsistenciaData]) || 0), 0);
                     if (originalTotal !== monthData.asistenciaTotal) hasChanged = true;
-                    
+
                     const numMeetings = monthData.numReuniones;
                     const total = monthData.asistenciaTotal;
                     const baseAttendance = numMeetings > 0 ? Math.floor(total / numMeetings) : 0;
                     let remainder = numMeetings > 0 ? total % numMeetings : 0;
-                    
+
                     for (let i = 1; i <= 5; i++) {
                         const key = `${prefix}_sem${i}` as keyof AsistenciaData;
                         if (i <= numMeetings) {
@@ -208,9 +209,9 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                 });
                 if (hasChanged) recordsToUpdate.push(newRecordData);
             });
-            
+
             if (recordsToUpdate.length > 0) {
-               await onBatchUpdateAttendance(recordsToUpdate);
+                await onBatchUpdateAttendance(recordsToUpdate);
             }
             // Success modal handled by parent
             setIsEditing(false);
@@ -228,7 +229,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
             alert("No hay registros de asistencia para exportar.");
             return;
         }
-        
+
         const sortedRecords = [...attendanceRecords].sort((a, b) => {
             if (a.ano !== b.ano) return a.ano - b.ano;
             return CALENDAR_YEAR_MONTHS.indexOf(a.mes) - CALENDAR_YEAR_MONTHS.indexOf(b.mes);
@@ -285,7 +286,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
         if (content) {
             setStatus("Generando PDF...");
             content.classList.add('pdf-export');
-            
+
             // @ts-ignore
             html2canvas(content, { scale: 2 }).then(canvas => {
                 // @ts-ignore
@@ -304,27 +305,27 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                     height = pdfHeight - 20;
                     width = height * ratio;
                 }
-                
+
                 let positionX = (pdfWidth - width) / 2;
                 let positionY = (pdfHeight - height) / 2;
 
                 pdf.addImage(imgData, 'PNG', positionX, positionY, width, height);
                 pdf.save(`Reporte_Asistencia_${selectedYear}.pdf`);
                 setStatus("PDF generado. Revisa tus descargas.");
-                 content.classList.remove('pdf-export');
+                content.classList.remove('pdf-export');
             }).catch(err => {
-                 setStatus("Error al generar PDF: " + err.message);
-                 content.classList.remove('pdf-export');
+                setStatus("Error al generar PDF: " + err.message);
+                content.classList.remove('pdf-export');
             });
         }
     };
-    
+
     const renderTable = (type: 'entreSemana' | 'finDeSemana', data: ReportData) => {
         let totalReunionesY1 = 0, totalAsistenciaY1 = 0;
         let totalReunionesY2 = 0, totalAsistenciaY2 = 0;
-        
+
         const defaultMonthData: MonthData = { numReuniones: 0, asistenciaTotal: 0, promedioSemanal: '' };
-        
+
         const dataToRender = isEditing && editableData ? editableData : data;
 
         const rows = SERVICE_YEAR_MONTHS.map(month => {
@@ -337,12 +338,12 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
             return (
                 <tr key={month}>
                     <td className="p-2 border border-gray-300 font-bold text-left" translate="no">{month}</td>
-                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d1.numReuniones} onChange={e => handleDataChange('year1Data', type, month, 'numReuniones', e.target.value)} className="w-16 p-1 text-center border rounded"/> : (d1.numReuniones || '')}</td>
-                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d1.asistenciaTotal} onChange={e => handleDataChange('year1Data', type, month, 'asistenciaTotal', e.target.value)} className="w-20 p-1 text-center border rounded"/> : (d1.asistenciaTotal || '')}</td>
+                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d1.numReuniones} onChange={e => handleDataChange('year1Data', type, month, 'numReuniones', e.target.value)} className="w-16 p-1 text-center border rounded" /> : (d1.numReuniones || '')}</td>
+                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d1.asistenciaTotal} onChange={e => handleDataChange('year1Data', type, month, 'asistenciaTotal', e.target.value)} className="w-20 p-1 text-center border rounded" /> : (d1.asistenciaTotal || '')}</td>
                     <td className="p-2 border border-gray-300 font-semibold border-r-2 border-r-gray-500">{d1.promedioSemanal || ''}</td>
                     <td className="p-2 border border-gray-300 font-bold text-left" translate="no">{month}</td>
-                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d2.numReuniones} onChange={e => handleDataChange('year2Data', type, month, 'numReuniones', e.target.value)} className="w-16 p-1 text-center border rounded"/> : (d2.numReuniones || '')}</td>
-                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d2.asistenciaTotal} onChange={e => handleDataChange('year2Data', type, month, 'asistenciaTotal', e.target.value)} className="w-20 p-1 text-center border rounded"/> : (d2.asistenciaTotal || '')}</td>
+                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d2.numReuniones} onChange={e => handleDataChange('year2Data', type, month, 'numReuniones', e.target.value)} className="w-16 p-1 text-center border rounded" /> : (d2.numReuniones || '')}</td>
+                    <td className="p-2 border border-gray-300">{isEditing ? <input type="number" value={d2.asistenciaTotal} onChange={e => handleDataChange('year2Data', type, month, 'asistenciaTotal', e.target.value)} className="w-20 p-1 text-center border rounded" /> : (d2.asistenciaTotal || '')}</td>
                     <td className="p-2 border border-gray-300 font-semibold">{d2.promedioSemanal || ''}</td>
                 </tr>
             );
@@ -350,7 +351,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
 
         const avgY1 = totalReunionesY1 > 0 ? (totalAsistenciaY1 / totalReunionesY1).toFixed(2) : '0.00';
         const avgY2 = totalReunionesY2 > 0 ? (totalAsistenciaY2 / totalReunionesY2).toFixed(2) : '0.00';
-        
+
         const footer = (
             <tr className="bg-gray-50 font-bold">
                 <td colSpan={2} className="p-2 border border-gray-300 text-left">Totales Anuales</td>
@@ -377,7 +378,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                             <th className="p-2 border border-gray-300 align-middle">Número de reuniones</th>
                             <th className="p-2 border border-gray-300 align-middle">Asistencia total</th>
                             <th className="p-2 border border-gray-300 border-r-2 border-r-gray-500 align-middle">Promedio de asistencia semanal</th>
-                            
+
                             <th className="p-2 border border-gray-300 text-center align-middle">
                                 Año de servicio
                                 <span className="block text-lg font-bold text-blue-700 leading-tight">{year2End}</span>
@@ -404,14 +405,14 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
             </div>
-            
+
             <div id="pdf-content" ref={pdfContentRef}>
                 <h1 className="text-2xl font-bold text-center mb-6">REGISTRO DE ASISTENCIA A LAS REUNIONES DE CONGREGACIÓN</h1>
                 {reportData ? (
                     <>
                         <h2 className="text-xl font-semibold border-b-2 pb-2 mb-4">Reunión de entre semana</h2>
                         {renderTable('entreSemana', reportData)}
-                        
+
                         <h2 className="text-xl font-semibold border-b-2 pb-2 mt-8 mb-4">Reunión del fin de semana</h2>
                         {renderTable('finDeSemana', reportData)}
                     </>
@@ -422,7 +423,7 @@ const AsistenciaReporte: React.FC<AsistenciaReporteProps> = ({ attendanceRecords
                 {isEditing ? (
                     <>
                         <button onClick={handleSave} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300 disabled:bg-gray-400">
-                           {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                            {isSaving ? 'Guardando...' : 'Guardar Cambios'}
                         </button>
                         <button onClick={handleCancel} disabled={isSaving} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300">Cancelar</button>
                     </>

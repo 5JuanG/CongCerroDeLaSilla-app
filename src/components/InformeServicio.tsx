@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Publisher, ServiceReport, InvitationContent, MONTHS } from '../App';
+import { Publisher, ServiceReport, InvitationContent } from '../types';
+import { MONTHS } from '../constants';
 
 interface PublishersData {
     [group: string]: Publisher[];
@@ -42,16 +43,16 @@ const InvitationModal: React.FC<{
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="p-5 text-center">
-                     <h2 className="text-2xl font-bold text-blue-700">¡Gracias por tu informe!</h2>
-                     <p className="text-gray-600 mt-2">Tu servicio fiel es muy valioso. ¿Has considerado ampliar tu ministerio?</p>
+                    <h2 className="text-2xl font-bold text-blue-700">¡Gracias por tu informe!</h2>
+                    <p className="text-gray-600 mt-2">Tu servicio fiel es muy valioso. ¿Has considerado ampliar tu ministerio?</p>
                 </div>
                 <div className="relative w-full h-64 bg-gray-200">
                     {slides.map((slide, index) => (
                         <div key={index} className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? 'opacity-100' : 'opacity-0'}`}>
-                             <img src={slide.imageUrl} alt="Inspirational" className="w-full h-full object-cover"/>
-                             <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                            <img src={slide.imageUrl} alt="Inspirational" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
                                 <p className="text-white text-xl text-center font-semibold">{slide.text}</p>
-                             </div>
+                            </div>
                         </div>
                     ))}
                     {slides.length > 1 && (
@@ -61,11 +62,11 @@ const InvitationModal: React.FC<{
                         </>
                     )}
                 </div>
-                 <div className="p-6 text-center">
+                <div className="p-6 text-center">
                     <button onClick={onApply} className="w-full p-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-transform transform hover:scale-105">
                         ¡Quiero ser precursor auxiliar!
                     </button>
-                     <button onClick={onClose} className="mt-3 text-gray-500 hover:text-gray-700 text-sm">
+                    <button onClick={onClose} className="mt-3 text-gray-500 hover:text-gray-700 text-sm">
                         Quizás en otra ocasión
                     </button>
                 </div>
@@ -88,7 +89,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
     const [notas, setNotas] = useState('');
     const [status, setStatus] = useState({ message: '', type: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+
     const [showInvitationModal, setShowInvitationModal] = useState(false);
     const [invitationDetails, setInvitationDetails] = useState<InvitationDetails>({ month: '', year: 0 });
 
@@ -104,7 +105,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
     }, [publishers]);
 
     const grupos = useMemo(() => Object.keys(publishersData).sort(), [publishersData]);
-    
+
     const publicadoresEnGrupo = useMemo(() => {
         const publishersInGroup = publishersData[grupo] || [];
         // Sort publishers alphabetically
@@ -116,7 +117,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
             return 0;
         });
     }, [publishersData, grupo]);
-    
+
     const invitationSlides = (invitationContent && invitationContent.length > 0)
         ? invitationContent.map(item => ({ imageUrl: item.imageUrl, text: item.phrase }))
         : [
@@ -125,12 +126,12 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
             { imageUrl: `https://source.unsplash.com/random/800x600?group,friends,smile`, text: `¿Has pensado en ser precursor auxiliar? ¡Es una meta excelente!` },
             { imageUrl: `https://source.unsplash.com/random/800x600?community,service`, text: 'Únete a otros en esta gozosa obra. ¡Tu ayuda es muy valiosa!' }
         ];
-        
+
     useEffect(() => {
         if (idPublicador && mes && anio && serviceReports) {
-            const existingReport = serviceReports.find(r => 
-                r.idPublicador === idPublicador && 
-                r.mes === mes && 
+            const existingReport = serviceReports.find(r =>
+                r.idPublicador === idPublicador &&
+                r.mes === mes &&
                 r.anioCalendario === Number(anio)
             );
 
@@ -188,7 +189,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!idPublicador) {
             setStatus({ message: 'Por favor, seleccione su nombre.', type: 'error' });
             return;
@@ -212,7 +213,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
             await onSaveReport(reportData as Omit<ServiceReport, 'id'>);
 
             setStatus({ message: '¡Informe guardado con éxito!', type: 'success' });
-            
+
             if (isLoggedIn) {
                 const months = MONTHS;
                 const currentMonthIndex = months.indexOf(mes);
@@ -223,11 +224,11 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                     nextMonthIndex = 0;
                     nextYear = currentYear + 1;
                 }
-                
+
                 setInvitationDetails({ month: months[nextMonthIndex], year: nextYear });
                 setShowInvitationModal(true);
             }
-            
+
             resetForm();
             setTimeout(() => setStatus({ message: '', type: '' }), 5000);
 
@@ -282,7 +283,7 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                             </tbody>
                         </table>
 
-                         <div className="form-group mb-6">
+                        <div className="form-group mb-6">
                             <label className="label">Tipo de servicio (si reporta horas):</label>
                             <div className="grid grid-cols-2 gap-2 mt-2">
                                 {['Precursor Auxiliar', 'Precursor Regular', 'Precursor Especial', 'Misionero'].map(type => (
@@ -305,19 +306,18 @@ const InformeServicio: React.FC<InformeServicioProps> = ({ publishers, serviceRe
                     </form>
 
                     {status.message && (
-                        <div className={`text-center mt-4 p-3 rounded-md font-bold ${
-                            status.type === 'info' ? 'bg-blue-100 text-blue-800' : 
-                            status.type === 'success' ? 'bg-green-100 text-green-800' : 
-                            'bg-red-100 text-red-800'
-                        }`}>
+                        <div className={`text-center mt-4 p-3 rounded-md font-bold ${status.type === 'info' ? 'bg-blue-100 text-blue-800' :
+                                status.type === 'success' ? 'bg-green-100 text-green-800' :
+                                    'bg-red-100 text-red-800'
+                            }`}>
                             {status.message}
                         </div>
                     )}
                 </div>
-                 <style>{`.label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; } .input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }`}</style>
+                <style>{`.label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; } .input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }`}</style>
             </div>
             {showInvitationModal && (
-                <InvitationModal 
+                <InvitationModal
                     slides={invitationSlides}
                     onClose={() => {
                         setShowInvitationModal(false);
