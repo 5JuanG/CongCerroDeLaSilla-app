@@ -1026,6 +1026,7 @@ const App: React.FC = () => {
         const PUBLIC_NAV_ITEMS: { view: string; label: string }[] = [
             { view: 'home', label: 'Inicio' },
             { view: 'informeServicio', label: 'Informar Servicio' },
+            { view: 'precursorAuxiliar', label: 'Prec. Auxiliar' },
             { view: 'vidaYMinisterio', label: 'Prog. Vida y Ministerio' },
             { view: 'programaServiciosAuxiliares', label: 'Prog de Acomodadores' },
             { view: 'territorios', label: 'Territorios' },
@@ -1118,6 +1119,19 @@ const App: React.FC = () => {
                                 </button>
                             </div>
                         )}
+
+                        <div className="glass p-8 rounded-[2.5rem] shadow-xl text-center mb-12 border border-white/50 relative overflow-hidden group bg-gradient-to-br from-white to-amber-50/30">
+                            <div className="absolute top-0 left-0 w-64 h-64 bg-amber-500/5 rounded-full -ml-32 -mt-32 blur-3xl group-hover:bg-amber-500/10 transition-all"></div>
+                            <span className="inline-block p-4 bg-amber-500 text-white rounded-3xl text-3xl mb-4 shadow-lg shadow-amber-200 group-hover:rotate-12 transition-transform">✨</span>
+                            <h3 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">¿Deseas ser Precursor Auxiliar?</h3>
+                            <p className="text-slate-600 mb-8 max-w-lg mx-auto text-lg">Únete a los muchos hermanos que están expandiendo su ministerio. ¡Envía tu solicitud aquí mismo!</p>
+                            <button
+                                onClick={() => setPublicView('precursorAuxiliar')}
+                                className="px-12 py-5 bg-amber-500 text-white font-black rounded-2xl hover:bg-amber-600 transition-all transform hover:scale-[1.05] shadow-2xl shadow-amber-300 flex items-center justify-center mx-auto gap-3 uppercase tracking-widest text-sm"
+                            >
+                                Llenar Solicitud de Precursor
+                            </button>
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
                             <div className="glass p-8 rounded-[2rem] border border-white/40 shadow-xl flex flex-col items-center text-center group hover:border-blue-300 transition-all">
