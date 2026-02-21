@@ -542,41 +542,57 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                     const dayData = (draft?.predicacion as any)?.[day];
                                     const dayNames: any = { miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' };
                                     const pastoreoByDay = draft?.pastoreo?.filter(v => v.dia === dayNames[day]) || [];
+
+                                    const allDayEvents: any[] = [];
+                                    ['manana', 'tarde'].forEach(slice => {
+                                        if ((day === 'sabado' || day === 'domingo') && slice === 'tarde') return;
+                                        const sliceData = dayData?.[slice];
+                                        if (sliceData && (sliceData.lugar || sliceData.hora)) {
+                                            allDayEvents.push({ ...sliceData, type: 'preach', slice });
+                                        }
+                                    });
+                                    pastoreoByDay.forEach(v => {
+                                        allDayEvents.push({ ...v, type: 'pastoreo' });
+                                    });
+
+                                    // Sort by time
+                                    allDayEvents.sort((a, b) => (a.hora || '00:00').localeCompare(b.hora || '00:00'));
+
                                     return (
                                         <div key={day} className="bg-white/5 border border-white/10 rounded-[1.5rem] overflow-hidden">
                                             <div className="bg-cyan-800/40 p-4 flex items-center gap-3 border-b border-white/5">
                                                 <h4 className="text-white font-black text-lg uppercase tracking-tight">{dayNames[day]}</h4>
                                             </div>
                                             <div className="p-4 space-y-3">
-                                                {['manana', 'tarde'].map(slice => {
-                                                    if ((day === 'sabado' || day === 'domingo') && slice === 'tarde') return null;
-                                                    const sliceData = dayData?.[slice];
-                                                    if (!sliceData) return null;
-                                                    return (
-                                                        <div key={slice} className="bg-white/5 p-3 rounded-xl space-y-1">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-[10px] font-black text-cyan-400 uppercase tracking-wider">{slice === 'manana' ? 'Mañana' : 'Tarde'}</span>
-                                                                <span className="text-cyan-300 font-bold text-xs">{sliceData.hora || ''}</span>
+                                                {allDayEvents.map((event, idx) => {
+                                                    if (event.type === 'preach') {
+                                                        return (
+                                                            <div key={`${day}-preach-${event.slice}`} className="bg-white/5 p-3 rounded-xl space-y-1">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-[10px] font-black text-cyan-400 uppercase tracking-wider">{event.slice === 'manana' ? 'Mañana' : 'Tarde'}</span>
+                                                                    <span className="text-cyan-300 font-bold text-xs">{event.hora || ''}</span>
+                                                                </div>
+                                                                <p className="text-white font-bold text-sm leading-tight">📍 {event.lugar || '---'}</p>
+                                                                {event.direccion && <p className="text-slate-400 text-[10px] mt-1 leading-tight">{event.direccion}</p>}
+                                                                {event.capitan && <p className="text-slate-400 text-xs"><span className="text-amber-400 font-bold">Asignación:</span> {event.capitan}</p>}
+                                                                {event.publicadoresSC && <p className="text-slate-400 text-xs"><span className="text-blue-400 font-bold">Con SC:</span> {event.publicadoresSC}</p>}
+                                                                {event.publicadoresEsposa && <p className="text-slate-400 text-xs"><span className="text-pink-400 font-bold">Con esposa:</span> {event.publicadoresEsposa}</p>}
+                                                                {event.notas && <p className="text-slate-500 text-xs italic">{event.notas}</p>}
                                                             </div>
-                                                            <p className="text-white font-bold text-sm leading-tight">📍 {sliceData.lugar || '---'}</p>
-                                                            {sliceData.direccion && <p className="text-slate-400 text-[10px] mt-1 leading-tight">{sliceData.direccion}</p>}
-                                                            {sliceData.capitan && <p className="text-slate-400 text-xs"><span className="text-amber-400 font-bold">Asignación:</span> {sliceData.capitan}</p>}
-                                                            {sliceData.publicadoresSC && <p className="text-slate-400 text-xs"><span className="text-blue-400 font-bold">Con SC:</span> {sliceData.publicadoresSC}</p>}
-                                                            {sliceData.publicadoresEsposa && <p className="text-slate-400 text-xs"><span className="text-pink-400 font-bold">Con esposa:</span> {sliceData.publicadoresEsposa}</p>}
-                                                            {sliceData.notas && <p className="text-slate-500 text-xs italic">{sliceData.notas}</p>}
-                                                        </div>
-                                                    );
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <div key={`${day}-pastoreo-${idx}`} className="bg-purple-900/40 p-3 rounded-xl space-y-1 border border-purple-500/30">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider">Pastoreo</span>
+                                                                    <span className="text-purple-300 font-bold text-xs">{event.hora || '---'}</span>
+                                                                </div>
+                                                                <p className="text-white font-bold text-sm leading-tight">{event.familia}</p>
+                                                                <p className="text-slate-400 text-xs"><span className="text-purple-400 font-bold">Acompañante:</span> {getPublisherName(event.acompananteId)}</p>
+                                                            </div>
+                                                        );
+                                                    }
                                                 })}
-                                                {pastoreoByDay.map((v, idx) => (
-                                                    <div key={`pastoreo-${idx}`} className="bg-purple-900/40 p-3 rounded-xl space-y-1 border border-purple-500/30">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider">Pastoreo</span>
-                                                            <span className="text-purple-300 font-bold text-xs">{v.hora || '---'}</span>
-                                                        </div>
-                                                        <p className="text-white font-bold text-sm leading-tight">{v.familia}</p>
-                                                        <p className="text-slate-400 text-xs"><span className="text-purple-400 font-bold">Acompañante:</span> {getPublisherName(v.acompananteId)}</p>
-                                                    </div>
-                                                ))}
                                             </div>
                                         </div>
                                     );
