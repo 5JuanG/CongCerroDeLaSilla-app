@@ -65,9 +65,10 @@ interface PresentationViewProps {
     onClose: () => void;
     serviceReports: ServiceReport[];
     onDownload: () => void;
+    getPublisherName: (id: string) => string;
 }
 
-const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, selectedDate, onClose, serviceReports, onDownload }) => {
+const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, selectedDate, onClose, serviceReports, onDownload, getPublisherName }) => {
     const [step, setStep] = useState(0);
     const [cardFilters, setCardFilters] = useState({
         group: 'todos',
@@ -540,7 +541,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                 {['miercoles', 'jueves', 'viernes', 'sabado', 'domingo'].map(day => {
                                     const dayData = (draft?.predicacion as any)?.[day];
                                     const dayNames: any = { miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' };
-                                    const dayIcons: any = { miercoles: '🌿', jueves: '🌻', viernes: '✨', sabado: '🌅', domingo: '☀️' };
+                                    const pastoreoByDay = draft?.pastoreo?.filter(v => v.dia === dayNames[day]) || [];
                                     return (
                                         <div key={day} className="bg-white/5 border border-white/10 rounded-[1.5rem] overflow-hidden">
                                             <div className="bg-cyan-800/40 p-4 flex items-center gap-3 border-b border-white/5">
@@ -559,13 +560,23 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                                             </div>
                                                             <p className="text-white font-bold text-sm leading-tight">📍 {sliceData.lugar || '---'}</p>
                                                             {sliceData.direccion && <p className="text-slate-400 text-[10px] mt-1 leading-tight">{sliceData.direccion}</p>}
-                                                            {sliceData.capitan && <p className="text-slate-400 text-xs"><span className="text-amber-400 font-bold">Capitán de territorio:</span> {sliceData.capitan}</p>}
+                                                            {sliceData.capitan && <p className="text-slate-400 text-xs"><span className="text-amber-400 font-bold">Asignación:</span> {sliceData.capitan}</p>}
                                                             {sliceData.publicadoresSC && <p className="text-slate-400 text-xs"><span className="text-blue-400 font-bold">Con SC:</span> {sliceData.publicadoresSC}</p>}
                                                             {sliceData.publicadoresEsposa && <p className="text-slate-400 text-xs"><span className="text-pink-400 font-bold">Con esposa:</span> {sliceData.publicadoresEsposa}</p>}
                                                             {sliceData.notas && <p className="text-slate-500 text-xs italic">{sliceData.notas}</p>}
                                                         </div>
                                                     );
                                                 })}
+                                                {pastoreoByDay.map((v, idx) => (
+                                                    <div key={`pastoreo-${idx}`} className="bg-purple-900/40 p-3 rounded-xl space-y-1 border border-purple-500/30">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider">Pastoreo</span>
+                                                            <span className="text-purple-300 font-bold text-xs">{v.hora || '---'}</span>
+                                                        </div>
+                                                        <p className="text-white font-bold text-sm leading-tight">{v.familia}</p>
+                                                        <p className="text-slate-400 text-xs"><span className="text-purple-400 font-bold">Acompañante:</span> {getPublisherName(v.acompananteId)}</p>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     );
@@ -2050,6 +2061,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     onClose={() => setIsPresentationMode(false)}
                     serviceReports={serviceReports}
                     onDownload={handleDownloadFullVisitProgram}
+                    getPublisherName={getPublisherName}
                 />
             )}
         </div>
