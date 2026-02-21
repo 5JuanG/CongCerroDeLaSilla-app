@@ -52,6 +52,7 @@ const manageablePermissions: { label: string; items: { permission: Permission; l
             { permission: 'asignacionesReunion', label: 'Generar Prog. Acomodadores' },
             { permission: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
             { permission: 'reunionPublica', label: 'Reunión Pública' },
+            { permission: 'visitaSC', label: 'Visita del SC' },
         ]
     },
     {

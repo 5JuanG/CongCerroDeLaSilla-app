@@ -279,7 +279,7 @@ const PublicTalksScheduleCard: React.FC<{
                         <p className="text-2xl font-black">{new Date(upcomingTalk.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                         <div className="h-px bg-white/20 my-2"></div>
                         <p className="font-semibold text-lg">{upcomingTalk.speakerName}</p>
-                        <p className="text-purple-100 text-sm italic">"{upcomingTalk.talkNumber}. {DISCURSOS_PUBLICOS.find(t => t.number === upcomingTalk.talkNumber)?.title}"</p>
+                        <p className="text-purple-100 text-sm italic">"{upcomingTalk.talkNumber}. {schedule.talksCatalog?.find(t => t.number === upcomingTalk.talkNumber)?.title || DISCURSOS_PUBLICOS.find(t => t.number === upcomingTalk.talkNumber)?.title}"</p>
                         {upcomingTalk.song && <p className="text-white font-bold text-sm mt-1">Canción: {upcomingTalk.song}</p>}
                     </div>
                 </div>

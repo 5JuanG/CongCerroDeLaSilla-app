@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DISCURSOS_PUBLICOS } from './discursos';
-import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment } from '../types';
+import { PublicTalksSchedule, PublicTalkAssignment, Publisher, ModalInfo, OutgoingTalkAssignment, CustomTalk } from '../types';
 import { MONTHS } from '../constants';
 
 interface ReunionPublicaProps {
@@ -48,14 +48,31 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     const [isOutgoingModalOpen, setIsOutgoingModalOpen] = useState(false);
     const [editingOutgoingTalk, setEditingOutgoingTalk] = useState<Partial<OutgoingTalkAssignment> | null>(null);
 
+    const [talksCatalog, setTalksCatalog] = useState<CustomTalk[]>([]);
+    const [isManageTalksModalOpen, setIsManageTalksModalOpen] = useState(false);
+
     // --- State for Public View & Monthly Admin View ---
     const [viewYear, setViewYear] = useState(new Date().getFullYear());
     const [viewMonth, setViewMonth] = useState(MONTHS[new Date().getMonth()]);
 
 
     useEffect(() => {
+        // Determine catalog
+        let currentCatalog: CustomTalk[] = [];
+        if (schedule.talksCatalog && schedule.talksCatalog.length > 0) {
+            currentCatalog = schedule.talksCatalog;
+        } else {
+            currentCatalog = DISCURSOS_PUBLICOS.map(t => ({
+                number: t.number,
+                title: t.title,
+                isActive: t.title !== '(No usar)'
+            }));
+        }
+        setTalksCatalog(currentCatalog);
+
         const fullSchedule: PublicTalksSchedule = {
-            publicVisibility: schedule.publicVisibility || {}
+            publicVisibility: schedule.publicVisibility || {},
+            talksCatalog: currentCatalog
         };
 
         // FIX: Replaced reduce with a for loop for better type safety and readability when calculating max length.
@@ -67,7 +84,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         }
         const requiredLength = Math.max(maxLength, (yearPage + 1) * YEARS_PER_PAGE);
 
-        DISCURSOS_PUBLICOS.forEach(talk => {
+        currentCatalog.forEach(talk => {
             const talkKey = talk.number.toString();
             const existingAssignments = schedule[talkKey] || [];
 
@@ -84,7 +101,11 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     }, [schedule, yearPage]);
 
     const filteredDiscursos = useMemo(() => {
-        let talks = [...DISCURSOS_PUBLICOS];
+        // Use catalog but map to format expected by filters if needed, or just use catalog
+        // We filter out inactive talks for the planner view unless they have assignments or date filter is active?
+        // User wants to see them if they are in the planner.
+        // For now, let's show all, but we might want to visually indicate inactive ones.
+        let talks = [...talksCatalog];
 
         if (dateFilter) {
             const talkNumbersOnDate = new Set<number>();
@@ -113,7 +134,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         }
 
         return talks;
-    }, [searchQuery, categoryFilter, dateFilter, localSchedule]);
+    }, [searchQuery, categoryFilter, dateFilter, localSchedule, talksCatalog]);
 
     const handleSlotClick = (talkNumber: number, slotIndex: number) => {
         const currentData = localSchedule[talkNumber.toString()]?.[slotIndex] || {};
@@ -161,6 +182,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         try {
             const scheduleToSave: PublicTalksSchedule = {
                 ...localSchedule,
+                talksCatalog: talksCatalog,
                 outgoingTalks: localOutgoingSchedule,
                 publicVisibility: localSchedule.publicVisibility
             };
@@ -290,7 +312,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
 
     const WhatsAppShareModal: React.FC<{ talkNumber: number; data: PublicTalkAssignment; onClose: () => void; }> = ({ talkNumber, data, onClose }) => {
         const [hospitality, setHospitality] = useState('no_ha_confirmado');
-        const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talkNumber);
+        const talkInfo = talksCatalog.find(t => t.number === talkNumber);
 
         const generateMessage = () => {
             let hospitalityText = '';
@@ -356,7 +378,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         if (!isModalOpen || !editingSlot) return null;
 
         const [formData, setFormData] = useState<Partial<PublicTalkAssignment>>(editingSlot.data);
-        const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === editingSlot.talkNumber);
+        const talkInfo = talksCatalog.find(t => t.number === editingSlot.talkNumber);
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -417,6 +439,101 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         );
     };
 
+
+    const ManageTalksModal = () => {
+        if (!isManageTalksModalOpen) return null;
+
+        const [localCatalog, setLocalCatalog] = useState<CustomTalk[]>(talksCatalog);
+        const [filter, setFilter] = useState('');
+
+        const handleCatalogChange = (index: number, field: keyof CustomTalk, value: any) => {
+            const newCatalog = [...localCatalog];
+            newCatalog[index] = { ...newCatalog[index], [field]: value };
+            setLocalCatalog(newCatalog);
+        };
+
+        const handleAddNew = () => {
+            const maxNum = Math.max(...localCatalog.map(t => t.number), 0);
+            setLocalCatalog([...localCatalog, { number: maxNum + 1, title: 'Nuevo Discurso', isActive: true }]);
+        };
+
+        const handleSaveStart = () => {
+            setTalksCatalog(localCatalog);
+            // We also need to update localSchedule structure if new talks were added, 
+            // but the useEffect dependency on talksCatalog is not there (it's on schedule).
+            // However, handleSaveChanges uses talksCatalog state, so it will be saved correctly.
+            // But to see the new talk in the grid immediately, we might need to force update localSchedule.
+            // For now, let's just close. The user can hit "Guardar Cambios" to persist.
+            setIsManageTalksModalOpen(false);
+        };
+
+        const filteredCatalog = localCatalog.filter(t =>
+            t.title.toLowerCase().includes(filter.toLowerCase()) ||
+            t.number.toString().includes(filter)
+        );
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-[70] p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                        <h3 className="text-xl font-bold text-gray-800">Gestionar Temas de Discursos</h3>
+                        <button onClick={() => setIsManageTalksModalOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+                    </div>
+
+                    <div className="p-4 border-b">
+                        <input
+                            type="text"
+                            placeholder="Buscar tema..."
+                            className="w-full p-2 border rounded-md"
+                            value={filter}
+                            onChange={e => setFilter(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                        {filteredCatalog.map((talk, index) => {
+                            // find index in original array to update correctly
+                            const originalIndex = localCatalog.findIndex(t => t.number === talk.number);
+                            return (
+                                <div key={talk.number} className={`flex items-center gap-3 p-3 rounded-lg border ${talk.isActive ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-200 opacity-75'}`}>
+                                    <div className="font-bold text-blue-600 w-10 text-center">{talk.number}</div>
+                                    <input
+                                        type="text"
+                                        value={talk.title}
+                                        onChange={(e) => handleCatalogChange(originalIndex, 'title', e.target.value)}
+                                        className="flex-1 p-1 border rounded focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <label className="flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={talk.isActive}
+                                            onChange={(e) => handleCatalogChange(originalIndex, 'isActive', e.target.checked)}
+                                            className="mr-2 h-4 w-4"
+                                        />
+                                        <span className="text-sm select-none">{talk.isActive ? 'Activo' : 'Inactivo'}</span>
+                                    </label>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="p-4 border-t bg-gray-50 rounded-b-lg flex justify-between items-center">
+                        <button
+                            onClick={handleAddNew}
+                            className="px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700"
+                        >
+                            + Agregar Nuevo
+                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setIsManageTalksModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded-lg text-gray-700">Cancelar</button>
+                            <button onClick={handleSaveStart} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Aplicar Cambios</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const displayedYears = Array.from({ length: YEARS_PER_PAGE }, (_, i) => START_YEAR + yearPage * YEARS_PER_PAGE + i);
 
     const LocalSpeakersView = () => {
@@ -428,11 +545,24 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         const [monthFilter, setMonthFilter] = useState('');
         const [yearFilter, setYearFilter] = useState<number | ''>('');
         const [speakerFilter, setSpeakerFilter] = useState('');
+        const [localAvailability, setLocalAvailability] = useState<string>('');
 
-        const speakers = useMemo(() =>
-            publishers.filter(p => p.Sexo === 'Hombre' && (p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial'))
-                .sort((a, b) => a.Nombre.localeCompare(b.Nombre)),
-            [publishers]);
+
+        const speakers = useMemo(() => {
+            const filtered = publishers.filter(p => {
+                // Must be male and have privilege
+                const isQualified = p.Sexo === 'Hombre' && (p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial');
+                if (!isQualified) return false;
+
+                // Check if qualified to give talks - it's stored in asignacionesDisponibles array
+                const assignments = p.asignacionesDisponibles || [];
+                const hasQualification = assignments.includes('Califica para Discursar');
+
+                return hasQualification;
+            });
+            console.log(`Total speakers qualified to give talks: ${filtered.length}`);
+            return filtered.sort((a, b) => a.Nombre.localeCompare(b.Nombre));
+        }, [publishers]);
 
         const filteredSpeakers = useMemo(() =>
             speakers.filter(s => `${s.Nombre} ${s.Apellido}`.toLowerCase().includes(filterText.toLowerCase())),
@@ -443,6 +573,13 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
             publishers.find(p => p.id === selectedSpeakerId),
             [publishers, selectedSpeakerId]
         );
+
+        // Update local availability when speaker changes
+        useEffect(() => {
+            if (selectedSpeaker) {
+                setLocalAvailability(selectedSpeaker.availabilityDetails || '');
+            }
+        }, [selectedSpeaker]);
 
         // --- Logic for Global View ---
         const getSpeakerName = (id: string) => {
@@ -507,11 +644,12 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
         const availableTalksToAdd = useMemo(() => {
             if (!talkSearch) return [];
             const searchLower = talkSearch.toLowerCase();
-            return DISCURSOS_PUBLICOS.filter(d =>
+            return talksCatalog.filter(d =>
+                (d.isActive) &&
                 (d.number.toString().startsWith(searchLower) || d.title.toLowerCase().includes(searchLower)) &&
                 !selectedSpeaker?.preparedTalks?.includes(d.number)
-            ).slice(0, 5);
-        }, [talkSearch, selectedSpeaker]);
+            ).slice(0, 50);
+        }, [talkSearch, selectedSpeaker, talksCatalog]);
 
 
         return (
@@ -605,7 +743,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                 <div className="space-y-2">
                                     {selectedSpeaker.preparedTalks && selectedSpeaker.preparedTalks.length > 0 ? (
                                         selectedSpeaker.preparedTalks.map(talkNum => {
-                                            const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talkNum);
+                                            const talkInfo = talksCatalog.find(t => t.number === talkNum);
                                             return (
                                                 <div key={talkNum} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
                                                     <div className="flex items-center gap-3">
@@ -630,6 +768,22 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                         <p className="text-sm text-gray-500 italic">No hay temas preparados registrados.</p>
                                     )}
                                 </div>
+                                <div className="mt-4">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Disponibilidad / Preferencias</label>
+                                    <textarea
+                                        className="w-full p-2 border rounded-md text-sm bg-gray-50 focus:bg-white transition-colors"
+                                        rows={3}
+                                        placeholder="Ingrese detalles sobre la disponibilidad del orador (ej: solo domingos, no salir lejos, etc.)"
+                                        value={localAvailability}
+                                        onChange={(e) => setLocalAvailability(e.target.value)}
+                                        onBlur={() => {
+                                            if (onUpdatePublisher && selectedSpeaker && localAvailability !== selectedSpeaker.availabilityDetails) {
+                                                onUpdatePublisher({ ...selectedSpeaker, availabilityDetails: localAvailability });
+                                            }
+                                        }}
+                                        disabled={!canManage}
+                                    />
+                                </div>
                             </div>
 
                             {/* SECTION 2: Asignaciones Salientes */}
@@ -649,7 +803,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                 <div className="space-y-3">
                                     {speakerAssignments.length > 0 ? (
                                         speakerAssignments.map(assignment => {
-                                            const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === assignment.talkNumber);
+                                            const talkInfo = talksCatalog.find(t => t.number === assignment.talkNumber);
                                             const isPast = new Date(assignment.date) < new Date();
                                             return (
                                                 <div key={assignment.id} className="p-3 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow">
@@ -749,7 +903,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                 {globalFilteredAssignments.length > 0 ? (
                                     <div className="grid grid-cols-1 gap-4">
                                         {globalFilteredAssignments.map(talk => {
-                                            const talkInfo = DISCURSOS_PUBLICOS.find(t => t.number === talk.talkNumber);
+                                            const talkInfo = talksCatalog.find(t => t.number === talk.talkNumber);
                                             return (
                                                 <div key={talk.id} className="bg-white p-4 rounded-lg border shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                                     <div>
@@ -875,7 +1029,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                                 <label className="block text-sm font-medium text-gray-700">Discurso</label>
                                 <select name="talkNumber" value={formData.talkNumber || ''} onChange={handleChange} required className="mt-1 w-full p-2 border rounded-md">
                                     <option value="" disabled>-- Seleccione un discurso --</option>
-                                    {DISCURSOS_PUBLICOS.map(t => <option key={t.number} value={t.number}>{t.number}. {t.title}</option>)}
+                                    {talksCatalog.filter(t => t.isActive).map(t => <option key={t.number} value={t.number}>{t.number}. {t.title}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -1003,6 +1157,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
     return (
         <div className="container mx-auto p-4 bg-white rounded-lg shadow-md">
             <AssignmentModal />
+            <ManageTalksModal />
             {isOutgoingModalOpen && <OutgoingAssignmentModal />}
             {whatsAppModalData && (
                 <WhatsAppShareModal
@@ -1037,6 +1192,17 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
 
             {activeTab === 'planner' && (
                 <>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold ml-2 hidden sm:block">Planificador</h2>
+                        {canManage && (
+                            <button
+                                onClick={() => setIsManageTalksModalOpen(true)}
+                                className="ml-4 px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold uppercase rounded-lg hover:bg-indigo-200 transition-colors"
+                            >
+                                Gestionar Temas
+                            </button>
+                        )}
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
                         <div>
                             <label htmlFor="search-query" className="block text-sm font-medium text-gray-700">Buscar por Título o Número:</label>
@@ -1086,7 +1252,7 @@ const ReunionPublica: React.FC<ReunionPublicaProps> = ({ schedule, onSave, canMa
                             {/* Body */}
                             <div className="max-h-[70vh] overflow-y-auto">
                                 {filteredDiscursos.length > 0 ? filteredDiscursos.map(talk => {
-                                    const isNoUsar = talk.title.toLowerCase().includes('(no usar)');
+                                    const isNoUsar = !talk.isActive;
                                     return (
                                         <div key={talk.number} className={`flex items-center p-2 border-b ${isNoUsar ? 'bg-gray-200 text-gray-500' : 'hover:bg-blue-50'}`}>
                                             <div className="flex-1 text-sm">

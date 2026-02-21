@@ -571,63 +571,192 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
         window.open(whatsappUrl, '_blank');
     }, [publishers]);
 
-    // PDF Export function
+    // PDF Export function (S-13-S 1/22 Format)
     const exportToPDF = useCallback(() => {
-        const doc = new jsPDF();
+        try {
+            const pdf = new jsPDF('p', 'mm', 'letter', true);
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const today = new Date();
+            const serviceYearY = today.getMonth() >= 8 ? today.getFullYear() + 1 : today.getFullYear();
 
-        // Header
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Reporte de Asignaciones de Territorio', 14, 20);
+            const drawTerritoryPage = (startNum: number, endNum: number, isSecondPage: boolean, isHistory: boolean) => {
+                if (isSecondPage || isHistory) pdf.addPage();
 
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Año de Servicio: ${currentServiceYear}`, 14, 28);
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 34);
+                pdf.setFontSize(14);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('REGISTRO DE ASIGNACIÓN DE TERRITORIO', pageWidth / 2, 10, { align: 'center' });
 
-        // Assignments table
-        const tableData = dailyAssignments.map(a => [
-            a.date,
-            a.vueltaNum.toString(),
-            a.territories.join(', '),
-            a.captain,
-            a.assignedDate || '-',
-            a.completedDate || 'Pendiente',
-            a.observations || '-'
-        ]);
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Año de servicio:', 10, 18);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(serviceYearY.toString(), 40, 18);
+                pdf.line(40, 19, 60, 19);
 
-        autoTable(doc, {
-            startY: 40,
-            head: [['Fecha', 'Vuelta', 'Territorios', 'Capitán', 'Asignado', 'Completado', 'Observaciones']],
-            body: tableData,
-            styles: { fontSize: 8, cellPadding: 2 },
-            headStyles: { fillColor: [41, 128, 185], fontStyle: 'bold' },
-            alternateRowStyles: { fillColor: [245, 245, 245] },
-            columnStyles: {
-                2: { cellWidth: 30 },
-                6: { cellWidth: 35 }
-            }
-        });
+                const territories = Array.from({ length: endNum - startNum + 1 }, (_, i) => startNum + i);
+                const tableBody: any[] = [];
 
-        // Statistics
-        const stats = calculateTerritoryStats;
-        const finalY = (doc as any).lastAutoTable.finalY + 10;
+                // Determine the "Current" and "History" blocks based on max progress
+                const totalMaxVuelta = records.length > 0 ? Math.max(...records.map(r => Number(r.vueltaNum) || 0)) : 1;
+                const recentBlockStart = Math.max(1, Math.floor((totalMaxVuelta - 1) / 4) * 4 + 1);
+                const historyBlockStart = recentBlockStart > 4 ? recentBlockStart - 4 : -1;
 
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Estadísticas', 14, finalY);
+                territories.forEach(num => {
+                    const allRecordsForTerr = [...records]
+                        .filter(r => String(r.terrNum) == String(num))
+                        .sort((a, b) => {
+                            const yearA = Number(a.serviceYear) || 0;
+                            const yearB = Number(b.serviceYear) || 0;
+                            if (yearA !== yearB) return yearA - yearB;
+                            return (Number(a.vueltaNum) || 0) - (Number(b.vueltaNum) || 0);
+                        });
 
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Total de asignaciones: ${dailyAssignments.length}`, 14, finalY + 8);
-        doc.text(`Asignaciones completadas: ${dailyAssignments.filter(a => a.completedDate).length}`, 14, finalY + 14);
-        doc.text(`Asignaciones pendientes: ${dailyAssignments.filter(a => !a.completedDate).length}`, 14, finalY + 20);
-        doc.text(`Territorios completados (última vuelta): ${stats.completed}/${stats.totalTerritories}`, 14, finalY + 26);
-        doc.text(`Progreso: ${stats.percentage}%`, 14, finalY + 32);
+                    // Map records to Stable Round Numbers
+                    const currentBlockStart = isHistory ? historyBlockStart : recentBlockStart;
 
-        doc.save(`reporte-territorios-${currentServiceYear}.pdf`);
-        onShowModal({ type: 'success', title: 'PDF Generado', message: 'El reporte se ha descargado correctamente.' });
-    }, [dailyAssignments, currentServiceYear, onShowModal]);
+                    if (currentBlockStart === -1 && isHistory) {
+                        const emptyRow = [
+                            { content: num.toString(), rowSpan: 2, styles: { valign: 'middle', fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+                            { content: '', rowSpan: 2 },
+                            { content: '', colSpan: 2 }, { content: '', colSpan: 2 }, { content: '', colSpan: 2 }, { content: '', colSpan: 2 }
+                        ];
+                        tableBody.push(emptyRow, ['', '', '', '', '', '', '', '']);
+                        return;
+                    }
+
+                    const recordsToDraw: (TerritoryRecord | undefined)[] = [];
+                    for (let v = 0; v < 4; v++) {
+                        const targetVuelta = currentBlockStart + v;
+                        const rec = allRecordsForTerr.filter(r => Number(r.vueltaNum) === targetVuelta).pop();
+                        recordsToDraw.push(rec);
+                    }
+
+                    // Col 1: Ultima fecha en que se completo*
+                    const prevVueltaNum = currentBlockStart - 1;
+                    const lastCompRecord = allRecordsForTerr.filter(r => Number(r.vueltaNum) === prevVueltaNum).pop();
+                    const lastComp = lastCompRecord?.completedDate || '';
+
+                    const row1 = [
+                        { content: num.toString(), rowSpan: 2, styles: { valign: 'middle', fontStyle: 'bold', fontSize: 10, halign: 'center' } },
+                        { content: lastComp, rowSpan: 2, styles: { valign: 'middle', fontSize: 7.5, halign: 'center' } },
+                        { content: recordsToDraw[0]?.asignadoA || '', colSpan: 2, styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[1]?.asignadoA || '', colSpan: 2, styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[2]?.asignadoA || '', colSpan: 2, styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[3]?.asignadoA || '', colSpan: 2, styles: { minCellHeight: 5.5 } }
+                    ];
+                    const row2 = [
+                        { content: recordsToDraw[0]?.assignedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[0]?.completedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[1]?.assignedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[1]?.completedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[2]?.assignedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[2]?.completedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[3]?.assignedDate || '', styles: { minCellHeight: 5.5 } },
+                        { content: recordsToDraw[3]?.completedDate || '', styles: { minCellHeight: 5.5 } }
+                    ];
+                    tableBody.push(row1, row2);
+                });
+
+                autoTable(pdf, {
+                    startY: 22,
+                    margin: { left: 10, right: 10, bottom: 20 },
+                    head: [
+                        [
+                            { content: 'Núm.\nde terr.', rowSpan: 2, styles: { valign: 'middle' } },
+                            { content: 'Última fecha\nen que se\ncompletó*', rowSpan: 2, styles: { valign: 'middle' } },
+                            { content: 'Asignado a', colSpan: 2 },
+                            { content: 'Asignado a', colSpan: 2 },
+                            { content: 'Asignado a', colSpan: 2 },
+                            { content: 'Asignado a', colSpan: 2 }
+                        ],
+                        [
+                            { content: 'Fecha en que\nse asignó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse completó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse asignó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse completó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse asignó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse completó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse asignó', styles: { fontSize: 5.5 } },
+                            { content: 'Fecha en que\nse completó', styles: { fontSize: 5.5 } }
+                        ]
+                    ],
+                    body: tableBody,
+                    theme: 'grid',
+                    headStyles: {
+                        fillColor: [240, 240, 240],
+                        textColor: [0, 0, 0],
+                        fontStyle: 'bold',
+                        halign: 'center',
+                        lineWidth: 0.1,
+                        lineColor: [100, 100, 100],
+                        fontSize: 8,
+                        minCellHeight: 5,
+                        cellPadding: 0.8
+                    },
+                    bodyStyles: {
+                        fontSize: 7.5,
+                        textColor: [0, 0, 0],
+                        lineWidth: 0.1,
+                        lineColor: [150, 150, 150],
+                        minCellHeight: 5.5,
+                        cellPadding: 0.6,
+                        overflow: 'ellipsize'
+                    },
+                    styles: {
+                        fontSize: 7.5,
+                        cellPadding: 1,
+                        halign: 'center',
+                        lineWidth: 0.2,
+                        textColor: [0, 0, 0],
+                        overflow: 'ellipsize'
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 12 },
+                        1: { cellWidth: 20 },
+                        2: { cellWidth: 20.5 },
+                        3: { cellWidth: 20.5 },
+                        4: { cellWidth: 20.5 },
+                        5: { cellWidth: 20.5 },
+                        6: { cellWidth: 20.5 },
+                        7: { cellWidth: 20.5 },
+                        8: { cellWidth: 20.5 },
+                        9: { cellWidth: 20.5 }
+                    }
+                });
+
+                pdf.setFontSize(7.5);
+                pdf.setFont('helvetica', 'normal');
+                const lastY = (pdf as any).lastAutoTable?.finalY || 200;
+                pdf.text('*Cuando comience una nueva página, anote en esta columna la última fecha en que los territorios se completaron.', 10, lastY + 4);
+                const footerY = pdf.internal.pageSize.height - 6;
+                pdf.setFontSize(7);
+                pdf.text(`S-13-S 1/22`, 10, footerY);
+                if (territoryResponsible?.publisherName) {
+                    pdf.text(`Responsable: ${territoryResponsible.publisherName}`, pdf.internal.pageSize.width - 10, footerY, { align: 'right' });
+                }
+
+                if (isHistory) {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('(Datos Anteriores)', pageWidth - 40, 14);
+                }
+            };
+
+            // Page 1: Territories 1-20 (Recent)
+            drawTerritoryPage(1, 20, false, false);
+            // Page 2: Territories 21-40 (Recent)
+            drawTerritoryPage(21, 40, true, false);
+            // Page 3: Territories 1-20 (History)
+            drawTerritoryPage(1, 20, false, true);
+            // Page 4: Territories 21-40 (History)
+            drawTerritoryPage(21, 40, true, true);
+
+            pdf.save(`registro-territorios-S13-${today.getFullYear()}.pdf`);
+            onShowModal({ type: 'success', title: 'PDF Generado', message: 'El registro S-13 se ha descargado correctamente.' });
+        } catch (error) {
+            console.error(error);
+            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo generar el registro de territorios.' });
+        }
+    }, [records, onShowModal]);
 
     // Calculate comprehensive territory statistics
     const calculateTerritoryStats = useMemo(() => {
@@ -893,25 +1022,20 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
             let maxNextVuelta = 1;
 
             formData.territories.forEach(terrNum => {
-                // Filter records for this specific territory and the calculated service year
-                // We access 'records' directly from props, not the 'territoryData' which is filtered by UI state
+                // Filter records for this specific territory across ALL service years
                 const specificRecords = records.filter(r =>
-                    r.terrNum === terrNum &&
-                    r.serviceYear === targetServiceYear
+                    String(r.terrNum) == String(terrNum)
                 );
 
-                const vueltas = specificRecords.map(r => r.vueltaNum).sort((a, b) => b - a);
+                const vueltas = specificRecords.map(r => Number(r.vueltaNum)).sort((a, b) => b - a);
 
-                if (vueltas.length === 0) {
-                    maxNextVuelta = Math.max(maxNextVuelta, 1);
-                } else {
+                if (vueltas.length > 0) {
                     const lastVuelta = vueltas[0];
-                    const lastRecord = specificRecords.find(r => r.vueltaNum === lastVuelta);
+                    const lastRecord = specificRecords.find(r => Number(r.vueltaNum) === lastVuelta);
 
                     if (lastRecord?.completedDate) {
                         maxNextVuelta = Math.max(maxNextVuelta, lastVuelta + 1);
                     } else {
-                        // If not completed, we are re-assigning the current round
                         maxNextVuelta = Math.max(maxNextVuelta, lastVuelta);
                     }
                 }

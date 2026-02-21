@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -23,6 +24,7 @@ import RegistroTransaccion from './components/RegistroTransaccion';
 import ReunionPublica from './components/ReunionPublica';
 import HomeDashboard from './components/HomeDashboard';
 import Vigilancia from './components/Vigilancia';
+import VisitaSC from './components/VisitaSC';
 import { DISCURSOS_PUBLICOS } from './components/discursos';
 import Carousel from './components/Carousel';
 
@@ -34,7 +36,7 @@ import {
     InvitationContent, HomepageContent, MeetingAssignmentSchedule,
     DayAssignment, LMMeetingSchedule, LMWeekAssignment, PioneerApplication,
     OutgoingTalkAssignment, PublicTalksSchedule, PublicTalkAssignment, SpecialEvent, MeetingConfig,
-    VigilanciaConfig, ModalInfo
+    VigilanciaConfig, ModalInfo, VisitaSCData
 } from './types';
 import { MONTHS, SERVICE_YEAR_MONTHS, ALL_PERMISSIONS } from './constants';
 import { compressImage, downloadFile } from './utils';
@@ -77,6 +79,7 @@ const App: React.FC = () => {
     const [pioneerApplications, setPioneerApplications] = useState<PioneerApplication[]>([]);
     const [vigilanciaSchedules, setVigilanciaSchedules] = useState<any[]>([]);
     const [vigilanciaConfig, setVigilanciaConfig] = useState<VigilanciaConfig | null>(null);
+    const [visitaSCData, setVisitaSCData] = useState<VisitaSCData[]>([]);
     const [modalInfo, setModalInfo] = useState<ModalInfo | null>(null);
 
     // New state to track individual public data loading status
@@ -94,6 +97,10 @@ const App: React.FC = () => {
         invitation: false,
         territoryMarkers: false,
     });
+
+    const safePublicTalksSchedule = useMemo(() => {
+        return publicTalksSchedule || {};
+    }, [publicTalksSchedule]);
 
     // Derived loading state
     const loading = !initialization.authChecked || !initialization.configLoaded || !meetingConfig || !vigilanciaConfig || !initialization.publicDataLoaded;
@@ -114,6 +121,20 @@ const App: React.FC = () => {
         }
         return user.permissions || [];
     }, [user]);
+
+    // URL parameter handling for direct navigation (e.g., from QR code)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get('view') as View;
+        const date = params.get('date');
+        const presentacion = params.get('presentacion');
+
+        if (view === 'visitaSC' && date) {
+            setActiveView('visitaSC');
+            // We can't directly set VisitaSC's internal state from here easily, 
+            // but VisitaSC will read the same params on mount.
+        }
+    }, []);
 
     // Master initialization effect for auth, user profile, and global config.
     useEffect(() => {
@@ -351,6 +372,11 @@ const App: React.FC = () => {
                 console.error("Territory Markers listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, territoryMarkers: true }));
             }),
+            db.collection('visita_sc').onSnapshot((snapshot: any) => {
+                setVisitaSCData(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as VisitaSCData })));
+            }, (err: Error) => {
+                console.error("Visita SC listener failed:", err);
+            }),
         ];
 
         return () => {
@@ -557,16 +583,28 @@ const App: React.FC = () => {
     };
 
     const handleSaveTerritoryRecord = async (record: Omit<TerritoryRecord, 'id'>) => {
+        // Ensure numeric types for critical fields to prevent sorting/filtering issues
+        const terrNum = Number(record.terrNum);
+        const vueltaNum = Number(record.vueltaNum);
+        const serviceYear = Number(record.serviceYear);
+
+        const sanitizedRecord = {
+            ...record,
+            terrNum,
+            vueltaNum,
+            serviceYear
+        };
+
         const query = await db.collection('territory_records')
-            .where('terrNum', '==', record.terrNum)
-            .where('vueltaNum', '==', record.vueltaNum)
-            .where('serviceYear', '==', record.serviceYear)
+            .where('terrNum', '==', terrNum)
+            .where('vueltaNum', '==', vueltaNum)
+            .where('serviceYear', '==', serviceYear)
             .get();
 
         if (query.empty) {
-            await db.collection('territory_records').add(record);
+            await db.collection('territory_records').add(sanitizedRecord);
         } else {
-            await db.collection('territory_records').doc(query.docs[0].id).update(record);
+            await db.collection('territory_records').doc(query.docs[0].id).update(sanitizedRecord);
         }
     };
 
@@ -897,8 +935,23 @@ const App: React.FC = () => {
         programaServiciosAuxiliares: <ProgramaServiciosAuxiliares schedules={schedules} publishers={publishers} onShowModal={setModalInfo} meetingConfig={meetingConfig!} />,
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
-        reunionPublica: <ReunionPublica schedule={publicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} onUpdatePublisher={handleUpdatePublisher} />,
+        reunionPublica: <ReunionPublica schedule={safePublicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} onUpdatePublisher={handleUpdatePublisher} />,
         vigilancia: <Vigilancia schedules={vigilanciaSchedules} onSave={handleSaveVigilanciaSchedule} config={vigilanciaConfig!} onSaveConfig={handleSaveVigilanciaConfig} />,
+        visitaSC: <VisitaSC
+            publishers={publishers}
+            lmSchedules={lmSchedules}
+            visitaData={visitaSCData}
+            onSaveVisita={async (data) => {
+                const { id, ...rest } = data;
+                await db.collection('visita_sc').doc(id).set(rest, { merge: true });
+                setModalInfo({ type: 'success', title: 'Guardado', message: 'Datos de la visita del SC guardados correctamente.' });
+            }}
+            onShowModal={setModalInfo}
+            attendanceRecords={attendanceRecords}
+            territoryRecords={territoryRecords}
+            serviceReports={serviceReports}
+            territoryResponsible={territoryResponsible}
+        />,
     };
 
     const NAV_ITEMS = useMemo<{ view: View; label: string }[]>(() => [
@@ -923,6 +976,7 @@ const App: React.FC = () => {
         { view: 'gestionContenidoInvitacion', label: 'Contenido Invitación' },
         { view: 'controlAcceso', label: 'Control de Acceso' },
         { view: 'registroTransaccion', label: 'Registro Transacción' },
+        { view: 'visitaSC', label: 'Visita del SC' },
     ], []);
 
     const activeViewLabel = useMemo(() => {
@@ -1206,36 +1260,40 @@ const App: React.FC = () => {
     };
 
 
-    return (
-        <div className="flex h-screen bg-gray-100">
-            <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
-            <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-                {dataLoadError && <ErrorBanner message={dataLoadError} />}
-                {connectionError && (
-                    <div className="bg-red-600 text-white text-center p-2 text-sm animate-pulse z-10">
-                        {connectionError}
-                    </div>
-                )}
-                <Header user={userProfileForHeader} activeViewLabel={activeViewLabel} />
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6">
-                    {userCanAccessView ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}
-                </main>
-            </div>
 
-            {modalInfo && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={() => setModalInfo(null)}>
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                        <div className={`p-6 text-center border-t-8 rounded-lg ${modalInfo.type === 'success' ? 'border-green-500' :
-                            modalInfo.type === 'error' ? 'border-red-500' : 'border-blue-500'
-                            }`}>
-                            <h3 className="text-xl font-bold mb-4">{modalInfo.title}</h3>
-                            <p className="text-gray-600 whitespace-pre-wrap">{modalInfo.message}</p>
-                            <button onClick={() => setModalInfo(null)} className="mt-6 px-6 py-2 bg-gray-200 rounded-md">Cerrar</button>
+
+    return (
+        <ErrorBoundary>
+            <div className="flex h-screen bg-gray-100">
+                <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} userRole={user.role} userPermissions={userPermissions} isCommitteeMember={user.isCommitteeMember} isCollapsed={isSidebarCollapsed} setIsCollapsed={setIsSidebarCollapsed} />
+                <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+                    {dataLoadError && <ErrorBanner message={dataLoadError} />}
+                    {connectionError && (
+                        <div className="bg-red-600 text-white text-center p-2 text-sm animate-pulse z-10">
+                            {connectionError}
+                        </div>
+                    )}
+                    <Header user={userProfileForHeader} activeViewLabel={activeViewLabel} />
+                    <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6">
+                        {userCanAccessView ? ALL_COMPONENTS[activeView] : <div className="text-center p-8 bg-white rounded-lg shadow-md"><h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2><p className="mt-2">No tiene permiso para ver esta sección.</p></div>}
+                    </main>
+                </div>
+
+                {modalInfo && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={() => setModalInfo(null)}>
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                            <div className={`p-6 text-center border-t-8 rounded-lg ${modalInfo.type === 'success' ? 'border-green-500' :
+                                modalInfo.type === 'error' ? 'border-red-500' : 'border-blue-500'
+                                }`}>
+                                <h3 className="text-xl font-bold mb-4">{modalInfo.title}</h3>
+                                <p className="text-gray-600 whitespace-pre-wrap">{modalInfo.message}</p>
+                                <button onClick={() => setModalInfo(null)} className="mt-6 px-6 py-2 bg-gray-200 rounded-md">Cerrar</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )}
+            </div>
+        </ErrorBoundary>
     );
 };
 

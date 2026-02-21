@@ -4,7 +4,8 @@ import { Publisher, ServiceReport, ModalInfo } from '../types';
 import { compressImage } from '../utils';
 import PublisherCardView from './PublisherCardView';
 
-declare const jspdf: any;
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface PublicadoresProps {
     publishers: Publisher[];
@@ -341,31 +342,54 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
     useEffect(() => {
         const uniqueGroups = [...new Set(publishers.map(p => p.Grupo).filter(Boolean) as string[])].sort();
         setGroups(uniqueGroups);
-        const uniqueFamilies = [...new Set(publishers.map(p => p.Familia).filter(Boolean) as string[])].sort();
-        setFamilies(uniqueFamilies);
     }, [publishers]);
+
+    useEffect(() => {
+        let filteredPublishers = publishers;
+        if (groupFilter !== 'todos') {
+            const fGroup = String(groupFilter).trim().toLowerCase();
+            filteredPublishers = publishers.filter(p => String(p.Grupo || '').trim().toLowerCase() === fGroup);
+        }
+        const uniqueFamilies = [...new Set(filteredPublishers.map(p => p.Familia).filter(Boolean) as string[])].sort();
+        setFamilies(uniqueFamilies);
+    }, [publishers, groupFilter]);
 
     const filteredPublishers = useMemo(() => {
         return publishers.filter(p => {
-            const matchesGroup = groupFilter === 'todos' || p.Grupo === groupFilter;
-            const matchesFamily = familyFilter === 'todos' || p.Familia === familyFilter;
-            const matchesGender = genderFilter === 'todos' || p.Sexo === genderFilter;
-            let matchesStatus = true;
-            if (statusFilter !== 'todos') {
-                if (statusFilter === 'Se mudaron') {
-                    matchesStatus = p.Estatus === 'Se cambió de congregación';
-                } else if (statusFilter === 'Fallecieron') {
-                    matchesStatus = p.Estatus === 'Falleció';
-                } else if (statusFilter === 'Irregulares') {
-                    matchesStatus = p.Estatus === 'Irregular';
-                } else if (statusFilter === 'Activos') {
-                    matchesStatus = p.Estatus === 'Activo';
-                } else if (statusFilter === 'Inactivos') {
-                    matchesStatus = p.Estatus === 'Inactivo';
+            const pGroup = String(p.Grupo || '').trim().toLowerCase();
+            const fGroup = String(groupFilter).trim().toLowerCase();
+            const matchesGroup = fGroup === 'todos' || pGroup === fGroup;
+
+            const pFamily = String(p.Familia || '').trim().toLowerCase();
+            const fFamily = String(familyFilter).trim().toLowerCase();
+            const matchesFamily = fFamily === 'todos' || pFamily === fFamily;
+
+            const pSexo = String(p.Sexo || '').trim().toLowerCase();
+            const fGender = genderFilter.toLowerCase();
+            let matchesGender = fGender === 'todos';
+            if (!matchesGender) {
+                if (fGender === 'hombre' || fGender === 'varón' || fGender === 'varon') {
+                    matchesGender = ['hombre', 'h', 'varón', 'varon'].includes(pSexo);
+                } else if (fGender === 'mujer') {
+                    matchesGender = ['mujer', 'm'].includes(pSexo);
                 } else {
-                    matchesStatus = p.Estatus === statusFilter;
+                    matchesGender = pSexo === fGender;
                 }
             }
+
+            let matchesStatus = true;
+            if (statusFilter !== 'todos') {
+                const pStatus = String(p.Estatus || '').trim().toLowerCase();
+                const fStatus = statusFilter.trim().toLowerCase();
+
+                if (fStatus === 'se mudaron') matchesStatus = pStatus === 'se cambió de congregación';
+                else if (fStatus === 'fallecieron') matchesStatus = pStatus === 'falleció';
+                else if (fStatus === 'irregulares') matchesStatus = pStatus === 'irregular';
+                else if (fStatus === 'activos') matchesStatus = pStatus === 'activo';
+                else if (fStatus === 'inactivos') matchesStatus = pStatus === 'inactivo';
+                else matchesStatus = pStatus === fStatus;
+            }
+
             return matchesGroup && matchesFamily && matchesGender && matchesStatus;
         });
     }, [groupFilter, familyFilter, genderFilter, statusFilter, publishers]);
@@ -475,8 +499,6 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
     };
 
     const handleGenerateFormPDF = () => {
-        // @ts-ignore
-        const { jsPDF } = jspdf;
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -623,8 +645,6 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
     };
 
     const handleGenerateChecklistPDF = () => {
-        // @ts-ignore
-        const { jsPDF } = jspdf;
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
@@ -700,8 +720,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 ];
             });
 
-            // @ts-ignore
-            doc.autoTable({
+            autoTable(doc, {
                 head: [tableHeaders],
                 body: tableData,
                 startY: finalY + 5,
@@ -727,7 +746,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 }
             });
 
-            finalY = (doc as any).lastAutoTable.finalY || finalY + 10;
+            finalY = (doc as any).lastAutoTable?.finalY || finalY + 10;
         });
 
         // Add Legend at the bottom of each page
@@ -760,8 +779,6 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
     };
 
     const handleGenerateEmergencyPDF = () => {
-        // @ts-ignore
-        const { jsPDF } = jspdf;
         const doc = new jsPDF({
             orientation: 'p',
             unit: 'mm',
@@ -809,8 +826,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 p['Cel de Emergencia'] || 'N/A'
             ]);
 
-            // @ts-ignore
-            doc.autoTable({
+            autoTable(doc, {
                 head: tableHeaders,
                 body: tableData,
                 startY: 45,
@@ -827,10 +843,13 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
             });
 
             // Pie de página
-            const pageCount = doc.internal.getNumberOfPages();
-            doc.setFontSize(8);
-            doc.setTextColor(100);
-            doc.text(`Página ${doc.internal.getCurrentPageInfo().pageNumber}`, pageWidth - 30, pageHeight - 10);
+            const pageCount = doc.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(100);
+                doc.text(`Página ${i} de ${pageCount}`, pageWidth - 30, pageHeight - 10);
+            }
         });
 
         doc.save('Datos_Emergencia_Publicadores.pdf');

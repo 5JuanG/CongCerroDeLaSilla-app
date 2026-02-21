@@ -2,7 +2,72 @@ import { Dispatch, SetStateAction } from 'react';
 
 export type UserRole = 'admin' | 'overseer' | 'publisher' | 'helper' | 'auxiliary' | 'secretario';
 
-export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica' | 'vigilancia';
+export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica' | 'vigilancia' | 'visitaSC';
+
+export interface MeetingDetails {
+    hora: string;
+    lugar: string;
+}
+
+export interface MealPlan {
+    familia: string;
+    telefono: string;
+    direccion: string;
+}
+
+export interface PredicacionData {
+    lugar: string;
+    direccion?: string;
+    hora: string;
+    publicadoresSC: string;
+    publicadoresEsposa: string;
+    capitan?: string;
+    notas?: string;
+}
+
+export interface PastoreoVisit {
+    dia: string;
+    hora: string;
+    familia: string;
+    asunto: string;
+    acompananteId: string;
+}
+
+export interface VisitaSCData {
+    id: string; // YYYY-MM
+    fechaInicio: string; // Martes
+    fechaFin?: string; // Domingo (para expiración de link)
+    scName?: string;
+    scWifeName?: string;
+    discursoMartesTitulo?: string;
+    discursoMartesCancion?: string;
+    discursoDomingoTitulo?: string;
+    discursoDomingoCancion?: string;
+    discursoConclusionTitulo?: string;
+    discursoConclusionCancion?: string;
+    reuniones: {
+        vym: MeetingDetails & { dia?: string };
+        precursores: MeetingDetails & { dia?: string };
+        ancianosSiervos: MeetingDetails & { dia?: string };
+        finSemana: MeetingDetails & { dia?: string };
+    };
+    discursoServicioTitulo: string;
+    alimentos: {
+        miercoles: MealPlan;
+        jueves: MealPlan;
+        viernes: MealPlan;
+        sabado: MealPlan;
+        domingo: MealPlan;
+    };
+    predicacion: {
+        [key: string]: { // 'miercoles', etc.
+            manana: PredicacionData;
+            tarde: PredicacionData;
+        };
+    };
+    pastoreo: PastoreoVisit[];
+    vymProgram?: LMWeekAssignment;
+}
 
 export type GranularPermission =
     'editAsistenciaReporte' |
@@ -31,6 +96,13 @@ export interface Publisher {
     [key: string]: any;
     Familia?: string;
     preparedTalks?: number[];
+    availabilityDetails?: string;
+}
+
+export interface CustomTalk {
+    number: number;
+    title: string;
+    isActive: boolean;
 }
 
 export interface ServiceReport {
@@ -174,6 +246,7 @@ export interface OutgoingTalkAssignment {
 export interface PublicTalksSchedule {
     [key: string]: any;
     outgoingTalks?: OutgoingTalkAssignment[];
+    talksCatalog?: CustomTalk[];
     publicVisibility?: { [yearMonth: string]: boolean };
 }
 
