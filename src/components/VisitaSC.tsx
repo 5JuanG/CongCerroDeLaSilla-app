@@ -1883,26 +1883,26 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                                     <p className="text-xl font-bold text-blue-600 uppercase tracking-widest">Semana de Visita del SC</p>
                                     <p className="text-slate-400 mt-2 font-medium">Congregación Cerro de la Silla</p>
 
-                                    <div className="mt-6 flex justify-center gap-8 text-left border-y border-slate-100 py-6">
-                                        <div>
-                                            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest block">Discurso Martes</span>
-                                            <span className="text-sm font-bold text-slate-700">{draft?.discursoMartesTitulo || '---'}</span>
-                                            {draft?.discursoMartesCancion && <span className="text-[10px] text-slate-500 block">Canción: {draft.discursoMartesCancion}</span>}
+                                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 text-left border-y border-slate-100 py-6">
+                                        <div className="p-4 md:p-0 bg-slate-50 md:bg-transparent rounded-2xl border border-slate-200 md:border-none">
+                                            <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-1">Discurso Martes</span>
+                                            <span className="text-sm font-bold text-slate-700 block leading-tight">{draft?.discursoMartesTitulo || '---'}</span>
+                                            {draft?.discursoMartesCancion && <span className="text-[10px] text-slate-500 font-bold mt-1 block">Canción {draft.discursoMartesCancion}</span>}
                                         </div>
-                                        <div>
-                                            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest block">Discurso Público</span>
-                                            <span className="text-sm font-bold text-slate-700">{draft?.discursoDomingoTitulo || '---'}</span>
-                                            {draft?.discursoDomingoCancion && <span className="text-[10px] text-slate-500 block">Canción: {draft.discursoDomingoCancion}</span>}
+                                        <div className="p-4 md:p-0 bg-slate-50 md:bg-transparent rounded-2xl border border-slate-200 md:border-none">
+                                            <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-1">Discurso Público</span>
+                                            <span className="text-sm font-bold text-slate-700 block leading-tight">{draft?.discursoDomingoTitulo || '---'}</span>
+                                            {draft?.discursoDomingoCancion && <span className="text-[10px] text-slate-500 font-bold mt-1 block">Canción {draft.discursoDomingoCancion}</span>}
                                         </div>
-                                        <div>
-                                            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest block">Discurso Conclusión</span>
-                                            <span className="text-sm font-bold text-slate-700">{draft?.discursoConclusionTitulo || '---'}</span>
-                                            {draft?.discursoConclusionCancion && <span className="text-[10px] text-slate-500 block">Canción: {draft.discursoConclusionCancion}</span>}
+                                        <div className="p-4 md:p-0 bg-slate-50 md:bg-transparent rounded-2xl border border-slate-200 md:border-none">
+                                            <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block mb-1">Discurso Conclusión</span>
+                                            <span className="text-sm font-bold text-slate-700 block leading-tight">{draft?.discursoConclusionTitulo || '---'}</span>
+                                            {draft?.discursoConclusionCancion && <span className="text-[10px] text-slate-500 font-bold mt-1 block">Canción {draft.discursoConclusionCancion}</span>}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
                                         <h4 className="font-black uppercase tracking-widest text-slate-400 text-xs">Reuniones de Entre Semana</h4>
                                         <div className="space-y-4">
