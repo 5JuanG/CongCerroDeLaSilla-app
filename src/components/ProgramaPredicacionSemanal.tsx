@@ -212,7 +212,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(20);
         doc.setFont('helvetica', 'bold');
-        doc.text('HOJA DE TRABAJO DIARIO', pageWidth / 2, 18, { align: 'center' });
+        doc.text('PROGRAMA DE PREDICACIÓN DIARIO', pageWidth / 2, 18, { align: 'center' });
         doc.setFontSize(10);
         doc.text(`CONGREGACIÓN CERRO DE LA SILLA`, pageWidth / 2, 25, { align: 'center' });
 
@@ -247,8 +247,24 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
         if (captain) {
             if (captain.Foto) {
                 try {
-                    // Use a square frame to avoid squashing
-                    doc.addImage(captain.Foto, 'WEBP', MARGIN, y, PHOTO_SIZE, PHOTO_SIZE, undefined, 'FAST');
+                    const img = new Image();
+                    img.src = captain.Foto;
+                    await new Promise(resolve => {
+                        img.onload = resolve;
+                        img.onerror = resolve;
+                    });
+                    
+                    let imgWidth = PHOTO_SIZE;
+                    let imgHeight = PHOTO_SIZE;
+                    if (img.width && img.height) {
+                        const ratio = img.width / img.height;
+                        if (ratio > 1) { // Landscape
+                            imgHeight = PHOTO_SIZE / ratio;
+                        } else { // Portrait
+                            imgWidth = PHOTO_SIZE * ratio;
+                        }
+                    }
+                    doc.addImage(captain.Foto, 'WEBP', MARGIN, y, imgWidth, imgHeight, undefined, 'FAST');
                 } catch (e) {}
             }
             const textX = captain.Foto ? MARGIN + PHOTO_SIZE + 10 : MARGIN;
