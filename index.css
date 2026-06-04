@@ -68,3 +68,40 @@ body {
 .hero-gradient {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.2) 60%, transparent 100%);
 }
+
+/* Mobile App Specific Styles */
+.mobile-nav-active {
+  color: #2563eb;
+  transform: scale(1.1);
+}
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (max-width: 640px) {
+  .glass {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+.bottom-nav-item {
+  @apply flex flex-col items-center justify-center gap-1 transition-all duration-200;
+}
+
+/* Smooth view transitions */
+.view-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.view-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 300ms, transform 300ms;
+}

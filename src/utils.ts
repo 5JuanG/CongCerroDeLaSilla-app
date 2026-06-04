@@ -84,3 +84,73 @@ export const downloadFile = async (url: string, fileName: string, onError?: (err
         if (onError) onError(error);
     }
 };
+
+export const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+};
+
+export const getPreviousMonthAndYear = () => {
+    const now = new Date();
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const monthIndex = prevDate.getMonth();
+    const year = prevDate.getFullYear();
+    // Service year ends in August. September (index 8) starts the next service year.
+    const serviceYear = monthIndex >= 8 ? year + 1 : year;
+    return { monthIndex, year, serviceYear };
+};
+
+export const getCalculatedStatus = (pub: any, serviceReports: any[], MONTHS: string[]) => {
+    try {
+        if (!pub || !Array.isArray(serviceReports) || !Array.isArray(MONTHS)) {
+            return 'activo';
+        }
+
+        const manualStatus = String(pub.Estatus || '').toLowerCase().trim();
+        
+        // Si el estatus manual indica que ya no es parte de la congregación activa, lo mantenemos.
+        if (['se cambió de congregación', 'falleció', 'sacado de la congregación'].includes(manualStatus)) {
+            return manualStatus;
+        }
+
+        const { monthIndex, year } = getPreviousMonthAndYear();
+        const monthsToCheck: { month: string; year: number }[] = [];
+        let mIdx = monthIndex;
+        let yr = year;
+
+        for (let i = 0; i < 6; i++) {
+            const monthName = MONTHS[mIdx];
+            if (monthName) {
+                monthsToCheck.push({ month: monthName, year: yr });
+            }
+            mIdx--;
+            if (mIdx < 0) {
+                mIdx = 11;
+                yr--;
+            }
+        }
+
+        if (monthsToCheck.length === 0) return 'activo';
+
+        const missedCount = monthsToCheck.filter(({ month, year: y }) => {
+            return !serviceReports.some(r => 
+                r && 
+                r.idPublicador === pub.id && 
+                r.anioCalendario === y && 
+                r.mes === month && 
+                r.participacion === true
+            );
+        }).length;
+
+        if (missedCount >= 6) return 'inactivo';
+        if (missedCount > 0) return 'irregular';
+        return 'activo';
+    } catch (error) {
+        console.error("Error calculating status for publisher:", pub?.id, error);
+        return 'activo'; // Default safe value
+    }
+};

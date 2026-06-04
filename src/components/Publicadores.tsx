@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Publisher, ServiceReport, ModalInfo } from '../types';
-import { compressImage } from '../utils';
+import { compressImage, getCalculatedStatus } from '../utils';
+import { DEFAULT_AVATAR, MONTHS } from '../constants';
 import PublisherCardView from './PublisherCardView';
 
 import { jsPDF } from 'jspdf';
@@ -32,11 +33,12 @@ const PublisherCard: React.FC<{ publisher: Publisher; onEdit: (id: string) => vo
     const accordionSections = {
         "Datos Personales": ["Sexo", "Fecha de Nacimiento", "Apellido de casada"],
         "Dirección y Contacto": ["Calle", "Numero", "Colonia", "Municipio", "Estado", "CP", "Cel", "Correo"],
-        "Información Espiritual": ["Fecha de bautismo", "Esperanza", "Privilegio", "Priv Adicional"],
+        "Información Espiritual": ["Fecha de bautismo", "Esperanza", "Privilegio", "Priv Adicional", "Responsabilidad en el Grupo"],
+        "Predicación y Localización": ["esLugarEncuentro", "territorioCasa"],
         "Emergencia y Estatus": ["Contacto de Emergencia", "Cel de Emergencia", "Carta de presentacion", "Estatus"]
     };
 
-    const foto = publisher.Foto || 'https://i.imgur.com/83itvIu.png';
+    const foto = publisher.Foto || DEFAULT_AVATAR;
     const nombreCompleto = [publisher.Nombre, publisher.Apellido, publisher['2do Apellido'], publisher['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ');
 
     const pdfIconSVG = <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13.5,9V3.5L18.5,9H13.5M12,18.5C10.3,18.5 9,17.2 9,15.5C9,13.8 10.3,12.5 12,12.5A2.3,2.3 0 0,1 14.3,14.8L15.4,13.7C14.4,12.6 13.3,12 12,12C9.8,12 8,13.8 8,16C8,18.2 9.8,20 12,20C13.2,20 14.2,19.5 15,18.8L13.9,17.7C13.3,18.2 12.7,18.5 12,18.5Z" /></svg>;
@@ -45,7 +47,18 @@ const PublisherCard: React.FC<{ publisher: Publisher; onEdit: (id: string) => vo
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="flex items-center p-5 border-b border-gray-200">
                 <div className="relative group">
-                    <img src={foto} alt="Foto" className="w-16 h-16 rounded-full object-cover mr-4 border-4 border-blue-500" />
+                <img
+                    src={foto}
+                    alt="Foto"
+                    className="w-16 h-16 rounded-full object-cover mr-4 border-4 border-blue-500"
+                    onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (target.src !== DEFAULT_AVATAR) {
+                            console.warn("Retrying photo with fallback avatar:", foto);
+                            target.src = DEFAULT_AVATAR;
+                        }
+                    }}
+                />
                     {publisher.Foto && onDownload && (
                         <button
                             onClick={() => onDownload(publisher.Foto, `foto_${publisher.Nombre}_${publisher.Apellido}.webp`)}
@@ -96,6 +109,12 @@ const PublisherCard: React.FC<{ publisher: Publisher; onEdit: (id: string) => vo
                                                 </div>
                                             </div>
                                         );
+                                    }
+                                    if (field === 'esLugarEncuentro') {
+                                        return <div key={field} className="flex flex-col"><strong className="text-blue-600 mb-1">¿Lugar de Encuentro?:</strong><span>{fieldValue ? 'Sí' : 'No'}</span></div>
+                                    }
+                                    if (field === 'territorioCasa') {
+                                        return <div key={field} className="flex flex-col"><strong className="text-blue-600 mb-1">Territorio de su Casa:</strong><span>{fieldValue || 'Sin asignar'}</span></div>
                                     }
                                     return <div key={field} className="flex flex-col"><strong className="text-blue-600 mb-1">{field}:</strong><span>{fieldValue as React.ReactNode}</span></div>
                                 })}
@@ -261,7 +280,22 @@ const PublisherForm: React.FC<{ publisher: Publisher | null, onSubmit: (data: an
                         {renderField('Privilegio', 'Privilegio', 'select', ['Anciano', 'Siervo Ministerial'])}
                         {renderField('Priv Adicional', 'Priv. Adicional', 'select', ['Precursor Regular', 'Precursor Especial', 'Misionero'])}
                         {renderField('Grupo', 'Grupo de Servicio')}
+                        {formData.Sexo === 'Hombre' && renderField('Responsabilidad en el Grupo', 'Resp. en el Grupo', 'select', ['Superintendente de Grupo', 'Auxiliar de Grupo'])}
                         {renderField('Estatus', 'Estatus', 'select', ['Activo', 'Inactivo', 'Irregular', 'Se cambió de congregación', 'Falleció', 'Sacado de la congregación'])}
+                    </div>
+                    <h3 className="form-section-title">Predicación y Localización</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="flex items-center space-x-2 mt-6">
+                            <input
+                                type="checkbox"
+                                id="esLugarEncuentro"
+                                checked={formData.esLugarEncuentro || false}
+                                onChange={(e) => setFormData({ ...formData, esLugarEncuentro: e.target.checked })}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor="esLugarEncuentro" className="text-sm font-medium text-gray-700">¿Su casa se usa como lugar de encuentro?</label>
+                        </div>
+                        {renderField('territorioCasa', 'Número de territorio donde vive', 'number')}
                     </div>
                     <h3 className="form-section-title">Privilegios de Asignación (Reunión Fin de Semana)</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
@@ -335,7 +369,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
     const [currentPage, setCurrentPage] = useState(1);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingPublisher, setEditingPublisher] = useState<Publisher | null>(null);
-    const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
+    const [viewMode, setViewMode] = useState<'list' | 'cards' | 'contactos'>('list');
 
     const itemsPerPage = 9;
 
@@ -379,20 +413,20 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
 
             let matchesStatus = true;
             if (statusFilter !== 'todos') {
-                const pStatus = String(p.Estatus || '').trim().toLowerCase();
+                const calculatedStatus = getCalculatedStatus(p, serviceReports, MONTHS);
                 const fStatus = statusFilter.trim().toLowerCase();
 
-                if (fStatus === 'se mudaron') matchesStatus = pStatus === 'se cambió de congregación';
-                else if (fStatus === 'fallecieron') matchesStatus = pStatus === 'falleció';
-                else if (fStatus === 'irregulares') matchesStatus = pStatus === 'irregular';
-                else if (fStatus === 'activos') matchesStatus = pStatus === 'activo';
-                else if (fStatus === 'inactivos') matchesStatus = pStatus === 'inactivo';
-                else matchesStatus = pStatus === fStatus;
+                if (fStatus === 'se mudaron') matchesStatus = calculatedStatus === 'se cambió de congregación';
+                else if (fStatus === 'fallecieron') matchesStatus = calculatedStatus === 'falleció';
+                else if (fStatus === 'irregulares') matchesStatus = calculatedStatus === 'irregular';
+                else if (fStatus === 'activos') matchesStatus = calculatedStatus === 'activo';
+                else if (fStatus === 'inactivos') matchesStatus = calculatedStatus === 'inactivo';
+                else matchesStatus = calculatedStatus === fStatus;
             }
 
             return matchesGroup && matchesFamily && matchesGender && matchesStatus;
         });
-    }, [groupFilter, familyFilter, genderFilter, statusFilter, publishers]);
+    }, [groupFilter, familyFilter, genderFilter, statusFilter, publishers, serviceReports]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -816,9 +850,14 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
             doc.setFont('helvetica', 'normal');
             doc.text(`Generado el: ${new Date().toLocaleDateString()}`, pageWidth / 2, 37, { align: 'center' });
 
-            const groupData = groupedPublishers[groupName].sort((a, b) => a.Nombre.localeCompare(b.Nombre));
+            const groupData = groupedPublishers[groupName].sort((a, b) => {
+                const famA = String(a.Familia || '').trim().toLowerCase();
+                const famB = String(b.Familia || '').trim().toLowerCase();
+                if (famA !== famB) return famA.localeCompare(famB);
+                return a.Nombre.localeCompare(b.Nombre);
+            });
 
-            const tableHeaders = [['Nombre del Publicador', 'Teléfono', 'Contacto de Emergencia', 'Tel. Emergencia']];
+            const tableHeaders = [['Nombre del Publicador', 'Cel. Personal', 'Contacto de Emergencia', 'Tel. Emergencia']];
             const tableData = groupData.map(p => [
                 `${p.Nombre} ${p.Apellido} ${p['2do Apellido'] || ''}`.trim(),
                 p.Cel || 'N/A',
@@ -924,6 +963,12 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 >
                     Tarjetas de Publicador
                 </button>
+                <button
+                    className={`py-2 px-4 font-semibold ${viewMode === 'contactos' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-blue-600'}`}
+                    onClick={() => setViewMode('contactos')}
+                >
+                    Directorio de Contactos
+                </button>
             </div>
 
             {paginatedPublishers.length > 0 ? (
@@ -933,8 +978,78 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                             <PublisherCard key={pub.id} publisher={pub} onEdit={handleEdit} onDelete={handleDelete} canManage={canManage} onDownload={onDownload} />
                         ))}
                     </div>
-                ) : (
+                ) : viewMode === 'cards' ? (
                     <PublisherCardView publishers={paginatedPublishers} serviceReports={serviceReports} />
+                ) : (
+                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Celular</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Emergencia</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {paginatedPublishers.map(p => {
+                                        const nombre = `${p.Nombre} ${p.Apellido}`;
+                                        const formatPhone = (phone: string) => phone?.replace(/\D/g, '').replace(/^(\+52|52)/, '');
+                                        const cel = formatPhone(p.Cel || '');
+                                        const celEmergencia = formatPhone(p['Cel de Emergencia'] || '');
+
+                                        return (
+                                            <tr key={p.id} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">{nombre}</div>
+                                                    <div className="text-xs text-gray-500">{p.Familia || 'Sin Familia'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm text-gray-500">{p.Cel || 'N/A'}</span>
+                                                        {cel && (
+                                                            <div className="flex gap-1">
+                                                                <a href={`tel:${cel}`} className="text-blue-600 hover:text-blue-800 transition-colors p-1" title="Llamar Personal">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                        <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                                                    </svg>
+                                                                </a>
+                                                                <a href={`https://wa.me/52${cel}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-800 transition-colors p-1" title="WhatsApp">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 448 512" fill="currentColor">
+                                                                        <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.7 68.9 27.1 106.1 27.1h.1c122.4 0 222-99.6 222-222.2 0-59.3-23-115.1-65-157.1zM223.9 446.7c-33.1 0-65.6-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-104.8 85.2-190 190.1-190 50.8 0 98.5 19.8 134.4 55.7 35.8 35.8 55.7 83.5 55.7 134.3 0 104.8-85.2 190-190.1 190.1zm105.2-143.9c-5.8-2.9-34.1-16.8-39.3-18.8-5.2-2-9-2.9-12.7 2.9-3.8 5.8-14.7 18.8-18 22.5-3.3 3.8-6.7 4.2-12.5 1.3-5.8-2.9-24.5-9-46.8-28.9-17.3-15.5-29-34.6-32.4-40.5-3.4-5.8-.4-9 2.6-11.8 2.6-2.6 5.8-6.7 8.7-10.1 2.9-3.4 3.8-5.8 5.8-9.6 2-3.8 1-7.1-.5-10.1-1.5-2.9-12.7-30.6-17.4-41.8-4.6-11.1-9.3-9.5-12.7-9.7-3.3-.1-7.1-.1-11-.1-3.8 0-10.1 1.4-15.4 7.1-5.3 5.8-20.2 19.7-20.2 47.9 0 28.2 20.5 55.5 23.4 59.3 2.9 3.8 40.3 61.5 97.7 86.2 13.7 5.9 24.3 9.4 32.7 12 13.7 4.4 26.2 3.8 36.1 2.3 11-1.6 34.1-13.9 38.9-27.4 4.8-13.4 4.8-25 3.4-27.4-1.5-2.4-5.3-3.8-11-6.7z" />
+                                                                    </svg>
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{p['Contacto de Emergencia'] || 'N/A'}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs text-gray-500">{p['Cel de Emergencia'] || ''}</span>
+                                                        {celEmergencia && (
+                                                            <div className="flex gap-1">
+                                                                <a href={`tel:${celEmergencia}`} className="text-blue-600 hover:text-blue-800 transition-colors p-1" title="Llamar Emergencia">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                        <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                                                    </svg>
+                                                                </a>
+                                                                <a href={`https://wa.me/52${celEmergencia}`} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-800 transition-colors p-1" title="WhatsApp Emergencia">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 448 512" fill="currentColor">
+                                                                        <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.7 68.9 27.1 106.1 27.1h.1c122.4 0 222-99.6 222-222.2 0-59.3-23-115.1-65-157.1zM223.9 446.7c-33.1 0-65.6-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-104.8 85.2-190 190.1-190 50.8 0 98.5 19.8 134.4 55.7 35.8 35.8 55.7 83.5 55.7 134.3 0 104.8-85.2 190-190.1 190.1zm105.2-143.9c-5.8-2.9-34.1-16.8-39.3-18.8-5.2-2-9-2.9-12.7 2.9-3.8 5.8-14.7 18.8-18 22.5-3.3 3.8-6.7 4.2-12.5 1.3-5.8-2.9-24.5-9-46.8-28.9-17.3-15.5-29-34.6-32.4-40.5-3.4-5.8-.4-9 2.6-11.8 2.6-2.6 5.8-6.7 8.7-10.1 2.9-3.4 3.8-5.8 5.8-9.6 2-3.8 1-7.1-.5-10.1-1.5-2.9-12.7-30.6-17.4-41.8-4.6-11.1-9.3-9.5-12.7-9.7-3.3-.1-7.1-.1-11-.1-3.8 0-10.1 1.4-15.4 7.1-5.3 5.8-20.2 19.7-20.2 47.9 0 28.2 20.5 55.5 23.4 59.3 2.9 3.8 40.3 61.5 97.7 86.2 13.7 5.9 24.3 9.4 32.7 12 13.7 4.4 26.2 3.8 36.1 2.3 11-1.6 34.1-13.9 38.9-27.4 4.8-13.4 4.8-25 3.4-27.4-1.5-2.4-5.3-3.8-11-6.7z" />
+                                                                    </svg>
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 )
             ) : (
                 <div className="text-center p-10 bg-white rounded-lg shadow-md">

@@ -83,9 +83,11 @@
     //    service firebase.storage {
     //      match /b/{bucket}/o {
     //        match /{allPaths=**} {
-    //          // Permite leer y escribir a cualquier usuario autenticado.
-    //          // Para pruebas públicas sin inicio de sesión, usa: allow read, write: if true;
-    //          allow read, write: if request.auth != null;
+    //          // PERMISO CRÍTICO PARA IMÁGENES:
+    //          // Permite leer a todo el mundo (para que se vean mapas y fotos)
+    //          // pero solo permite escribir a usuarios autenticados.
+    //          allow read: if true;
+    //          allow write: if request.auth != null;
     //        }
     //      }
     //    }

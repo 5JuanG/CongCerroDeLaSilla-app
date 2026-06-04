@@ -1,4 +1,5 @@
 import React from 'react';
+import { DEFAULT_AVATAR } from '../constants';
 
 interface HeaderProps {
     user: {
@@ -24,7 +25,7 @@ const Header: React.FC<HeaderProps> = ({ user, activeViewLabel }) => {
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-blue-500"
                     onError={(e) => {
                         // Fallback to a default image if the provided URL fails
-                        (e.target as HTMLImageElement).src = 'https://i.imgur.com/83itvIu.png';
+                        (e.target as HTMLImageElement).src = DEFAULT_AVATAR;
                     }}
                 />
             </div>

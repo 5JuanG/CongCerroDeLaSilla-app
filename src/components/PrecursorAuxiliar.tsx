@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useMemo } from 'react';
-import { UserRole } from '../types';
+import { UserRole, Publisher } from '../types';
 import { MONTHS } from '../constants';
 import { GoogleGenAI } from "@google/genai";
 import Tooltip from './Tooltip';
@@ -30,6 +30,7 @@ interface PrecursorAuxiliarProps {
     isCommitteeMember: boolean;
     forceFormView?: boolean;
     is15HourOptionEnabled: boolean;
+    publishers: Publisher[];
 }
 
 // --- UI Sub-Components ---
@@ -42,8 +43,10 @@ const Badge: React.FC<{ status: Solicitud['status']; children: React.ReactNode }
     return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClasses[status]}`}>{children}</span>;
 };
 
-const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOptionEnabled }) => {
+const Formulario: React.FC<{ is15HourOptionEnabled: boolean, publishers: Publisher[] }> = ({ is15HourOptionEnabled, publishers }) => {
     const [nombre, setNombre] = useState('');
+    const [selectedGroup, setSelectedGroup] = useState('');
+    const [selectedPublisherId, setSelectedPublisherId] = useState('');
     const [mes, setMes] = useState('');
     const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
     const [horas, setHoras] = useState<string | null>(null);
@@ -169,9 +172,57 @@ const Formulario: React.FC<{ is15HourOptionEnabled: boolean }> = ({ is15HourOpti
                     <Tooltip text="Si marca esta casilla, su solicitud se renovará automáticamente cada mes hasta que notifique lo contrario al comité de servicio." />
                 </div>
                 <p className="text-gray-600 text-base md:text-lg my-6 leading-relaxed">Disfruto de una buena reputación moral y tengo buenos hábitos. He hecho planes para cumplir con el requisito de horas.</p>
-                <div className="mb-6">
-                    <label htmlFor="nombre" className="block text-lg font-bold text-gray-700 mb-2">Nombre (en imprenta):</label>
-                    <input type="text" id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required className="w-full p-4 text-lg border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div className="form-group">
+                        <label htmlFor="grupo" className="block text-lg font-bold text-gray-700 mb-2">Grupo:</label>
+                        <select
+                            id="grupo"
+                            value={selectedGroup}
+                            onChange={(e) => {
+                                setSelectedGroup(e.target.value);
+                                setSelectedPublisherId('');
+                                setNombre('');
+                            }}
+                            className="w-full p-4 text-lg border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition"
+                            required
+                        >
+                            <option value="">Seleccione un grupo</option>
+                            {[...new Set(publishers.map(p => p.Grupo).filter(Boolean))].sort().map(g => (
+                                <option key={g} value={g}>{g}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label htmlFor="nombre" className="block text-lg font-bold text-gray-700 mb-2">Nombre:</label>
+                        <select
+                            id="nombre"
+                            value={selectedPublisherId}
+                            onChange={(e) => {
+                                const pubId = e.target.value;
+                                setSelectedPublisherId(pubId);
+                                const pub = publishers.find(p => p.id === pubId);
+                                if (pub) {
+                                    setNombre([pub.Nombre, pub.Apellido, pub['2do Apellido'], pub['Apellido de casada']].filter(n => n && n !== 'N/A').join(' '));
+                                } else {
+                                    setNombre('');
+                                }
+                            }}
+                            required
+                            disabled={!selectedGroup}
+                            className="w-full p-4 text-lg border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                            <option value="">{selectedGroup ? 'Seleccione un nombre' : 'Primero seleccione un grupo'}</option>
+                            {publishers
+                                .filter(p => p.Grupo === selectedGroup)
+                                .sort((a, b) => a.Nombre.localeCompare(b.Nombre))
+                                .map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {[p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(n => n && n !== 'N/A').join(' ')}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                    </div>
                 </div>
                 <div className="mb-6">
                     <label className="block text-lg font-bold text-gray-700 mb-2">Firma del Solicitante:</label>
@@ -347,7 +398,7 @@ const SigningModal: React.FC<{
     );
 };
 
-const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommitteeMember, forceFormView = false, is15HourOptionEnabled }) => {
+const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommitteeMember, forceFormView = false, is15HourOptionEnabled, publishers }) => {
     const isPrivilegedUser = useMemo(() => userRole === 'admin' || userRole === 'overseer' || isCommitteeMember, [userRole, isCommitteeMember]);
     const initialView = forceFormView ? 'form' : (isPrivilegedUser ? 'list' : 'form');
     const [view, setView] = useState<'list' | 'form'>(initialView);
@@ -652,7 +703,7 @@ const PrecursorAuxiliar: React.FC<PrecursorAuxiliarProps> = ({ userRole, isCommi
             )}
 
             <div className="bg-white p-0 sm:p-6 rounded-lg shadow-md">
-                {view === 'list' ? <SolicitudesList /> : <Formulario is15HourOptionEnabled={is15HourOptionEnabled} />}
+                {view === 'list' ? <SolicitudesList /> : <Formulario is15HourOptionEnabled={is15HourOptionEnabled} publishers={publishers} />}
             </div>
         </div>
     );

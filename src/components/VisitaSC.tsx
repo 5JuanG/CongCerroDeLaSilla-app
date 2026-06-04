@@ -12,6 +12,7 @@ import html2canvas from 'html2canvas';
 
 import PublisherRecordModal from './PublisherRecordModal';
 import { QRCodeSVG } from 'qrcode.react';
+import { getCalculatedStatus } from '../utils';
 
 // --- Atomic UI Helpers ---
 
@@ -104,9 +105,16 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             return a.localeCompare(b);
         });
     }, [publishers]);
+    
+    const publishersWithStatus = useMemo(() => {
+        return publishers.map(p => ({
+            ...p,
+            calculatedStatus: getCalculatedStatus(p, serviceReports, MONTHS)
+        }));
+    }, [publishers, serviceReports]);
 
     const filteredCards = useMemo(() => {
-        return publishers.filter(p => {
+        return publishersWithStatus.filter(p => {
             const pGroup = String(p.Grupo || '').trim().toLowerCase();
             const fGroup = String(cardFilters.group || '').trim().toLowerCase();
             const matchesGroup = fGroup === 'todos' || pGroup === fGroup;
@@ -128,18 +136,19 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             const matchesName = !fName || pFullName.includes(fName);
 
             let matchesStatus = true;
-            if (cardFilters.status !== 'todos') {
-                const pStatus = String(p.Estatus || '').toLowerCase().trim();
+            if (cardFilters.status === 'todos') {
+                // Excluir inactivos (calculados) por defecto según solicitud del usuario
+                matchesStatus = p.calculatedStatus !== 'inactivo';
+            } else {
                 const fStatus = cardFilters.status.toLowerCase();
-                if (fStatus === 'activos') matchesStatus = pStatus === 'activo';
-                else if (fStatus === 'inactivos') matchesStatus = pStatus === 'inactivo';
-                else if (fStatus === 'irregulares') matchesStatus = pStatus === 'irregular';
+                if (fStatus === 'activos') matchesStatus = p.calculatedStatus === 'activo';
+                else if (fStatus === 'irregulares') matchesStatus = p.calculatedStatus === 'irregular';
             }
 
             const isBaja = p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1';
             return matchesGroup && matchesGender && matchesStatus && matchesFamily && matchesName && !isBaja;
         });
-    }, [cardFilters, publishers]);
+    }, [cardFilters, publishersWithStatus]);
 
     const homeButtons = [
         { id: 'discursos', title: 'Discursos del SC', desc: 'Martes, Público y Conclusión', color: 'from-blue-600 to-blue-900', shadow: 'shadow-blue-500/30', action: () => setPresModal('discursos') },
@@ -196,9 +205,8 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                 {groupOptions.map(g => (<option key={g} value={g} className="text-black">Grupo {g}</option>))}
                             </select>
                             <select className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-blue-500 outline-none" value={cardFilters.status} onChange={(e) => setCardFilters({ ...cardFilters, status: e.target.value })}>
-                                <option value="todos" className="text-black">Todos los Estatus</option>
+                                <option value="todos" className="text-black">Todos (Activos e Irregulares)</option>
                                 <option value="activos" className="text-black">Activos</option>
-                                <option value="inactivos" className="text-black">Inactivos</option>
                                 <option value="irregulares" className="text-black">Irregulares</option>
                             </select>
                             <select className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-blue-500 outline-none" value={cardFilters.gender} onChange={(e) => setCardFilters({ ...cardFilters, gender: e.target.value })}>
@@ -226,7 +234,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                     <div className="relative w-32 h-32 md:w-48 h-48 rounded-full p-2 bg-slate-800 shadow-2xl">
                                         <img src={p.Foto || 'https://i.imgur.com/83itvIu.png'} alt={p.Nombre} className="w-full h-full rounded-full object-cover border-4 border-blue-500 shadow-inner" />
                                     </div>
-                                    <div className={`absolute top-0 right-0 px-4 md:px-6 py-1 md:py-2 rounded-full text-[10px] md:text-xs font-black uppercase text-black shadow-2xl ${p.Estatus === 'Activo' ? 'bg-[#39FF14]' : p.Estatus === 'Inactivo' ? 'bg-red-500 text-white' : 'bg-orange-500 text-white'}`}>{p.Estatus}</div>
+                                    <div className={`absolute top-0 right-0 px-4 md:px-6 py-1 md:py-2 rounded-full text-[10px] md:text-xs font-black uppercase text-black shadow-2xl ${p.calculatedStatus === 'activo' ? 'bg-[#39FF14]' : p.calculatedStatus === 'inactivo' ? 'bg-red-500 text-white' : 'bg-orange-500 text-white'}`}>{p.calculatedStatus}</div>
                                 </div>
                                 <div className="text-center space-y-2 md:space-y-3 z-10 w-full flex-1 flex flex-col justify-between h-full pt-4">
                                     <div className="space-y-2">

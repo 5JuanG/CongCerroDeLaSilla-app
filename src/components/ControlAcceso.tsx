@@ -12,6 +12,7 @@ interface ControlAccesoProps {
     onUpdateUserPermissions: (userId: string, permissions: Permission[]) => Promise<void>;
     onUpdateServiceCommittee: (memberUids: string[]) => Promise<void>;
     onLinkUserToPublisher: (userId: string, publisherId: string) => Promise<void>;
+    onDeleteUser: (userId: string) => Promise<void>;
     isPublicReportFormEnabled: boolean;
     onUpdatePublicReportFormEnabled: (isEnabled: boolean) => Promise<void>;
     meetingConfig: MeetingConfig | null;
@@ -53,6 +54,8 @@ const manageablePermissions: { label: string; items: { permission: Permission; l
             { permission: 'programaServiciosAuxiliares', label: 'Prog Acomodadores' },
             { permission: 'reunionPublica', label: 'Reunión Pública' },
             { permission: 'visitaSC', label: 'Visita del SC' },
+            { permission: 'seguimientoInformes', label: 'Agente de Informes' },
+            { permission: 'programaPredicacionSemanal', label: 'Programa de Predicación' },
         ]
     },
     {
@@ -181,6 +184,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
     onUpdateUserPermissions,
     onUpdateServiceCommittee,
     onLinkUserToPublisher,
+    onDeleteUser,
     isPublicReportFormEnabled,
     onUpdatePublicReportFormEnabled,
     meetingConfig,
@@ -200,6 +204,11 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
     // State for meeting config form
     const [localMeetingConfig, setLocalMeetingConfig] = useState<MeetingConfig | null>(null);
     const [newEvent, setNewEvent] = useState({ date: '', description: '' });
+    const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+
+    const togglePasswordVisibility = (userId: string) => {
+        setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+    };
 
     const { uidToPublisherMap, unlinkedPublishers } = useMemo(() => {
         const map = new Map<string, Publisher>();
@@ -458,6 +467,7 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                             <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                                 <tr>
                                     <th className="px-6 py-3">Usuario (Nombre y Email)</th>
+                                    <th className="px-6 py-3">Contraseña</th>
                                     <th className="px-6 py-3">Rol Asignado</th>
                                     <th className="px-6 py-3 text-center">Acciones</th>
                                 </tr>
@@ -472,20 +482,55 @@ const ControlAcceso: React.FC<ControlAccesoProps> = ({
                                                 {linkedPublisher ? <>{[linkedPublisher.Nombre, linkedPublisher.Apellido].filter(Boolean).join(' ')}<span className="block text-xs text-gray-500">{user.email}</span></> : user.email}
                                             </td>
                                             <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono">
+                                                        {user.password 
+                                                            ? (visiblePasswords[user.id] ? user.password : '••••••••') 
+                                                            : <span className="text-gray-400 italic text-xs">No registrada</span>
+                                                        }
+                                                    </span>
+                                                    {user.password && (
+                                                        <button onClick={() => togglePasswordVisibility(user.id)} className="text-gray-500 hover:text-blue-600">
+                                                            {visiblePasswords[user.id] ? (
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                                                </svg>
+                                                            ) : (
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                </svg>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
                                                 <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)} disabled={!canManage} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 disabled:bg-gray-200">
                                                     {Object.entries(roleNames).map(([roleKey, roleName]) => <option key={roleKey} value={roleKey}>{roleName}</option>)}
                                                 </select>
                                             </td>
                                             <td className="px-6 py-4 text-center space-x-4">
-                                                {!linkedPublisher && <button onClick={() => setLinkingUser(user)} disabled={!canManage} className="font-medium text-green-600 hover:underline disabled:text-gray-400">Enlazar con Publicador</button>}
+                                                <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                                                    {!linkedPublisher && <button onClick={() => setLinkingUser(user)} disabled={!canManage} className="font-medium text-green-600 hover:underline disabled:text-gray-400">Enlazar</button>}
 
-                                                {isPrivileged ? (
-                                                    <span className="text-xs italic text-gray-500">Todos los permisos (automático)</span>
-                                                ) : (
-                                                    <button onClick={() => setEditingUser(user)} disabled={!canManage} className="font-medium text-blue-600 hover:underline disabled:text-gray-400">
-                                                        Gestionar Permisos
+                                                    {isPrivileged ? (
+                                                        <span className="text-[10px] italic text-gray-500">Permisos auto</span>
+                                                    ) : (
+                                                        <button onClick={() => setEditingUser(user)} disabled={!canManage} className="font-medium text-blue-600 hover:underline disabled:text-gray-400">
+                                                            Permisos
+                                                        </button>
+                                                    )}
+                                                    
+                                                    <button 
+                                                        onClick={() => onDeleteUser(user.id)} 
+                                                        disabled={!canManage || user.role === 'admin'} 
+                                                        className="font-medium text-red-600 hover:underline disabled:text-gray-400"
+                                                        title="Eliminar usuario"
+                                                    >
+                                                        Eliminar
                                                     </button>
-                                                )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );

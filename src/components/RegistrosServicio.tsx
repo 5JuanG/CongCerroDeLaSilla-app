@@ -257,8 +257,21 @@ const RecordCard: React.FC<RecordCardProps> = ({
                                         <td className="p-2 border border-black text-center">
                                             {editable ? <input type="number" step="0.1" className="w-20 p-1 text-center border rounded" data-field="horas" value={report?.horas ?? ''} onChange={(e) => handleInputChange(e, month, yearToSearch)} /> : (report?.horas ?? '')}
                                         </td>
-                                        <td className="p-2 border border-black" translate="no">
-                                            {editable ? <input type="text" className="w-full p-1 border rounded" data-field="notas" value={report?.notas ?? ''} onChange={(e) => handleInputChange(e, month, yearToSearch)} translate="no" /> : report?.notas}
+                                        <td className="p-2 border border-black overflow-hidden" translate="no">
+                                            {editable ? (
+                                                <input 
+                                                    type="text" 
+                                                    maxLength={45} 
+                                                    className="w-full p-1 border rounded text-xs" 
+                                                    data-field="notas" 
+                                                    value={report?.notas ?? ''} 
+                                                    onChange={(e) => handleInputChange(e, month, yearToSearch)} 
+                                                    translate="no" 
+                                                    title="Máximo 45 caracteres para evitar distorsión al imprimir"
+                                                />
+                                            ) : (
+                                                <div className="max-w-[150px] truncate" title={report?.notas}>{report?.notas}</div>
+                                            )}
                                         </td>
                                     </tr>
                                 );

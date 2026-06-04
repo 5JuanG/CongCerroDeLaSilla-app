@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Publisher, ServiceReport, PioneerApplication } from '../types';
 import { MONTHS } from '../constants';
+import { getPreviousMonthAndYear } from '../utils';
 
 interface StatCardProps {
     title: string;
@@ -28,13 +29,13 @@ interface DashboardPrecursoresProps {
 }
 
 const DashboardPrecursores: React.FC<DashboardPrecursoresProps> = ({ publishers, serviceReports, pioneerApplications }) => {
-    const currentServiceYearEnd = new Date().getMonth() >= 8 ? new Date().getFullYear() + 1 : new Date().getFullYear();
-    const currentMonthName = MONTHS[new Date().getMonth()];
+    const { monthIndex, serviceYear } = getPreviousMonthAndYear();
+    const currentMonthName = MONTHS[monthIndex];
 
-    const [selectedYear, setSelectedYear] = useState(currentServiceYearEnd);
+    const [selectedYear, setSelectedYear] = useState(serviceYear);
     const [selectedMonth, setSelectedMonth] = useState(currentMonthName);
 
-    const years = useMemo(() => Array.from({ length: 5 }, (_, i) => currentServiceYearEnd - i), [currentServiceYearEnd]);
+    const years = useMemo(() => Array.from({ length: 5 }, (_, i) => serviceYear - i), [serviceYear]);
 
     const stats = useMemo(() => {
         const regularPioneersCount = publishers.filter(p => p.Estatus === 'Activo' && p['Priv Adicional'] === 'Precursor Regular').length;

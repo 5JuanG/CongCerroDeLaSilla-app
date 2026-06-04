@@ -2,7 +2,7 @@ import { Dispatch, SetStateAction } from 'react';
 
 export type UserRole = 'admin' | 'overseer' | 'publisher' | 'helper' | 'auxiliary' | 'secretario';
 
-export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica' | 'vigilancia' | 'visitaSC';
+export type View = 'asistenciaForm' | 'asistenciaReporte' | 'publicadores' | 'registrosServicio' | 'grupos' | 'informeServicio' | 'territorios' | 'precursorAuxiliar' | 'home' | 'controlAcceso' | 'informeMensualGrupo' | 'gestionContenidoInvitacion' | 'informeMensualConsolidado' | 'dashboardCursos' | 'dashboardPrecursores' | 'seguimientoInformes' | 'asignacionesReunion' | 'programaServiciosAuxiliares' | 'vidaYMinisterio' | 'registroTransaccion' | 'reunionPublica' | 'vigilancia' | 'visitaSC' | 'programaPredicacionSemanal';
 
 export interface MeetingDetails {
     hora: string;
@@ -84,6 +84,7 @@ export type Permission = View | GranularPermission;
 export interface UserData {
     id: string;
     email: string;
+    password?: string;
     role: UserRole;
     isCommitteeMember: boolean;
     permissions: Permission[];
@@ -97,6 +98,21 @@ export interface Publisher {
     Familia?: string;
     preparedTalks?: number[];
     availabilityDetails?: string;
+    esLugarEncuentro?: boolean;
+    territorioCasa?: number;
+}
+
+export interface FieldServiceSchedule {
+    id: string;
+    date: string;
+    meetingPlace: string;
+    captainId: string;
+    captainName: string;
+    time: string;
+    period: 'Mañana' | 'Tarde' | 'Noche';
+    modality: string;
+    suggestedTerritories: number[];
+    notes?: string;
 }
 
 export interface CustomTalk {
@@ -145,7 +161,7 @@ export interface TerritoryMarker {
     terrNum: number;
     x: number; // Porcentaje 0-100
     y: number; // Porcentaje 0-100
-    status: 'available' | 'assigned' | 'completed';
+    status: 'available' | 'assigned' | 'completed' | 'delayed';
     assigneeName?: string;
     lastUpdated: any;
 }
@@ -262,6 +278,13 @@ export interface SpecialEvent {
     id: string;
     date: string;
     description: string;
+}
+
+export interface Campaign {
+    id: string;
+    name: string;
+    startDate: string;
+    endDate: string;
 }
 
 export interface MeetingConfig {

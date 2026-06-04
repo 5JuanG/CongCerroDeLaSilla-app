@@ -51,8 +51,8 @@ const Carousel: React.FC<CarouselProps> = ({ slides }) => {
             <div className="relative h-[300px] sm:h-[400px] md:h-[500px] w-full" >
                 {slides.map((slide, index) => (
                     <div key={slide.id} className={`absolute inset-0 transition-all duration-1000 ease-in-out ${index === currentIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-105'}`}>
-                        <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-8 sm:p-12 text-white">
+                        <img src={slide.imageUrl} alt={slide.title} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-slate-800/80 flex flex-col justify-end p-8 sm:p-12 text-white">
                             <h3 className="text-3xl sm:text-5xl font-black drop-shadow-2xl mb-2 tracking-tight">{slide.title}</h3>
                             <p className="text-lg sm:text-xl text-gray-200 font-medium max-w-2xl drop-shadow-lg">{slide.phrase}</p>
                         </div>

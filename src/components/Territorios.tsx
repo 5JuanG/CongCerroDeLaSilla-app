@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { TerritoryRecord, TerritoryMap, TerritoryResponsible, DailyTerritoryAssignment, Publisher, ModalInfo, TerritoryMarker } from '../types';
+import { TerritoryRecord, TerritoryMap, TerritoryResponsible, DailyTerritoryAssignment, Publisher, ModalInfo, TerritoryMarker, Campaign } from '../types';
 import { compressImage } from '../utils';
 import Tooltip from './Tooltip';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { DEFAULT_AVATAR, DEFAULT_MAP_ERROR } from '../constants';
+import InteractiveMap from './InteractiveMap';
 
 interface TerritoriosProps {
     records: TerritoryRecord[];
@@ -26,6 +28,9 @@ interface TerritoriosProps {
     territoryMarkers: TerritoryMarker[];
     onSaveTerritoryMarker: (marker: Omit<TerritoryMarker, 'id'> & { id?: string }) => Promise<void>;
     onDeleteTerritoryMarker: (id: string) => Promise<void>;
+    campaigns: Campaign[];
+    onSaveCampaign: (campaign: Omit<Campaign, 'id'> & { id?: string }) => Promise<void>;
+    onDeleteCampaign: (id: string) => Promise<void>;
 }
 
 interface TerritoryData {
@@ -103,6 +108,19 @@ const MapManager: React.FC<{
         return [...maps].sort((a, b) => {
             if (a.territoryId === 'global') return -1;
             if (b.territoryId === 'global') return 1;
+            
+            if (a.territoryId === 'global-numerado') return -1;
+            if (b.territoryId === 'global-numerado') return 1;
+
+            const aIsZona = a.territoryId.startsWith('zona-');
+            const bIsZona = b.territoryId.startsWith('zona-');
+            
+            if (aIsZona && bIsZona) {
+                return parseInt(a.territoryId.replace('zona-', ''), 10) - parseInt(b.territoryId.replace('zona-', ''), 10);
+            }
+            if (aIsZona) return -1;
+            if (bIsZona) return 1;
+
             return parseInt(a.territoryId, 10) - parseInt(b.territoryId, 10);
         });
     }, [maps]);
@@ -116,8 +134,14 @@ const MapManager: React.FC<{
                         <div>
                             <label htmlFor="territory-select" className="block text-sm font-medium text-gray-700">Territorio</label>
                             <select id="territory-select" value={selectedTerritoryId} onChange={e => setSelectedTerritoryId(e.target.value)} className="mt-1 w-full p-2 border rounded-md">
-                                <option value="global">Global (Todos)</option>
-                                {Array.from({ length: 40 }, (_, i) => i + 1).map(num => <option key={num} value={num.toString()}>{num}</option>)}
+                                <option value="global">Global (Interactivo sin números)</option>
+                                <option value="global-numerado">Global Numerado (Referencia)</option>
+                                <optgroup label="Zonas de Predicación">
+                                    {Array.from({ length: 15 }, (_, i) => i + 1).map(num => <option key={`zona-${num}`} value={`zona-${num}`}>Zona {num}</option>)}
+                                </optgroup>
+                                <optgroup label="Territorios Individuales">
+                                    {Array.from({ length: 40 }, (_, i) => i + 1).map(num => <option key={num} value={num.toString()}>{num}</option>)}
+                                </optgroup>
                             </select>
                         </div>
                         <div>
@@ -137,16 +161,19 @@ const MapManager: React.FC<{
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {sortedMaps.map(map => (
                             <div key={map.id} className="group relative border rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
-                                <img src={map.mapUrl} alt={`Mapa ${map.territoryId}`} onClick={() => setViewingMapUrl(map.mapUrl)} className="w-full h-32 object-cover cursor-pointer" />
+                                <img src={map.mapUrl} alt={`Mapa ${map.territoryId}`} onClick={() => setViewingMapUrl(map.mapUrl)} className="w-full h-32 object-cover cursor-pointer" onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_MAP_ERROR; }} />
                                 <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-center py-1 text-sm font-bold">
-                                    {map.territoryId === 'global' ? 'Global' : `Terr. ${map.territoryId}`}
+                                    {map.territoryId === 'global' ? 'Global' : 
+                                     map.territoryId === 'global-numerado' ? 'Global Numerado' :
+                                     map.territoryId.startsWith('zona-') ? `Zona ${map.territoryId.replace('zona-', '')}` :
+                                     `Terr. ${map.territoryId}`}
                                 </div>
                                 {canManage && (
                                     <button onClick={() => handleDelete(map)} className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                                 )}
                                 {onDownload && (
                                     <button
-                                        onClick={() => onDownload(map.mapUrl, `mapa_territorio_${map.territoryId}.webp`)}
+                                        onClick={() => onDownload(map.mapUrl, `mapa_${map.territoryId}.webp`)}
                                         className="absolute top-1 left-1 bg-white text-blue-600 rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                                         title="Descargar Mapa"
                                     >
@@ -166,158 +193,7 @@ const MapManager: React.FC<{
     );
 };
 
-const InteractiveMap: React.FC<{
-    maps: TerritoryMap[];
-    markers: TerritoryMarker[];
-    onSaveMarker: (marker: Omit<TerritoryMarker, 'id'> & { id?: string }) => Promise<void>;
-    onDeleteMarker: (id: string) => Promise<void>;
-    canManage: boolean;
-    onShowModal: (info: ModalInfo) => void;
-}> = ({ maps, markers, onSaveMarker, onDeleteMarker, canManage, onShowModal }) => {
-    const [isAddingMode, setIsAddingMode] = useState(false);
-    const [editingMarker, setEditingMarker] = useState<Partial<TerritoryMarker> | null>(null);
-    const containerRef = React.useRef<HTMLDivElement>(null);
-
-    const globalMap = maps.find(m => m.territoryId === 'global');
-
-    const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!canManage || !containerRef.current) return;
-
-        const rect = containerRef.current.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-        setEditingMarker({ x, y, status: 'available', terrNum: 0 });
-    };
-
-    const handleSave = async () => {
-        if (!editingMarker || !editingMarker.terrNum) {
-            onShowModal({ type: 'error', title: 'Error', message: 'Debe ingresar un número de territorio.' });
-            return;
-        }
-
-        try {
-            await onSaveMarker(editingMarker as any);
-            setEditingMarker(null);
-            onShowModal({ type: 'success', title: 'Éxito', message: 'Marcador guardado.' });
-        } catch (error) {
-            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo guardar el marcador.' });
-        }
-    };
-
-    if (!globalMap) {
-        return (
-            <div className="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
-                <span className="text-4xl mb-4">🗺️</span>
-                <p className="text-gray-500 text-center max-w-md">No se ha subido un mapa global. Por favor, suba una imagen con la etiqueta "Global" en la Galería de Mapas para activar esta función.</p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm border gap-4">
-                <div>
-                    <h3 className="text-lg font-bold text-gray-800">Mapa Territorial Interactivo</h3>
-                    <p className="text-sm text-gray-500">Haz clic en el mapa para ubicar o gestionar territorios.</p>
-                </div>
-                <div className="flex flex-wrap gap-4 text-xs font-bold">
-                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-gray-400"></span> Disponible</div>
-                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> Asignado</div>
-                    <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500"></span> Completado</div>
-                </div>
-            </div>
-
-            <div
-                ref={containerRef}
-                className="relative cursor-crosshair overflow-hidden rounded-xl shadow-2xl border-4 border-white"
-                onClick={handleMapClick}
-            >
-                <img src={globalMap.mapUrl} alt="Mapa Global" className="w-full h-auto block select-none" draggable={false} />
-
-                {markers.map(marker => (
-                    <div
-                        key={marker.id}
-                        className={`absolute sm:w-5 sm:h-5 w-[10px] h-[10px] translate-x-[-50%] translate-y-[-50%] rounded-full border-[0.1px] border-white shadow-sm cursor-pointer flex items-center justify-center text-[5px] sm:text-[9px] font-bold text-white transition-transform hover:scale-[2.5] z-10 ${marker.status === 'completed' ? 'bg-green-500' : marker.status === 'assigned' ? 'bg-red-500' : 'bg-gray-500'
-                            }`}
-                        style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (canManage) setEditingMarker(marker);
-                        }}
-                        title={`Territorio ${marker.terrNum}`}
-                    >
-                        <span className="hidden sm:inline">{marker.terrNum}</span>
-                        <span className="sm:hidden" style={{ fontSize: '5px', lineHeight: '1' }}>{marker.terrNum}</span>
-                    </div>
-                ))}
-            </div>
-
-            {editingMarker && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[100] p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-6 bg-slate-50 border-b">
-                            <h3 className="text-xl font-black text-slate-800">Gestionar Marcador</h3>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Número de Territorio</label>
-                                <input
-                                    type="number"
-                                    value={editingMarker.terrNum || ''}
-                                    onChange={e => setEditingMarker({ ...editingMarker, terrNum: parseInt(e.target.value) })}
-                                    className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
-                                    placeholder="Ej: 15"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Estado</label>
-                                <select
-                                    value={editingMarker.status}
-                                    onChange={e => setEditingMarker({ ...editingMarker, status: e.target.value as any })}
-                                    className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
-                                >
-                                    <option value="available">Disponible (Gris)</option>
-                                    <option value="assigned">Asignado (Rojo)</option>
-                                    <option value="completed">Completado (Verde)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="p-6 bg-slate-50 border-t flex flex-col gap-2">
-                            <button
-                                onClick={handleSave}
-                                className="w-full py-3 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-200"
-                            >
-                                Guardar Cambios
-                            </button>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setEditingMarker(null)}
-                                    className="flex-1 py-3 bg-white text-slate-600 font-bold rounded-xl border border-slate-200 hover:bg-slate-100 transition-all text-sm"
-                                >
-                                    Cancelar
-                                </button>
-                                {editingMarker.id && (
-                                    <button
-                                        onClick={async () => {
-                                            if (window.confirm('¿Eliminar este marcador?')) {
-                                                await onDeleteMarker(editingMarker.id!);
-                                                setEditingMarker(null);
-                                            }
-                                        }}
-                                        className="flex-1 py-3 bg-red-50 text-red-600 font-bold rounded-xl border border-red-100 hover:bg-red-100 transition-all text-sm"
-                                    >
-                                        Eliminar
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
+// Removed internal InteractiveMap component
 
 
 const Territorios: React.FC<TerritoriosProps> = ({
@@ -340,11 +216,14 @@ const Territorios: React.FC<TerritoriosProps> = ({
     isCommitteeMember,
     territoryMarkers,
     onSaveTerritoryMarker,
-    onDeleteTerritoryMarker
+    onDeleteTerritoryMarker,
+    campaigns = [],
+    onSaveCampaign,
+    onDeleteCampaign
 }) => {
     const [activeTab, setActiveTab] = useState('registro');
     const [currentServiceYear, setCurrentServiceYear] = useState(getCurrentServiceYear());
-    const [vueltaPage, setVueltaPage] = useState(1);
+    const [vueltaPage, setVueltaPage] = useState(-1); // -1 means "go to last page" (set after data loads)
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterTerritory, setFilterTerritory] = useState('');
@@ -354,6 +233,8 @@ const Territorios: React.FC<TerritoriosProps> = ({
     const [isResponsibleModalOpen, setIsResponsibleModalOpen] = useState(false);
     const [isDailyAssignmentModalOpen, setIsDailyAssignmentModalOpen] = useState(false);
     const [editingDailyAssignment, setEditingDailyAssignment] = useState<Partial<DailyTerritoryAssignment> | null>(null);
+    const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+    const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
 
     const serviceYearOptions = useMemo(() => Array.from({ length: 5 }, (_, i) => getCurrentServiceYear() - i), []);
 
@@ -388,12 +269,47 @@ const Territorios: React.FC<TerritoriosProps> = ({
 
     const totalPages = useMemo(() => Math.max(1, Math.ceil(maxVueltas / 4)), [maxVueltas]);
 
+    // Auto-jump to last page whenever totalPages changes (e.g., year switches or data loads)
+    useEffect(() => {
+        setVueltaPage(totalPages);
+    }, [totalPages]);
+
     const handleOpenModal = (terrNum: number, vueltaNum: number) => {
         if (!canManage) return; // Prevent opening modal if user can't manage
         const record = territoryData[terrNum]?.vueltas[vueltaNum];
         setEditingRecord(record || { terrNum, vueltaNum, serviceYear: currentServiceYear });
         setIsModalOpen(true);
     };
+
+    const getCampaignHighlight = useCallback((terrNum: number, vueltaNum: number) => {
+        const vueltaData = territoryData[terrNum]?.vueltas[vueltaNum];
+        if (!vueltaData || !vueltaData.assignedDate) return { highlightClass: '', label: '' };
+
+        const date = vueltaData.assignedDate;
+        const currentCampaign = (campaigns || []).find(c => date >= c.startDate && date <= c.endDate);
+
+        if (!currentCampaign) return { highlightClass: '', label: '' };
+
+        // Obtenemos todos los registros de este territorio que caen en este periodo de campaña específico
+        const recordsInThisCampaign = (Object.values(territoryData[terrNum].vueltas) as TerritoryRecord[])
+            .filter(v => v.assignedDate && v.assignedDate >= currentCampaign.startDate && v.assignedDate <= currentCampaign.endDate)
+            .sort((a, b) => a.assignedDate!.localeCompare(b.assignedDate!));
+
+        const relativeTurnIndex = recordsInThisCampaign.findIndex(v => v.vueltaNum === vueltaNum);
+        const relativeTurn = relativeTurnIndex !== -1 ? relativeTurnIndex + 1 : 1;
+
+        let colorClass = '';
+        if (relativeTurn === 1) colorClass = 'bg-yellow-300 text-black font-bold border-2 border-yellow-500';
+        else if (relativeTurn === 2) colorClass = 'bg-lime-400 text-black font-bold border-2 border-lime-600';
+        else if (relativeTurn === 3) colorClass = 'bg-cyan-300 text-black font-bold border-2 border-cyan-500';
+        else if (relativeTurn === 4) colorClass = 'bg-pink-300 text-black font-bold border-2 border-pink-500';
+        else colorClass = 'bg-purple-600 text-white font-bold border-2 border-purple-800';
+
+        return {
+            highlightClass: colorClass,
+            label: `Camp. V${relativeTurn}`
+        };
+    }, [campaigns, territoryData]);
 
     const handleSave = async (recordToSave: Partial<TerritoryRecord>) => {
         if (!recordToSave.terrNum || !recordToSave.vueltaNum || !recordToSave.serviceYear) {
@@ -420,7 +336,21 @@ const Territorios: React.FC<TerritoriosProps> = ({
 
         try {
             await onSave(fullRecordData);
-            onShowModal({ type: 'success', title: 'Guardado', message: 'Registro guardado con éxito.' });
+            
+            // Sync with marker: Find the marker for this territory and update its status
+            const marker = territoryMarkers.find(m => m.terrNum === recordToSave.terrNum);
+            if (marker) {
+                let newStatus: 'available' | 'assigned' | 'completed' = 'available';
+                if (recordToSave.assignedDate && !recordToSave.completedDate) {
+                    newStatus = 'assigned';
+                } else if (recordToSave.completedDate) {
+                    newStatus = 'completed';
+                }
+                
+                await onSaveTerritoryMarker({ ...marker, status: newStatus });
+            }
+
+            onShowModal({ type: 'success', title: 'Guardado', message: 'Registro guardado y mapa actualizado.' });
             setIsModalOpen(false);
             setEditingRecord(null);
         } catch (error) {
@@ -449,6 +379,17 @@ const Territorios: React.FC<TerritoriosProps> = ({
         }
     };
 
+    const handleResetCompletedMarkers = async () => {
+        const completedMarkers = territoryMarkers.filter(m => m.status === 'completed');
+        if (completedMarkers.length === 0) return;
+
+        await Promise.all(
+            completedMarkers.map(marker => 
+                onSaveTerritoryMarker({ ...marker, status: 'available' })
+            )
+        );
+    };
+
     const handleViewTerritoryMap = (terrNum: number) => {
         const map = territoryMaps.find(m => m.territoryId === terrNum.toString());
         if (map) {
@@ -462,38 +403,57 @@ const Territorios: React.FC<TerritoriosProps> = ({
         }
     };
 
-    // Calculate territories worked in the last round
-    const getLastRoundTerritories = useMemo(() => {
-        const lastRoundTerrs: number[] = [];
-
-        // Find the maximum vuelta number across all territories for current service year
+    // Calculate territories worked in a specific round
+    const getWorkedTerritories = useCallback((vuelta: number) => {
+        if (vuelta <= 0) return [];
+        const worked: number[] = [];
         const currentYearRecords = records.filter(r => r.serviceYear === currentServiceYear);
-        const maxVuelta = Math.max(...currentYearRecords.map(r => r.vueltaNum), 0);
-
-        if (maxVuelta === 0) return [];
-
-        // Get all territories that have been completed in the last vuelta
+        
         for (let terrNum = 1; terrNum <= 40; terrNum++) {
-            const lastVueltaRecord = currentYearRecords.find(
-                r => r.terrNum === terrNum && r.vueltaNum === maxVuelta && r.completedDate
+            const record = currentYearRecords.find(
+                r => r.terrNum === terrNum && r.vueltaNum === vuelta && r.completedDate
             );
-            if (lastVueltaRecord) {
-                lastRoundTerrs.push(terrNum);
+            if (record) {
+                worked.push(terrNum);
             }
         }
-
-        return lastRoundTerrs.sort((a, b) => a - b);
+        return worked.sort((a, b) => a - b);
     }, [records, currentServiceYear]);
 
+    const currentVueltaWorked = useMemo(() => {
+        const yearRecords = records.filter(r => r.serviceYear === currentServiceYear);
+        if (yearRecords.length === 0) return [];
+        
+        const vueltas = yearRecords.map(r => r.vueltaNum);
+        let maxV = Math.max(...vueltas);
+        
+        // Damping: if max vuelta has only 1 record and previous has many, stay in previous
+        const countInMax = yearRecords.filter(r => r.vueltaNum === maxV).length;
+        if (maxV > 1 && countInMax === 1) {
+            const countInPrev = yearRecords.filter(r => r.vueltaNum === maxV - 1).length;
+            if (countInPrev > 5) maxV = maxV - 1;
+        }
+
+        return getWorkedTerritories(maxV);
+    }, [getWorkedTerritories, records, currentServiceYear]);
+
+    const previousVueltaWorked = useMemo(() => {
+        const currentYearRecords = records.filter(r => r.serviceYear === currentServiceYear);
+        const maxVuelta = currentYearRecords.length > 0 ? Math.max(...currentYearRecords.map(r => r.vueltaNum)) : 0;
+        return getWorkedTerritories(maxVuelta - 1);
+    }, [getWorkedTerritories, records, currentServiceYear]);
+
+    const [viewingVueltaMode, setViewingVueltaMode] = useState<'current' | 'previous'>('current');
+
     const handleViewGlobalMap = () => {
-        const map = territoryMaps.find(m => m.territoryId === 'global');
+        const map = territoryMaps.find(m => m.territoryId === 'global-numerado') || territoryMaps.find(m => m.territoryId === 'global');
         if (map) {
             setViewingMapUrl(map.mapUrl);
         } else {
             onShowModal({
                 type: 'info',
                 title: 'Mapa no Encontrado',
-                message: 'No se ha subido un mapa global de territorios.'
+                message: 'No se ha subido un mapa global (numerado o normal) de territorios.'
             });
         }
     };
@@ -761,7 +721,16 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
     // Calculate comprehensive territory statistics
     const calculateTerritoryStats = useMemo(() => {
         const currentYearRecords = records.filter(r => r.serviceYear === currentServiceYear);
-        const maxVuelta = Math.max(...currentYearRecords.map(r => r.vueltaNum), 0);
+        
+        // Apply damping: if max vuelta has only 1 record and previous has >5, use previous
+        let maxVuelta = Math.max(...currentYearRecords.map(r => r.vueltaNum), 0);
+        if (maxVuelta > 1) {
+            const countInMax = currentYearRecords.filter(r => r.vueltaNum === maxVuelta).length;
+            if (countInMax === 1) {
+                const countInPrev = currentYearRecords.filter(r => r.vueltaNum === maxVuelta - 1).length;
+                if (countInPrev > 5) maxVuelta = maxVuelta - 1;
+            }
+        }
 
         const completed = currentYearRecords.filter(
             r => r.vueltaNum === maxVuelta && r.completedDate
@@ -1277,6 +1246,116 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
         );
     };
 
+    const CampaignModal = () => {
+        const today = new Date().toISOString().split('T')[0];
+        const [formData, setFormData] = useState<Partial<Campaign>>({
+            name: '',
+            startDate: today,
+            endDate: today,
+            ...editingCampaign
+        });
+
+        useEffect(() => {
+            if (editingCampaign) {
+                setFormData({ ...editingCampaign });
+            } else {
+                setFormData({
+                    name: '',
+                    startDate: today,
+                    endDate: today
+                });
+            }
+        }, [isCampaignModalOpen]);
+
+        if (!isCampaignModalOpen) return null;
+
+        const handleSave = async () => {
+            if (!formData.name || !formData.startDate || !formData.endDate) {
+                onShowModal({ type: 'error', title: 'Error', message: 'Todos los campos son obligatorios.' });
+                return;
+            }
+            if (formData.startDate > formData.endDate) {
+                onShowModal({ type: 'error', title: 'Error de Fechas', message: 'La fecha de inicio no puede ser posterior a la de conclusión.' });
+                return;
+            }
+            await onSaveCampaign(formData as Omit<Campaign, 'id'>);
+            setIsCampaignModalOpen(false);
+            setEditingCampaign(null);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[60] p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="bg-gradient-to-r from-yellow-500 to-amber-600 p-6">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <span>📢</span> {editingCampaign?.id ? 'Editar Campaña' : 'Nueva Campaña Especial'}
+                        </h3>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Nombre de la Campaña</label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                placeholder="Ej: Invitación a la Conmemoración"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Inicio</label>
+                                <input
+                                    type="date"
+                                    value={formData.startDate}
+                                    onChange={e => setFormData({ ...formData, startDate: e.target.value })}
+                                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Conclusión</label>
+                                <input
+                                    type="date"
+                                    value={formData.endDate}
+                                    onChange={e => setFormData({ ...formData, endDate: e.target.value })}
+                                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                />
+                            </div>
+                        </div>
+                        {editingCampaign?.id && (
+                            <button
+                                onClick={async () => {
+                                    if (window.confirm('¿Eliminar esta campaña?')) {
+                                        await onDeleteCampaign(editingCampaign.id!);
+                                        setIsCampaignModalOpen(false);
+                                        setEditingCampaign(null);
+                                    }
+                                }}
+                                className="w-full py-2.5 text-red-600 font-bold border-2 border-red-200 rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                <span>🗑️</span> Eliminar Campaña
+                            </button>
+                        )}
+                    </div>
+                    <div className="bg-gray-50 p-6 flex gap-3">
+                        <button
+                            onClick={() => { setIsCampaignModalOpen(false); setEditingCampaign(null); }}
+                            className="flex-1 py-3 text-gray-600 font-bold bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-all"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
+                        >
+                            Guardar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const DesktopTable = ({ startTerr, endTerr }: { startTerr: number, endTerr: number }) => {
         const vueltasPorPagina = 4;
         const startVuelta = (vueltaPage - 1) * vueltasPorPagina + 1;
@@ -1333,20 +1412,25 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                                         <td rowSpan={2} className="p-1 md:p-2 border border-gray-400 text-center align-middle">{ultimaFechaCompletado}</td>
                                         {vueltasRange.map(vueltaNum => {
                                             const vueltaData = terrData.vueltas[vueltaNum];
+                                            const { highlightClass, label } = getCampaignHighlight(terrNum, vueltaNum);
                                             return (
-                                                <td colSpan={2} key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center font-semibold align-bottom ${cellClasses}`}>
-                                                    {vueltaData?.asignadoA || '\u00A0'}
+                                                <td colSpan={2} key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center font-semibold align-bottom ${cellClasses} ${highlightClass}`}>
+                                                    <div className="flex flex-col items-center">
+                                                        <span>{vueltaData?.asignadoA || '\u00A0'}</span>
+                                                        {label && <span className="text-[7px] leading-tight px-1 bg-black/20 rounded mt-0.5 whitespace-nowrap">{label}</span>}
+                                                    </div>
                                                 </td>
                                             );
                                         })}
                                     </tr>
                                     <tr className="h-8">
                                         {vueltasRange.map(vueltaNum => {
+                                            const { highlightClass } = getCampaignHighlight(terrNum, vueltaNum);
                                             const vueltaData = terrData.vueltas[vueltaNum];
                                             return (
                                                 <React.Fragment key={vueltaNum}>
-                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center ${cellClasses}`}>{vueltaData?.assignedDate || '\u00A0'}</td>
-                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center ${cellClasses}`}>{vueltaData?.completedDate || '\u00A0'}</td>
+                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center ${cellClasses} ${highlightClass}`}>{vueltaData?.assignedDate || '\u00A0'}</td>
+                                                    <td onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-1 md:p-2 border border-gray-400 text-center ${cellClasses} ${highlightClass}`}>{vueltaData?.completedDate || '\u00A0'}</td>
                                                 </React.Fragment>
                                             );
                                         })}
@@ -1393,13 +1477,17 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                                 const vueltaData = territoryData[terrNum]?.vueltas[vueltaNum];
                                 if (!vueltaData && filterStatus !== 'all' && filterStatus !== 'empty') return null;
                                 const cellClasses = canManage ? 'cursor-pointer' : '';
-                                const cardBgClass = 'bg-gray-50 border-gray-200'; // Neutral background
+                                const { highlightClass, label } = getCampaignHighlight(terrNum, vueltaNum);
+                                const cardBgClass = highlightClass !== '' ? highlightClass : 'bg-gray-50 border-gray-200';
 
                                 return (
                                     <div key={vueltaNum} onClick={() => handleOpenModal(terrNum, vueltaNum)} className={`p-3 rounded-md border ${cardBgClass} ${cellClasses}`}>
-                                        <p className="font-semibold text-gray-800">Vuelta {vueltaNum}: {vueltaData?.asignadoA || <span className="text-gray-400 italic">Sin asignar</span>}</p>
+                                        <p className={`font-semibold ${highlightClass ? 'text-black' : 'text-gray-800'}`}>
+                                            Vuelta {vueltaNum}: {vueltaData?.asignadoA || <span className="text-gray-400 italic">Sin asignar</span>}
+                                            {label && <span className="ml-2 text-[10px] bg-black/10 px-1 rounded">{label}</span>}
+                                        </p>
                                         {vueltaData?.asignadoA && (
-                                            <p className="text-xs text-gray-600 mt-1">
+                                            <p className={`text-xs mt-1 ${highlightClass ? 'text-gray-800' : 'text-gray-600'}`}>
                                                 Asignado: {vueltaData.assignedDate || 'N/A'} | Completado: {vueltaData.completedDate || 'N/A'}
                                             </p>
                                         )}
@@ -1416,47 +1504,87 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
     return (
         <div className="p-2 sm:p-4">
             {viewingMapUrl && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col justify-center items-center z-50 p-4" onClick={() => setViewingMapUrl(null)}>
-                    <div className="relative max-w-full max-h-full flex flex-col items-center">
-                        <img src={viewingMapUrl} alt="Mapa de territorio" className="max-w-full max-h-[85vh] object-contain" onClick={(e) => e.stopPropagation()} />
+                <div className="fixed inset-0 bg-black bg-opacity-75 overflow-y-auto z-50 p-4" onClick={() => setViewingMapUrl(null)}>
+                    <div className="min-h-full flex flex-col justify-center items-center py-8">
+                        <img src={viewingMapUrl} alt="Mapa de territorio" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()} />
 
                         {/* Round Indicator for Global Map */}
-                        {territoryMaps.find(m => m.mapUrl === viewingMapUrl)?.territoryId === 'global' && (
+                        {['global', 'global-numerado'].includes(territoryMaps.find(m => m.mapUrl === viewingMapUrl)?.territoryId || '') && (
                             <div className="absolute top-4 left-4 z-10 bg-blue-600/90 text-white px-4 py-2 rounded-lg shadow-lg backdrop-blur-sm border border-blue-400/50" onClick={(e) => e.stopPropagation()}>
                                 <p className="text-xs uppercase tracking-wider opacity-80 font-semibold mb-1">Vuelta Actual</p>
                                 <p className="text-2xl font-black">{calculateTerritoryStats.currentRound}</p>
+                                {territoryMaps.find(m => m.territoryId === 'global-numerado') && (
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const map = territoryMaps.find(m => m.territoryId === 'global-numerado');
+                                            if (map) setViewingMapUrl(map.mapUrl);
+                                        }}
+                                        className="mt-2 w-full py-1 bg-white/20 hover:bg-white/30 rounded text-[10px] font-bold transition-colors"
+                                    >
+                                        Ver Numerado
+                                    </button>
+                                )}
                             </div>
                         )}
 
-                        {/* Show last round territories indicator for global map */}
-                        {territoryMaps.find(m => m.mapUrl === viewingMapUrl)?.territoryId === 'global' && getLastRoundTerritories.length > 0 && (
+                        {/* Show worked territories indicator for global map */}
+                        {['global', 'global-numerado'].includes(territoryMaps.find(m => m.mapUrl === viewingMapUrl)?.territoryId || '') && (
                             <div
                                 className="mt-4 backdrop-blur-md bg-black/70 text-white px-6 py-4 rounded-xl shadow-2xl max-w-4xl border border-white/20"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                <div className="flex items-center gap-3 mb-3 border-b border-white/20 pb-2">
-                                    <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: '#39FF14', boxShadow: '0 0 10px #39FF14' }}></div>
-                                    <h3 className="text-lg font-bold tracking-wide">Territorios Trabajados en la Última Vuelta</h3>
-                                </div>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                    {getLastRoundTerritories.map(terrNum => (
-                                        <span
-                                            key={terrNum}
-                                            className="px-3 py-1 rounded-full font-bold text-sm transition-transform hover:scale-110 cursor-default"
-                                            style={{
-                                                backgroundColor: 'rgba(57, 255, 20, 0.2)',
-                                                border: '1px solid #39FF14',
-                                                color: '#39FF14',
-                                                boxShadow: '0 0 5px rgba(57, 255, 20, 0.3)'
-                                            }}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 border-b border-white/20 pb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: viewingVueltaMode === 'current' ? '#39FF14' : '#00D1FF', boxShadow: viewingVueltaMode === 'current' ? '0 0 10px #39FF14' : '0 0 10px #00D1FF' }}></div>
+                                        <h3 className="text-lg font-bold tracking-wide">
+                                            Territorios Trabajados: {viewingVueltaMode === 'current' ? `Vuelta ${calculateTerritoryStats.currentRound}` : `Vuelta ${calculateTerritoryStats.currentRound - 1}`}
+                                        </h3>
+                                    </div>
+                                    <div className="flex bg-white/10 p-1 rounded-lg border border-white/10">
+                                        <button 
+                                            onClick={() => setViewingVueltaMode('previous')}
+                                            disabled={calculateTerritoryStats.currentRound <= 1}
+                                            className={`px-3 py-1 rounded-md text-[10px] uppercase font-black transition-all ${viewingVueltaMode === 'previous' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white disabled:opacity-30'}`}
                                         >
-                                            {terrNum}
-                                        </span>
-                                    ))}
+                                            V. Anterior
+                                        </button>
+                                        <button 
+                                            onClick={() => setViewingVueltaMode('current')}
+                                            className={`px-3 py-1 rounded-md text-[10px] uppercase font-black transition-all ${viewingVueltaMode === 'current' ? 'bg-green-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                                        >
+                                            V. Actual
+                                        </button>
+                                    </div>
                                 </div>
-                                <p className="text-xs text-gray-300 mt-3 text-center uppercase tracking-wider font-semibold">
-                                    Total: {getLastRoundTerritories.length} completados
-                                </p>
+                                
+                                {((viewingVueltaMode === 'current' ? currentVueltaWorked : previousVueltaWorked).length > 0) ? (
+                                    <>
+                                        <div className="flex flex-wrap gap-2 justify-center max-h-[20vh] overflow-y-auto p-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.3) transparent' }}>
+                                            {(viewingVueltaMode === 'current' ? currentVueltaWorked : previousVueltaWorked).map(terrNum => (
+                                                <span
+                                                    key={terrNum}
+                                                    className="px-3 py-1 rounded-full font-bold text-sm transition-transform hover:scale-110 cursor-default"
+                                                    style={{
+                                                        backgroundColor: viewingVueltaMode === 'current' ? 'rgba(57, 255, 20, 0.2)' : 'rgba(0, 209, 255, 0.2)',
+                                                        border: `1px solid ${viewingVueltaMode === 'current' ? '#39FF14' : '#00D1FF'}`,
+                                                        color: viewingVueltaMode === 'current' ? '#39FF14' : '#00D1FF',
+                                                        boxShadow: `0 0 5px ${viewingVueltaMode === 'current' ? 'rgba(57, 255, 20, 0.3)' : 'rgba(0, 209, 255, 0.3)'}`
+                                                    }}
+                                                >
+                                                    {terrNum}
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-gray-300 mt-3 text-center uppercase tracking-wider font-semibold">
+                                            Total: {(viewingVueltaMode === 'current' ? currentVueltaWorked : previousVueltaWorked).length} completados
+                                        </p>
+                                    </>
+                                ) : (
+                                    <div className="py-6 text-center text-gray-400 italic text-sm">
+                                        No hay territorios registrados como completados en esta vuelta.
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -1486,6 +1614,7 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
             <CrudModal />
             <ResponsibleModal />
             <DailyAssignmentModal />
+            <CampaignModal />
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex space-x-8 overflow-x-auto pb-1 scrollbar-hide" aria-label="Tabs">
                     <button onClick={() => setActiveTab('registro')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'registro' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
@@ -1505,13 +1634,17 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
 
             {activeTab === 'mapa' && (
                 <div className="fade-in-up">
-                    <InteractiveMap
-                        maps={territoryMaps}
-                        markers={territoryMarkers}
-                        canManage={canManage}
-                        onSaveMarker={onSaveTerritoryMarker}
+                    <InteractiveMap 
+                        maps={territoryMaps} 
+                        markers={territoryMarkers} 
+                        records={records}
+                        onSaveMarker={onSaveTerritoryMarker} 
                         onDeleteMarker={onDeleteTerritoryMarker}
-                        onShowModal={onShowModal}
+                        onSaveRecord={onSave}
+                        onResetCompletedMarkers={handleResetCompletedMarkers}
+                        canManage={canManage} 
+                        onShowModal={onShowModal} 
+                        currentServiceYear={currentServiceYear}
                     />
                 </div>
             )}
@@ -1525,13 +1658,19 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                                 <h3 className="text-lg font-bold text-gray-800 mb-2">Responsable de Asignación de Territorio</h3>
                                 {territoryResponsible ? (() => {
                                     const responsiblePublisher = publishers.find(p => p.id === territoryResponsible.publisherId);
-                                    const photoUrl = responsiblePublisher?.Foto || 'https://i.imgur.com/83itvIu.png';
+                                    const photoUrl = responsiblePublisher?.Foto || DEFAULT_AVATAR;
                                     return (
                                         <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-100 shadow-sm">
                                             <img
                                                 src={photoUrl}
                                                 alt="Responsable"
                                                 className="w-12 h-12 rounded-full object-cover border-2 border-blue-200"
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    if (target.src !== DEFAULT_AVATAR) {
+                                                        target.src = DEFAULT_AVATAR;
+                                                    }
+                                                }}
                                             />
                                             <div className="text-sm text-gray-700">
                                                 <p className="font-bold text-blue-800 text-lg">{territoryResponsible.publisherName}</p>
@@ -1550,6 +1689,45 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                                 >
                                     {territoryResponsible ? 'Cambiar Responsable' : 'Asignar Responsable'}
                                 </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Campañas Section */}
+                    <div className="bg-gradient-to-r from-yellow-50 to-amber-50 p-4 rounded-lg shadow-md mb-6 border border-yellow-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-800">Campañas Especiales</h3>
+                                <p className="text-xs text-amber-700 font-medium italic">Los registros en estas fechas se resaltarán: Vuelta 1 (Amarillo), Vuelta 2 (Verde Limón), etc.</p>
+                            </div>
+                            {isCommitteeMember && (
+                                <button
+                                    onClick={() => { setEditingCampaign(null); setIsCampaignModalOpen(true); }}
+                                    className="px-3 py-1.5 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 transition-all shadow-sm"
+                                >
+                                    + Nueva Campaña
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                            {(campaigns || []).length > 0 ? (
+                                (campaigns || []).map(campaign => (
+                                    <div
+                                        key={campaign.id}
+                                        onClick={() => isCommitteeMember && (setEditingCampaign(campaign), setIsCampaignModalOpen(true))}
+                                        className={`flex items-center gap-3 bg-white p-3 rounded-xl border border-amber-100 shadow-sm transition-all ${isCommitteeMember ? 'cursor-pointer hover:border-amber-300 hover:shadow-md' : ''}`}
+                                    >
+                                        <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-xl">📢</div>
+                                        <div>
+                                            <p className="font-bold text-amber-900 text-sm">{campaign.name}</p>
+                                            <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">
+                                                {campaign.startDate} al {campaign.endDate}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-amber-700 italic">No hay campañas activas registradas.</p>
                             )}
                         </div>
                     </div>
@@ -1669,13 +1847,24 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                             <div><label className="font-semibold block mb-1 text-sm">Buscar por publicador:</label><input type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="..." className="w-full p-2 border rounded" /></div>
                             <div><label className="font-semibold block mb-1 text-sm">Buscar Territorio:</label><input type="number" value={filterTerritory} onChange={e => setFilterTerritory(e.target.value)} placeholder="Núm." className="w-full p-2 border rounded" /></div>
                             <div><label className="font-semibold block mb-1 text-sm">Estado:</label><select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full p-2 border rounded"><option value="all">Todos</option><option value="assigned">Asignado</option><option value="completed">Completado</option><option value="empty">Sin asignar</option></select></div>
-                            <div>
+                             <div>
                                 <button
                                     onClick={handleViewGlobalMap}
-                                    className="w-full p-2 bg-purple-600 text-white font-semibold rounded-md hover:bg-purple-700"
+                                    className="w-full p-2 bg-purple-600 text-white font-semibold rounded-md hover:bg-purple-700 mb-2"
                                 >
                                     Ver Mapa Global
                                 </button>
+                                {territoryMaps.find(m => m.territoryId === 'global-numerado') && (
+                                    <button
+                                        onClick={() => {
+                                            const map = territoryMaps.find(m => m.territoryId === 'global-numerado');
+                                            if (map) setViewingMapUrl(map.mapUrl);
+                                        }}
+                                        className="w-full p-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700"
+                                    >
+                                        Ver Mapa Global Numerado
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </header>
@@ -1692,115 +1881,120 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                         <div className="bg-white p-2 sm:p-4 rounded-lg shadow-md"><DesktopTable startTerr={21} endTerr={40} /></div>
                     </div>
                 </>
-            )}
+            )
+            }
 
-            {activeTab === 'mapas' && (
-                <MapManager maps={territoryMaps} onUpload={onUploadMap} onDelete={onDeleteMap} canManage={canManage} setViewingMapUrl={setViewingMapUrl} onShowModal={onShowModal} onDownload={onDownload} />
-            )}
+            {
+                activeTab === 'mapas' && (
+                    <MapManager maps={territoryMaps} onUpload={onUploadMap} onDelete={onDeleteMap} canManage={canManage} setViewingMapUrl={setViewingMapUrl} onShowModal={onShowModal} onDownload={onDownload} />
+                )
+            }
 
-            {activeTab === 'estadisticas' && (
-                <div className="space-y-6">
-                    <header className="bg-white p-4 rounded-lg shadow-md mb-6">
-                        <h1 className="text-xl sm:text-2xl font-bold text-center">ESTADÍSTICAS DE TERRITORIO</h1>
-                        <p className="text-center text-gray-500 text-sm mt-1">Año de Servicio {currentServiceYear}</p>
-                    </header>
+            {
+                activeTab === 'estadisticas' && (
+                    <div className="space-y-6">
+                        <header className="bg-white p-4 rounded-lg shadow-md mb-6">
+                            <h1 className="text-xl sm:text-2xl font-bold text-center">ESTADÍSTICAS DE TERRITORIO</h1>
+                            <p className="text-center text-gray-500 text-sm mt-1">Año de Servicio {currentServiceYear}</p>
+                        </header>
 
-                    {/* Quick Stats Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
-                            <p className="text-sm text-gray-500 font-medium">Progreso Vuelta {calculateTerritoryStats.currentRound}</p>
-                            <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.percentage}%</p>
-                            <p className="text-xs text-gray-400 mt-1">{calculateTerritoryStats.completed} de {calculateTerritoryStats.totalTerritories} completados</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                            <p className="text-sm text-gray-500 font-medium">Asignaciones Diarias</p>
-                            <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.totalAssignments}</p>
-                            <p className="text-xs text-gray-400 mt-1">{calculateTerritoryStats.completedAssignments} completadas / {calculateTerritoryStats.pendingAssignments} pendientes</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-500">
-                            <p className="text-sm text-gray-500 font-medium">Tiempo Promedio</p>
-                            <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.avgCompletionDays} días</p>
-                            <p className="text-xs text-gray-400 mt-1">Para completar un territorio</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
-                            <p className="text-sm text-gray-500 font-medium">Pendientes Críticos</p>
-                            <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.oldPendingCount}</p>
-                            <p className="text-xs text-gray-400 mt-1">Más de 30 días sin completar</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Progress Bar and Details */}
-                        <div className="bg-white p-6 rounded-lg shadow-md">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Cobertura de la Vuelta Actual</h3>
-                            <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
-                                <div
-                                    className="bg-blue-600 h-4 rounded-full transition-all duration-500"
-                                    style={{ width: `${calculateTerritoryStats.percentage}%` }}
-                                ></div>
+                        {/* Quick Stats Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
+                                <p className="text-sm text-gray-500 font-medium">Progreso Vuelta {calculateTerritoryStats.currentRound}</p>
+                                <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.percentage}%</p>
+                                <p className="text-xs text-gray-400 mt-1">{calculateTerritoryStats.completed} de {calculateTerritoryStats.totalTerritories} completados</p>
                             </div>
-                            <div className="space-y-3">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Territorios Completados</span>
-                                    <span className="font-bold text-green-600">{calculateTerritoryStats.completed}</span>
+                            <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+                                <p className="text-sm text-gray-500 font-medium">Asignaciones Diarias</p>
+                                <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.totalAssignments}</p>
+                                <p className="text-xs text-gray-400 mt-1">{calculateTerritoryStats.completedAssignments} completadas / {calculateTerritoryStats.pendingAssignments} pendientes</p>
+                            </div>
+                            <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-500">
+                                <p className="text-sm text-gray-500 font-medium">Tiempo Promedio</p>
+                                <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.avgCompletionDays} días</p>
+                                <p className="text-xs text-gray-400 mt-1">Para completar un territorio</p>
+                            </div>
+                            <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
+                                <p className="text-sm text-gray-500 font-medium">Pendientes Críticos</p>
+                                <p className="text-2xl font-bold text-gray-800">{calculateTerritoryStats.oldPendingCount}</p>
+                                <p className="text-xs text-gray-400 mt-1">Más de 30 días sin completar</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Progress Bar and Details */}
+                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4">Cobertura de la Vuelta Actual</h3>
+                                <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
+                                    <div
+                                        className="bg-blue-600 h-4 rounded-full transition-all duration-500"
+                                        style={{ width: `${calculateTerritoryStats.percentage}%` }}
+                                    ></div>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Territorios Pendientes</span>
-                                    <span className="font-bold text-red-500">{calculateTerritoryStats.pending}</span>
-                                </div>
-                                <div className="pt-4 border-t">
-                                    <h4 className="text-sm font-bold text-gray-700 mb-2">No trabajados en esta vuelta:</h4>
-                                    <div className="flex flex-wrap gap-1">
-                                        {calculateTerritoryStats.notWorkedThisRound.length > 0 ? (
-                                            calculateTerritoryStats.notWorkedThisRound.map(num => (
-                                                <span key={num} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border">
-                                                    {num}
-                                                </span>
-                                            ))
-                                        ) : (
-                                            <span className="text-xs text-green-600 font-medium">¡Todos los territorios han sido asignados!</span>
-                                        )}
+                                <div className="space-y-3">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Territorios Completados</span>
+                                        <span className="font-bold text-green-600">{calculateTerritoryStats.completed}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-gray-600">Territorios Pendientes</span>
+                                        <span className="font-bold text-red-500">{calculateTerritoryStats.pending}</span>
+                                    </div>
+                                    <div className="pt-4 border-t">
+                                        <h4 className="text-sm font-bold text-gray-700 mb-2">No trabajados en esta vuelta:</h4>
+                                        <div className="flex flex-wrap gap-1">
+                                            {calculateTerritoryStats.notWorkedThisRound.length > 0 ? (
+                                                calculateTerritoryStats.notWorkedThisRound.map(num => (
+                                                    <span key={num} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded border">
+                                                        {num}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-xs text-green-600 font-medium">¡Todos los territorios han sido asignados!</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Top Captains */}
-                        <div className="bg-white p-6 rounded-lg shadow-md">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Capitanes con Más Asignaciones</h3>
-                            {calculateTerritoryStats.topCaptains.length > 0 ? (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="text-left border-b">
-                                                <th className="pb-2 font-bold text-gray-600">Capitán</th>
-                                                <th className="pb-2 font-bold text-gray-600 text-center">Asignaciones</th>
-                                                <th className="pb-2 font-bold text-gray-600 text-center">Efectividad</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y">
-                                            {calculateTerritoryStats.topCaptains.map((cap, i) => (
-                                                <tr key={cap.name} className="hover:bg-gray-50">
-                                                    <td className="py-3 font-medium text-gray-800">{i + 1}. {cap.name}</td>
-                                                    <td className="py-3 text-center text-gray-600">{cap.count}</td>
-                                                    <td className="py-3 text-center">
-                                                        <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold">
-                                                            {Math.round((cap.completed / cap.count) * 100)}%
-                                                        </span>
-                                                    </td>
+                            {/* Top Captains */}
+                            <div className="bg-white p-6 rounded-lg shadow-md">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4">Capitanes con Más Asignaciones</h3>
+                                {calculateTerritoryStats.topCaptains.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="text-left border-b">
+                                                    <th className="pb-2 font-bold text-gray-600">Capitán</th>
+                                                    <th className="pb-2 font-bold text-gray-600 text-center">Asignaciones</th>
+                                                    <th className="pb-2 font-bold text-gray-600 text-center">Efectividad</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <p className="text-center text-gray-500 py-10 italic">No hay datos de capitanes todavía.</p>
-                            )}
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {calculateTerritoryStats.topCaptains.map((cap, i) => (
+                                                    <tr key={cap.name} className="hover:bg-gray-50">
+                                                        <td className="py-3 font-medium text-gray-800">{i + 1}. {cap.name}</td>
+                                                        <td className="py-3 text-center text-gray-600">{cap.count}</td>
+                                                        <td className="py-3 text-center">
+                                                            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold">
+                                                                {Math.round((cap.completed / cap.count) * 100)}%
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-gray-500 py-10 italic">No hay datos de capitanes todavía.</p>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

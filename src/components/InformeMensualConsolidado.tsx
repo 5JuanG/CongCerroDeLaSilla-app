@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { Publisher, ServiceReport } from '../types';
 import { MONTHS } from '../constants';
+import { getPreviousMonthAndYear } from '../utils';
 
 interface InformeMensualConsolidadoProps {
     publishers: Publisher[];
@@ -21,15 +22,16 @@ const StatItem: React.FC<{ label: string; value: number | string }> = ({ label, 
 
 
 const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ publishers, serviceReports }) => {
+    const { monthIndex: prevMonthIndex, year: prevYear } = getPreviousMonthAndYear();
     const currentYear = new Date().getFullYear();
-    const currentMonthName = MONTHS[new Date().getMonth()];
+    const currentMonthName = MONTHS[prevMonthIndex];
 
-    const [selectedYear, setSelectedYear] = useState(currentYear);
+    const [selectedYear, setSelectedYear] = useState(prevYear);
     const [selectedMonth, setSelectedMonth] = useState(currentMonthName);
     const [openAccordion, setOpenAccordion] = useState<string | null>(null);
     const [openIrregularAccordion, setOpenIrregularAccordion] = useState<string | null>(null);
 
-    const [periodEndYear, setPeriodEndYear] = useState(currentYear);
+    const [periodEndYear, setPeriodEndYear] = useState(prevYear);
     const [periodEndMonth, setPeriodEndMonth] = useState(currentMonthName);
 
     const toggleAccordion = (groupName: string) => {

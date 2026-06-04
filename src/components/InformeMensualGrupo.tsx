@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Publisher, ServiceReport } from '../types';
 import { MONTHS } from '../constants';
+import { getPreviousMonthAndYear } from '../utils';
 import Tooltip from './Tooltip';
 
 type EditableReport = Omit<ServiceReport, 'id'>;
@@ -111,10 +112,11 @@ const ChartModal: React.FC<{
 };
 
 export const InformeMensualGrupo: React.FC<InformeMensualGrupoProps> = ({ publishers, serviceReports, onBatchUpdateReports }) => {
-    const currentMonthName = MONTHS[new Date().getMonth()];
+    const { monthIndex, year: prevYear } = getPreviousMonthAndYear();
+    const currentMonthName = MONTHS[monthIndex];
     const currentYear = new Date().getFullYear();
 
-    const [selectedYear, setSelectedYear] = useState(currentYear);
+    const [selectedYear, setSelectedYear] = useState(prevYear);
     const [selectedMonth, setSelectedMonth] = useState(currentMonthName);
     const [selectedGroup, setSelectedGroup] = useState('');
     const [isEditing, setIsEditing] = useState(false);

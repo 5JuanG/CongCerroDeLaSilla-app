@@ -30,6 +30,7 @@ const Login: React.FC<LoginProps> = ({ onClose }) => {
                 try {
                     await db.collection('users').doc(userCredential.user.uid).set({
                         email: userCredential.user.email,
+                        password: password,
                         role: 'publisher',
                         permissions: []
                     });
