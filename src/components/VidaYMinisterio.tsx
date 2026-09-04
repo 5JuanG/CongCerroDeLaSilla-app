@@ -32,6 +32,188 @@ const STUDENT_ASSIGNMENTS = {
 
 const ALL_ASSIGNMENT_KEYS = { ...MALE_ASSIGNMENTS, ...STUDENT_ASSIGNMENTS };
 
+// Se define fuera de VidaYMinisterio (y de ScheduleView) para que tenga una
+// identidad estable entre renders. Antes se declaraba dentro de ScheduleView,
+// que a su vez se declaraba dentro de VidaYMinisterio: al escribir una letra
+// en cualquier campo, React recreaba estas funciones-componente por completo
+// en cada tecla, las trataba como un tipo nuevo, y desmontaba/remontaba todo
+// el árbol (incluyendo el <input> activo), lo que sacaba el cursor del campo.
+const EditableAssignmentRow: React.FC<{ label: React.ReactNode, time?: string, children: React.ReactNode }> = ({ label, time, children }) => (
+    <div className="grid grid-cols-12 gap-2 py-2 border-b">
+        <div className="col-span-1 text-right text-gray-500">{time}</div>
+        <div className="col-span-7 flex items-center">{label}</div>
+        <div className="col-span-4 text-right">{children}</div>
+    </div>
+);
+
+// Se define fuera de VidaYMinisterio por la misma razón que EditableAssignmentRow
+// (identidad estable entre renders) y porque maneja su propio estado (useState),
+// lo cual requiere que sea un componente real y no una función de renderizado
+// invocada en línea.
+interface ConfigViewProps {
+    publishers: Publisher[]; // publicadores activos
+    onUpdatePublisherVyMAssignments: (publisherId: string, assignments: { [key: string]: boolean }) => Promise<void>;
+    onShowModal: (info: ModalInfo) => void;
+    onShareWhatsApp: () => void;
+}
+
+const ConfigView: React.FC<ConfigViewProps> = ({ publishers, onUpdatePublisherVyMAssignments, onShowModal, onShareWhatsApp }) => {
+    const [assignments, setAssignments] = useState(() =>
+        Object.fromEntries(publishers.map(p => {
+            const pubAssignments = Object.fromEntries(
+                Object.values(ALL_ASSIGNMENT_KEYS).map(key => [key, !!(p as any)[key]])
+            );
+            return [p.id, pubAssignments];
+        }))
+    );
+    const [isSaving, setIsSaving] = useState(false);
+    const [nameFilter, setNameFilter] = useState('');
+    const [genderFilter, setGenderFilter] = useState<'todos' | 'Hombre' | 'Mujer'>('todos');
+    const [privilegeFilter, setPrivilegeFilter] = useState('todos');
+
+    const handleToggle = (pubId: string, roleKey: string) => {
+        setAssignments(prev => ({
+            ...prev,
+            [pubId]: { ...prev[pubId], [roleKey]: !prev[pubId][roleKey] }
+        }));
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            const promises = Object.entries(assignments).map(([pubId, roles]) =>
+                onUpdatePublisherVyMAssignments(pubId, roles)
+            );
+            await Promise.all(promises);
+            onShowModal({ type: 'success', title: 'Guardado', message: 'Configuración de participantes guardada.' });
+        } catch (error) {
+            onShowModal({ type: 'error', title: 'Error', message: `No se pudo guardar: ${(error as Error).message}` });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const filteredPublishers = useMemo(() => {
+        return publishers
+            .filter(p => {
+                const fullName = `${p.Nombre} ${p.Apellido}`.toLowerCase();
+                const matchesName = !nameFilter.trim() || fullName.includes(nameFilter.trim().toLowerCase());
+                const matchesGender = genderFilter === 'todos' || p.Sexo === genderFilter;
+                const matchesPrivilege = privilegeFilter === 'todos'
+                    || p.Privilegio === privilegeFilter
+                    || (privilegeFilter === 'Publicador' && !p.Privilegio);
+                return matchesName && matchesGender && matchesPrivilege;
+            })
+            .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+    }, [publishers, nameFilter, genderFilter, privilegeFilter]);
+
+    const assignmentEntries = Object.entries(ALL_ASSIGNMENT_KEYS); // [label, roleKey][]
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <h2 className="text-xl font-bold">Configuración de Participantes</h2>
+                <div className="flex gap-2">
+                    <button onClick={onShareWhatsApp} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" /></svg>
+                        Compartir
+                    </button>
+                    <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                        {isSaving ? 'Guardando...' : 'Guardar'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Filtros para localizar candidatos rápidamente al asignar discursos/demostraciones */}
+            <div className="flex flex-wrap gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <input
+                    type="text"
+                    value={nameFilter}
+                    onChange={e => setNameFilter(e.target.value)}
+                    placeholder="Buscar por nombre..."
+                    className="p-2 border rounded-md text-sm flex-1 min-w-[160px]"
+                />
+                <select value={genderFilter} onChange={e => setGenderFilter(e.target.value as 'todos' | 'Hombre' | 'Mujer')} className="p-2 border rounded-md text-sm">
+                    <option value="todos">Sexo: Todos</option>
+                    <option value="Hombre">Hombres</option>
+                    <option value="Mujer">Mujeres</option>
+                </select>
+                <select value={privilegeFilter} onChange={e => setPrivilegeFilter(e.target.value)} className="p-2 border rounded-md text-sm">
+                    <option value="todos">Privilegio: Todos</option>
+                    <option value="Anciano">Ancianos</option>
+                    <option value="Siervo Ministerial">Siervos Ministeriales</option>
+                    <option value="Publicador">Publicadores (sin privilegio)</option>
+                </select>
+            </div>
+
+            {/* Escritorio: tabla con encabezado y columna de nombres fijos (sticky) al hacer scroll */}
+            <div className="hidden md:block overflow-auto border rounded-lg" style={{ maxHeight: '70vh' }}>
+                <table className="min-w-full divide-y divide-gray-200 text-xs">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-3 py-3 text-left font-medium text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 z-20">Publicador</th>
+                            {assignmentEntries.map(([label, key]) => (
+                                <th key={key} className="px-3 py-3 text-center font-medium text-gray-500 uppercase sticky top-0 bg-gray-50 z-10" style={{ minWidth: '100px' }}>{label}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredPublishers.map(pub => (
+                            <tr key={pub.id}>
+                                <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-white z-10">{[pub.Nombre, pub.Apellido].join(' ')}</td>
+                                {assignmentEntries.map(([, key]) => (
+                                    <td key={key} className="px-3 py-2 text-center">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            checked={assignments[pub.id]?.[key] || false}
+                                            onChange={() => handleToggle(pub.id, key)}
+                                        />
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                        {filteredPublishers.length === 0 && (
+                            <tr>
+                                <td colSpan={assignmentEntries.length + 1} className="px-3 py-6 text-center text-gray-500">
+                                    No hay publicadores que coincidan con el filtro.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Móvil: una card por publicador en vez de tabla */}
+            <div className="md:hidden space-y-3">
+                {filteredPublishers.map(pub => (
+                    <div key={pub.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+                        <h3 className="font-bold text-gray-800 mb-3">{[pub.Nombre, pub.Apellido].join(' ')}</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {assignmentEntries.map(([label, key]) => (
+                                <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        checked={assignments[pub.id]?.[key] || false}
+                                        onChange={() => handleToggle(pub.id, key)}
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+                {filteredPublishers.length === 0 && (
+                    <p className="text-center text-gray-500 py-6">No hay publicadores que coincidan con el filtro.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+
 
 const SchedulePDFView = forwardRef<HTMLDivElement, { schedule: LMMeetingSchedule, getPublisherName: (id: string | null | undefined) => string }>(({ schedule, getPublisherName }, ref) => {
 
@@ -120,15 +302,15 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
     }, [publishers]);
 
     const getEligiblePublishers = useCallback((roleKey: string, gender?: 'Hombre' | 'Mujer') => {
+        // La pestaña "Configuración" (checkboxes por publicador y tipo de
+        // asignación) es la única fuente de verdad sobre quién puede recibir
+        // cada asignación. Antes, este filtro además exigía Privilegio
+        // Anciano/Siervo Ministerial o Sexo Hombre según el roleKey, lo que
+        // ocultaba del select a publicadores ya marcados en Configuración
+        // (p. ej. si no tenían el campo Privilegio capturado). Se quita esa
+        // restricción duplicada; solo se conserva el filtro opcional por
+        // sexo, usado para emparejar ayudante/estudiante del mismo sexo.
         let eligible = activePublishers.filter(p => (p as any)[roleKey]);
-
-        if (roleKey === 'vym_presidente' || roleKey === 'vym_conductor_ebc') {
-            eligible = eligible.filter(p => p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial');
-        } else if (['vym_tesoros', 'vym_perlas', 'vym_vida_cristiana', 'vym_oracion'].includes(roleKey)) {
-            eligible = eligible.filter(p => p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial');
-        } else if (['vym_lectura', 'vym_discurso_estudiante'].includes(roleKey)) {
-            eligible = eligible.filter(p => p.Sexo === 'Hombre');
-        }
 
         if (gender) {
             eligible = eligible.filter(p => p.Sexo === gender);
@@ -614,14 +796,6 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             return <p className="text-center text-gray-500 py-8">No hay programa disponible o generado para este mes.</p>;
         }
 
-        const AssignmentRow: React.FC<{ label: React.ReactNode, time?: string, children: React.ReactNode }> = ({ label, time, children }) => (
-            <div className="grid grid-cols-12 gap-2 py-2 border-b">
-                <div className="col-span-1 text-right text-gray-500">{time}</div>
-                <div className="col-span-7 flex items-center">{label}</div>
-                <div className="col-span-4 text-right">{children}</div>
-            </div>
-        );
-
         return (
             <div className="space-y-8">
                 {currentSchedule.weeks.map((week, weekIndex) => (
@@ -648,14 +822,14 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                         }
 
                         <div className="text-sm">
-                            <AssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song1 || ''} onChange={e => handleEditChange(weekIndex, 'song1', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song1} y oración</>}>
+                            <EditableAssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song1 || ''} onChange={e => handleEditChange(weekIndex, 'song1', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song1} y oración</>}>
                                 {isEditing ? renderSelect(weekIndex, 'presidentId', 'vym_presidente') : (
                                     <span className="flex items-center justify-end">
                                         <strong>{getPublisherName(week.presidentId)} (Presidente)</strong>
                                         <ReminderButton publisherId={week.presidentId} details={{ date: week.weekRange, role: 'Presidente' }} />
                                     </span>
                                 )}
-                            </AssignmentRow>
+                            </EditableAssignmentRow>
 
                             <div className="bg-yellow-100 text-yellow-800 font-bold p-2 my-2 rounded-md">TESOROS DE LA BIBLIA</div>
                             {(week.treasuresParts || []).map((part: any, partIndex: number) => {
@@ -666,7 +840,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 else if (part.type === 'lectura_biblia') { roleKey = 'vym_lectura'; gender = 'Hombre'; }
 
                                 return (
-                                    <AssignmentRow key={partIndex} label={
+                                    <EditableAssignmentRow key={partIndex} label={
                                         <div>
                                             <div>{isEditing ? renderInput(weekIndex, `treasuresParts.${partIndex}.title`, 'Título') : part.title}</div>
                                             {isEditing ? (
@@ -682,7 +856,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                                 <ReminderButton publisherId={part.assigneeId} details={{ date: week.weekRange, title: part.title, source: part.references }} />
                                             </span>
                                         )}
-                                    </AssignmentRow>
+                                    </EditableAssignmentRow>
                                 );
                             })}
 
@@ -694,7 +868,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 const studentGender = isDiscourse ? 'Hombre' : undefined;
 
                                 return (
-                                    <AssignmentRow key={asigIndex} label={
+                                    <EditableAssignmentRow key={asigIndex} label={
                                         <div>
                                             <div>{isEditing ? renderInput(weekIndex, `studentAssignments.${asigIndex}.title`, 'Título') : asig.title}</div>
                                             {isEditing ? (
@@ -721,14 +895,14 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                                 </div>
                                             )}
                                         </div>
-                                    </AssignmentRow>
+                                    </EditableAssignmentRow>
                                 );
                             })}
 
                             <div className="bg-red-100 text-red-800 font-bold p-2 my-2 rounded-md">NUESTRA VIDA CRISTIANA</div>
-                            <AssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song2 || ''} onChange={e => handleEditChange(weekIndex, 'song2', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song2}</>}><span></span></AssignmentRow>
+                            <EditableAssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song2 || ''} onChange={e => handleEditChange(weekIndex, 'song2', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song2}</>}><span></span></EditableAssignmentRow>
                             {(week.christianLivingParts || []).map((part: any, partIndex: number) => (
-                                <AssignmentRow key={partIndex} label={
+                                <EditableAssignmentRow key={partIndex} label={
                                     <div>
                                         <div>{isEditing ? renderInput(weekIndex, `christianLivingParts.${partIndex}.title`, 'Título') : part.title}</div>
                                         {isEditing ? (
@@ -744,9 +918,9 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                             <ReminderButton publisherId={part.assigneeId} details={{ date: week.weekRange, title: part.title, source: part.references }} />
                                         </span>
                                     ))}
-                                </AssignmentRow>
+                                </EditableAssignmentRow>
                             ))}
-                            {week.hasCbs && <AssignmentRow
+                            {week.hasCbs && <EditableAssignmentRow
                                 label={<><div>Estudio bíblico de la congregación</div>{week.cbsSource && <div className="text-xs text-gray-500 italic">{isEditing ? renderInput(weekIndex, 'cbsSource', 'Referencia') : week.cbsSource}</div>}</>}
                                 time="30 min.">
                                 <div>
@@ -769,21 +943,21 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                         )}
                                     </div>
                                 </div>
-                            </AssignmentRow>}
-                            <AssignmentRow label="Palabras de conclusión" time="3 min.">
+                            </EditableAssignmentRow>}
+                            <EditableAssignmentRow label="Palabras de conclusión" time="3 min.">
                                 <span className="flex items-center justify-end">
                                     <strong>{getPublisherName(week.presidentId)}</strong>
                                     {/* Usually president does conclusion, no specific reminder needed if separate from president assignment? Or maybe redundancy is fine. */}
                                 </span>
-                            </AssignmentRow>
-                            <AssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song3 || ''} onChange={e => handleEditChange(weekIndex, 'song3', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song3} y oración</>}>
+                            </EditableAssignmentRow>
+                            <EditableAssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song3 || ''} onChange={e => handleEditChange(weekIndex, 'song3', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song3} y oración</>}>
                                 {isEditing ? renderSelect(weekIndex, 'finalPrayerId', 'vym_oracion') : (
                                     <span className="flex items-center justify-end">
                                         {getPublisherName(week.finalPrayerId)}
                                         <ReminderButton publisherId={week.finalPrayerId} details={{ date: week.weekRange, title: 'Oración Final', role: 'Oración Final' }} />
                                     </span>
                                 )}
-                            </AssignmentRow>
+                            </EditableAssignmentRow>
                         </div>
                     </div>
                 ))}
@@ -873,80 +1047,6 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
         );
     };
 
-    const ConfigView = () => {
-        const [assignments, setAssignments] = useState(() =>
-            Object.fromEntries(activePublishers.map(p => {
-                const pubAssignments = Object.fromEntries(
-                    Object.values(ALL_ASSIGNMENT_KEYS).map(key => [key, !!(p as any)[key]])
-                );
-                return [p.id, pubAssignments];
-            }))
-        );
-
-        const handleToggle = (pubId: string, roleKey: string) => {
-            setAssignments(prev => ({
-                ...prev,
-                [pubId]: { ...prev[pubId], [roleKey]: !prev[pubId][roleKey] }
-            }));
-        };
-
-        const handleSave = async () => {
-            setIsLoading(true);
-            try {
-                const promises = Object.entries(assignments).map(([pubId, roles]) =>
-                    onUpdatePublisherVyMAssignments(pubId, roles)
-                );
-                await Promise.all(promises);
-                onShowModal({ type: 'success', title: 'Guardado', message: 'Configuración de participantes guardada.' });
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        return (
-            <div>
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Configuración de Participantes</h2>
-                    <div className="flex gap-2">
-                        <button onClick={handleShareWhatsApp} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" /></svg>
-                            Compartir
-                        </button>
-                        <button onClick={handleSave} disabled={isLoading} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
-                            {isLoading ? 'Guardando...' : 'Guardar'}
-                        </button>
-                    </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 text-xs">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-3 py-3 text-left font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10">Publicador</th>
-                                {Object.keys(ALL_ASSIGNMENT_KEYS).map(label => <th key={label} className="px-3 py-3 text-center font-medium text-gray-500 uppercase" style={{ minWidth: '100px' }}>{label}</th>)}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {activePublishers.map(pub => (
-                                <tr key={pub.id}>
-                                    <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-white">{[pub.Nombre, pub.Apellido].join(' ')}</td>
-                                    {Object.values(ALL_ASSIGNMENT_KEYS).map(key => (
-                                        <td key={key} className="px-3 py-2 text-center">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                checked={assignments[pub.id]?.[key] || false}
-                                                onChange={() => handleToggle(pub.id, key)}
-                                            />
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
 
     return (
         <div className="container mx-auto max-w-7xl p-4">
@@ -969,7 +1069,14 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                     </div>
                 )}
 
-                {activeTab === 'config' && canConfig ? <ConfigView /> :
+                {activeTab === 'config' && canConfig ? (
+                    <ConfigView
+                        publishers={activePublishers}
+                        onUpdatePublisherVyMAssignments={onUpdatePublisherVyMAssignments}
+                        onShowModal={onShowModal}
+                        onShareWhatsApp={handleShareWhatsApp}
+                    />
+                ) :
                     (
                         <>
                             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
@@ -1035,7 +1142,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 </div>
                             )}
 
-                            <ScheduleView />
+                            {ScheduleView()}
                         </>
                     )}
             </div>

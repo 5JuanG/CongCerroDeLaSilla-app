@@ -2,7 +2,8 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     Publisher, LMMeetingSchedule, VisitaSCData, ModalInfo,
     AttendanceRecord, TerritoryRecord, TerritoryResponsible, ServiceReport,
-    MeetingDetails, MealPlan, PredicacionData, PastoreoVisit
+    MeetingDetails, MealPlan, PredicacionData, PastoreoVisit,
+    TerritoryMap, TerritoryMarker
 } from '../types';
 import { MONTHS, SERVICE_YEAR_MONTHS } from '../constants';
 
@@ -11,9 +12,9 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 
 import PublisherRecordModal from './PublisherRecordModal';
-import DashboardCursos from './DashboardCursos';
+import InteractiveMap from './InteractiveMap';
 import { QRCodeSVG } from 'qrcode.react';
-import { getCalculatedStatus, getPreviousMonthAndYear } from '../utils';
+import { getCalculatedStatus } from '../utils';
 
 // --- Atomic UI Helpers ---
 
@@ -60,102 +61,29 @@ const MeetingMiniRow = ({ label, details, dark }: { label: string, details?: Mee
     </div>
 );
 
-// Resumen de asistencia del año de servicio actual (septiembre a agosto),
-// calculado a partir de los registros mensuales de AsistenciaReporte.
-// Se define fuera de PresentationView por ser un bloque de solo lectura
-// autocontenido (mismo criterio de estabilidad usado en el resto del archivo).
-const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] }> = ({ attendanceRecords }) => {
-    const { serviceYear } = getPreviousMonthAndYear();
-    const [selectedServiceYear, setSelectedServiceYear] = useState(serviceYear);
-
-    const monthlyAverages = useMemo(() => {
-        return SERVICE_YEAR_MONTHS.map(month => {
-            const monthIndexInCalendar = MONTHS.indexOf(month);
-            const calendarYear = monthIndexInCalendar >= 8 ? selectedServiceYear - 1 : selectedServiceYear;
-            const record = attendanceRecords.find(r => r.ano === calendarYear && r.mes === month);
-            const avg = (record: AttendanceRecord | undefined, prefix: 'es' | 'fs'): number | null => {
-                if (!record) return null;
-                const values = [1, 2, 3, 4, 5]
-                    .map(n => parseFloat((record as any)[`${prefix}_sem${n}`]))
-                    .filter(v => !isNaN(v) && v > 0);
-                if (values.length === 0) return null;
-                return values.reduce((a, b) => a + b, 0) / values.length;
-            };
-            return {
-                month,
-                midweek: avg(record, 'es'),
-                weekend: avg(record, 'fs')
-            };
-        });
-    }, [attendanceRecords, selectedServiceYear]);
-
-    const annualAverage = (key: 'midweek' | 'weekend') => {
-        const values = monthlyAverages.map(m => m[key]).filter((v): v is number => v !== null);
-        if (values.length === 0) return '---';
-        return (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
-    };
-
-    const years = useMemo(() => Array.from({ length: 5 }, (_, i) => serviceYear - i), [serviceYear]);
-
-    return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h4 className="font-black text-blue-400 uppercase text-xs tracking-widest">Año de servicio</h4>
-                <select
-                    value={selectedServiceYear}
-                    onChange={e => setSelectedServiceYear(Number(e.target.value))}
-                    className="bg-white/10 border border-white/10 text-white text-sm font-bold rounded-xl px-3 py-2 outline-none"
-                >
-                    {years.map(y => <option key={y} value={y} className="text-black">{y}</option>)}
-                </select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
-                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Prom. anual entre semana</span>
-                    <span className="text-white font-black text-2xl">{annualAverage('midweek')}</span>
-                </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
-                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Prom. anual fin de semana</span>
-                    <span className="text-white font-black text-2xl">{annualAverage('weekend')}</span>
-                </div>
-            </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                    <thead>
-                        <tr className="text-slate-400 uppercase tracking-widest text-[10px]">
-                            <th className="text-left py-2">Mes</th>
-                            <th className="text-right py-2">Entre semana</th>
-                            <th className="text-right py-2">Fin de semana</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {monthlyAverages.map(m => (
-                            <tr key={m.month} className="border-t border-white/5">
-                                <td className="py-2 text-white font-bold">{m.month}</td>
-                                <td className="py-2 text-right text-blue-300 font-bold">{m.midweek !== null ? m.midweek.toFixed(1) : '---'}</td>
-                                <td className="py-2 text-right text-blue-300 font-bold">{m.weekend !== null ? m.weekend.toFixed(1) : '---'}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-};
-
 interface PresentationViewProps {
     publishers: Publisher[];
     draft: VisitaSCData | null;
     selectedDate: string;
     onClose: () => void;
     serviceReports: ServiceReport[];
-    attendanceRecords: AttendanceRecord[];
     onDownload: () => void;
     getPublisherName: (id: string) => string;
+    territoryRecords: TerritoryRecord[];
+    territoryMaps: TerritoryMap[];
+    territoryMarkers: TerritoryMarker[];
+    territoryResponsible?: TerritoryResponsible | null;
+    onShowModal: (info: ModalInfo) => void;
+    attendanceRecords: AttendanceRecord[];
 }
 
-const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, selectedDate, onClose, serviceReports, attendanceRecords, onDownload, getPublisherName }) => {
+const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, selectedDate, onClose, serviceReports, onDownload, getPublisherName, territoryRecords, territoryMaps, territoryMarkers, territoryResponsible, onShowModal, attendanceRecords }) => {
     const [step, setStep] = useState(0);
+    const [territorioTab, setTerritorioTab] = useState<'registro' | 'mapa'>('registro');
+    const currentServiceYear = useMemo(() => {
+        const now = new Date();
+        return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear();
+    }, []);
     const [cardFilters, setCardFilters] = useState({
         group: 'todos',
         status: 'todos',
@@ -164,7 +92,48 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
         name: ''
     });
     const [selectedPublisherForModal, setSelectedPublisherForModal] = useState<Publisher | null>(null);
-    const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'asistencia' | 'cursos' | null>(null);
+    const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'territorios' | 'directorio' | 'asistencia' | null>(null);
+
+    // Mismo cálculo que "Reporte Anual de Asistencia" (AsistenciaReporte.tsx) y el PDF S-88
+    const calcAttendanceMonthData = (endYear: number, month: string, index: number, prefix: 'es' | 'fs') => {
+        const calYear = index < 4 ? endYear - 1 : endYear;
+        const record = attendanceRecords.find(r => r.mes === month && r.ano === calYear);
+        let total = 0;
+        let count = 0;
+        for (let i = 1; i <= 5; i++) {
+            const valueStr = (record as any)?.[`${prefix}_sem${i}`];
+            if (valueStr && String(valueStr).trim() !== '') {
+                const value = parseInt(valueStr, 10);
+                if (!isNaN(value) && value > 0) {
+                    total += value;
+                    count++;
+                }
+            }
+        }
+        return { total, count, avg: count > 0 ? (total / count).toFixed(2) : '' };
+    };
+
+    const buildAttendanceSection = (isWeekend: boolean) => {
+        const prefix: 'es' | 'fs' = isWeekend ? 'fs' : 'es';
+        let totalY1 = 0, countY1 = 0, totalY2 = 0, countY2 = 0;
+
+        const rows = SERVICE_YEAR_MONTHS.map((month, index) => {
+            const d1 = calcAttendanceMonthData(currentServiceYear, month, index, prefix);
+            const d2 = calcAttendanceMonthData(currentServiceYear + 1, month, index, prefix);
+            totalY1 += d1.total; countY1 += d1.count;
+            totalY2 += d2.total; countY2 += d2.count;
+            return { month, y1: d1, y2: d2 };
+        });
+
+        return {
+            rows,
+            totalY1, avgY1: countY1 > 0 ? (totalY1 / countY1).toFixed(2) : '0.00',
+            totalY2, avgY2: countY2 > 0 ? (totalY2 / countY2).toFixed(2) : '0.00'
+        };
+    };
+
+    const attendanceMidweek = useMemo(() => buildAttendanceSection(false), [attendanceRecords, currentServiceYear]);
+    const attendanceWeekend = useMemo(() => buildAttendanceSection(true), [attendanceRecords, currentServiceYear]);
 
     const familyOptions = useMemo(() => {
         let filteredPublishers = publishers;
@@ -242,8 +211,9 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
         { id: 'tarjetas', title: 'Tarjetas de Registro', desc: 'Tarjetas S-21 de publicadores', color: 'from-emerald-600 to-emerald-900', shadow: 'shadow-emerald-500/30', action: () => setStep(1) },
         { id: 'predicacion', title: 'Plan de Predicación', desc: 'Actividad diaria y territorios', color: 'from-cyan-600 to-cyan-900', shadow: 'shadow-cyan-500/30', action: () => setPresModal('predicacion') },
         { id: 'vym', title: 'Vida y Ministerio', desc: 'Programa de la reunión semanal', color: 'from-indigo-600 to-purple-800', shadow: 'shadow-indigo-500/30', action: () => setStep(2) },
-        { id: 'asistencia', title: 'Asistencia Anual', desc: 'Promedios de asistencia del año de servicio', color: 'from-rose-600 to-rose-900', shadow: 'shadow-rose-500/30', action: () => setPresModal('asistencia') },
-        { id: 'cursos', title: 'Cursos Bíblicos', desc: 'Cursos por publicador y precursor', color: 'from-teal-600 to-teal-900', shadow: 'shadow-teal-500/30', action: () => setPresModal('cursos') },
+        { id: 'territorios', title: 'Territorios', desc: 'Registro de asignación y mapa interactivo', color: 'from-teal-600 to-teal-900', shadow: 'shadow-teal-500/30', action: () => setPresModal('territorios') },
+        { id: 'directorio', title: 'Directorio de Emergencias', desc: 'Contactos, llamadas y WhatsApp', color: 'from-rose-600 to-rose-900', shadow: 'shadow-rose-500/30', action: () => setPresModal('directorio') },
+        { id: 'asistencia', title: 'Asistencia Anual', desc: 'Reporte de asistencia a reuniones (S-88)', color: 'from-sky-600 to-sky-900', shadow: 'shadow-sky-500/30', action: () => setPresModal('asistencia') },
     ];
 
     const steps = [
@@ -401,18 +371,12 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                     <h5 className="font-black text-green-400 uppercase text-xs tracking-widest flex items-center gap-2"><span className="w-2 h-2 bg-green-400 rounded-full"></span> Seamos Mejores Maestros</h5>
                                     {draft.vymProgram.studentAssignments?.map((p: any, i: number) => {
                                         const pub = publishers.find(pub => pub.id === p.studentId);
-                                        const helperPub = p.helperId ? publishers.find(pub => pub.id === p.helperId) : null;
                                         return (
                                             <div key={i} className="bg-white/10 p-4 rounded-xl border border-white/5 shadow-sm">
                                                 <span className="block text-white text-[13px] font-black leading-snug mb-2">{p.title}</span>
                                                 <div className="flex items-center gap-2">
                                                     <span className="block text-green-400 font-black text-xs uppercase tracking-wider">{pub ? `${pub.Nombre} ${pub.Apellido}` : 'Vacante'}</span>
                                                 </div>
-                                                {helperPub && (
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="block text-green-300/70 font-bold text-[10px] uppercase tracking-wider">/ Ayudante: {helperPub.Nombre} {helperPub.Apellido}</span>
-                                                    </div>
-                                                )}
                                             </div>
                                         );
                                     })}
@@ -441,7 +405,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                     </div>
                                     <div className="bg-white/5 p-3 rounded-xl">
                                         <span className="block text-white text-xs font-bold">Oración Final</span>
-                                        <span className="block text-blue-400/70 text-[10px] mt-1">{draft?.scName || 'Superintendente de Circuito'}</span>
+                                        <span className="block text-blue-400/70 text-[10px] mt-1">Superintendente de Circuito</span>
                                     </div>
                                 </div>
                             </div>
@@ -707,19 +671,172 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                 </div>
             )}
 
-            {/* Modal: Asistencia Anual */}
-            {presModal === 'asistencia' && (
+            {/* Modal: Territorios (Registro de Asignación y Mapa Interactivo) */}
+            {presModal === 'territorios' && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
-                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="bg-gradient-to-r from-teal-700 to-teal-900 p-6 md:p-8 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Territorios</h3>
+                                <p className="text-teal-200 text-xs font-bold mt-1">
+                                    Registro de asignación{territoryResponsible?.publisherName ? ` • Capitán: ${territoryResponsible.publisherName}` : ''}
+                                </p>
+                            </div>
+                            <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
+                        </div>
+                        <div className="px-6 md:px-8 pt-4 flex gap-2">
+                            <button
+                                onClick={() => setTerritorioTab('registro')}
+                                className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${territorioTab === 'registro' ? 'bg-teal-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                            >
+                                Registro de Asignación
+                            </button>
+                            <button
+                                onClick={() => setTerritorioTab('mapa')}
+                                className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${territorioTab === 'mapa' ? 'bg-teal-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                            >
+                                Mapa Interactivo
+                            </button>
+                        </div>
+                        <div className="p-5 md:p-6 overflow-y-auto max-h-[65vh]">
+                            {territorioTab === 'registro' ? (
+                                territoryRecords.filter(r => r.serviceYear === currentServiceYear).length === 0 ? (
+                                    <div className="w-full flex items-center justify-center text-slate-500 font-bold text-sm uppercase tracking-widest border-4 border-dashed border-white/5 rounded-[2rem] min-h-[200px]">
+                                        Sin registros para el año de servicio {currentServiceYear}
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto rounded-2xl border border-white/10">
+                                        <table className="min-w-full divide-y divide-white/10">
+                                            <thead className="bg-white/5">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left text-[10px] font-black text-teal-400 uppercase tracking-widest">Territorio</th>
+                                                    <th className="px-4 py-3 text-left text-[10px] font-black text-teal-400 uppercase tracking-widest">Vuelta</th>
+                                                    <th className="px-4 py-3 text-left text-[10px] font-black text-teal-400 uppercase tracking-widest">Asignado a</th>
+                                                    <th className="px-4 py-3 text-left text-[10px] font-black text-teal-400 uppercase tracking-widest">Fecha Asignación</th>
+                                                    <th className="px-4 py-3 text-left text-[10px] font-black text-teal-400 uppercase tracking-widest">Fecha Completado</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {territoryRecords
+                                                    .filter(r => r.serviceYear === currentServiceYear)
+                                                    .sort((a, b) => a.terrNum - b.terrNum || a.vueltaNum - b.vueltaNum)
+                                                    .map(r => (
+                                                        <tr key={r.id} className="hover:bg-white/5">
+                                                            <td className="px-4 py-3 text-white font-bold text-sm">#{r.terrNum}</td>
+                                                            <td className="px-4 py-3 text-slate-300 text-sm">{r.vueltaNum}</td>
+                                                            <td className="px-4 py-3 text-slate-300 text-sm">{r.asignadoA || '---'}</td>
+                                                            <td className="px-4 py-3 text-slate-400 text-xs">{r.assignedDate || '---'}</td>
+                                                            <td className="px-4 py-3 text-xs">
+                                                                {r.completedDate ? (
+                                                                    <span className="text-emerald-400 font-bold">{r.completedDate}</span>
+                                                                ) : (
+                                                                    <span className="text-amber-400 font-bold">Pendiente</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )
+                            ) : (
+                                <InteractiveMap
+                                    maps={territoryMaps}
+                                    markers={territoryMarkers}
+                                    records={territoryRecords}
+                                    canManage={false}
+                                    onShowModal={onShowModal}
+                                    currentServiceYear={currentServiceYear}
+                                />
+                            )}
+                        </div>
+                        <div className="p-6 flex justify-end bg-white/5">
+                            <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-teal-600 text-white font-black rounded-2xl hover:bg-teal-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Directorio de Emergencias */}
+            {presModal === 'directorio' && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
                         <div className="bg-gradient-to-r from-rose-700 to-rose-900 p-6 md:p-8 flex justify-between items-center">
                             <div>
-                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Asistencia Anual</h3>
-                                <p className="text-rose-300 text-xs font-bold mt-1">Promedios de asistencia por mes</p>
+                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Directorio de Emergencias</h3>
+                                <p className="text-rose-200 text-xs font-bold mt-1">Contactos personales y de emergencia de los publicadores</p>
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
                         <div className="p-5 md:p-6 overflow-y-auto max-h-[65vh]">
-                            <AnnualAttendanceSummary attendanceRecords={attendanceRecords} />
+                            <div className="overflow-x-auto rounded-2xl border border-white/10">
+                                <table className="min-w-full divide-y divide-white/10">
+                                    <thead className="bg-white/5">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-[10px] font-black text-rose-400 uppercase tracking-widest">Nombre</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-black text-rose-400 uppercase tracking-widest">Celular</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-black text-rose-400 uppercase tracking-widest">Emergencia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {publishers
+                                            .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s')))
+                                            .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`))
+                                            .map(p => {
+                                                const formatPhone = (phone: string) => phone?.replace(/\D/g, '').replace(/^(\+52|52)/, '');
+                                                const cel = formatPhone(p.Cel || '');
+                                                const celEmergencia = formatPhone(p['Cel de Emergencia'] || '');
+                                                return (
+                                                    <tr key={p.id} className="hover:bg-white/5">
+                                                        <td className="px-4 py-3">
+                                                            <div className="text-sm font-bold text-white">{p.Nombre} {p.Apellido}</div>
+                                                            <div className="text-[10px] text-slate-500 font-medium">{p.Familia || 'Sin Familia'}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-slate-400">{p.Cel || 'N/A'}</span>
+                                                                {cel && (
+                                                                    <div className="flex gap-1">
+                                                                        <a href={`tel:${cel}`} className="text-blue-400 hover:text-blue-300 transition-colors p-1" title="Llamar Personal">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                                <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                                                            </svg>
+                                                                        </a>
+                                                                        <a href={`https://wa.me/52${cel}`} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 transition-colors p-1" title="WhatsApp">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 448 512" fill="currentColor">
+                                                                                <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.7 68.9 27.1 106.1 27.1h.1c122.4 0 222-99.6 222-222.2 0-59.3-23-115.1-65-157.1zM223.9 446.7c-33.1 0-65.6-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-104.8 85.2-190 190.1-190 50.8 0 98.5 19.8 134.4 55.7 35.8 35.8 55.7 83.5 55.7 134.3 0 104.8-85.2 190-190.1 190.1zm105.2-143.9c-5.8-2.9-34.1-16.8-39.3-18.8-5.2-2-9-2.9-12.7 2.9-3.8 5.8-14.7 18.8-18 22.5-3.3 3.8-6.7 4.2-12.5 1.3-5.8-2.9-24.5-9-46.8-28.9-17.3-15.5-29-34.6-32.4-40.5-3.4-5.8-.4-9 2.6-11.8 2.6-2.6 5.8-6.7 8.7-10.1 2.9-3.4 3.8-5.8 5.8-9.6 2-3.8 1-7.1-.5-10.1-1.5-2.9-12.7-30.6-17.4-41.8-4.6-11.1-9.3-9.5-12.7-9.7-3.3-.1-7.1-.1-11-.1-3.8 0-10.1 1.4-15.4 7.1-5.3 5.8-20.2 19.7-20.2 47.9 0 28.2 20.5 55.5 23.4 59.3 2.9 3.8 40.3 61.5 97.7 86.2 13.7 5.9 24.3 9.4 32.7 12 13.7 4.4 26.2 3.8 36.1 2.3 11-1.6 34.1-13.9 38.9-27.4 4.8-13.4 4.8-25 3.4-27.4-1.5-2.4-5.3-3.8-11-6.7z" />
+                                                                            </svg>
+                                                                        </a>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="text-xs text-slate-300">{p['Contacto de Emergencia'] || 'N/A'}</div>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span className="text-[10px] text-slate-500">{p['Cel de Emergencia'] || ''}</span>
+                                                                {celEmergencia && (
+                                                                    <div className="flex gap-1">
+                                                                        <a href={`tel:${celEmergencia}`} className="text-blue-400 hover:text-blue-300 transition-colors p-1" title="Llamar Emergencia">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                                <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                                                            </svg>
+                                                                        </a>
+                                                                        <a href={`https://wa.me/52${celEmergencia}`} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 transition-colors p-1" title="WhatsApp Emergencia">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 448 512" fill="currentColor">
+                                                                                <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.7 17.7 68.9 27.1 106.1 27.1h.1c122.4 0 222-99.6 222-222.2 0-59.3-23-115.1-65-157.1zM223.9 446.7c-33.1 0-65.6-8.9-93.9-25.7l-6.7-4-69.8 18.3 18.7-68.1-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-104.8 85.2-190 190.1-190 50.8 0 98.5 19.8 134.4 55.7 35.8 35.8 55.7 83.5 55.7 134.3 0 104.8-85.2 190-190.1 190.1zm105.2-143.9c-5.8-2.9-34.1-16.8-39.3-18.8-5.2-2-9-2.9-12.7 2.9-3.8 5.8-14.7 18.8-18 22.5-3.3 3.8-6.7 4.2-12.5 1.3-5.8-2.9-24.5-9-46.8-28.9-17.3-15.5-29-34.6-32.4-40.5-3.4-5.8-.4-9 2.6-11.8 2.6-2.6 5.8-6.7 8.7-10.1 2.9-3.4 3.8-5.8 5.8-9.6 2-3.8 1-7.1-.5-10.1-1.5-2.9-12.7-30.6-17.4-41.8-4.6-11.1-9.3-9.5-12.7-9.7-3.3-.1-7.1-.1-11-.1-3.8 0-10.1 1.4-15.4 7.1-5.3 5.8-20.2 19.7-20.2 47.9 0 28.2 20.5 55.5 23.4 59.3 2.9 3.8 40.3 61.5 97.7 86.2 13.7 5.9 24.3 9.4 32.7 12 13.7 4.4 26.2 3.8 36.1 2.3 11-1.6 34.1-13.9 38.9-27.4 4.8-13.4 4.8-25 3.4-27.4-1.5-2.4-5.3-3.8-11-6.7z" />
+                                                                            </svg>
+                                                                        </a>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         <div className="p-6 flex justify-end bg-white/5">
                             <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-rose-600 text-white font-black rounded-2xl hover:bg-rose-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
@@ -728,22 +845,71 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                 </div>
             )}
 
-            {/* Modal: Dashboard de Cursos Bíblicos */}
-            {presModal === 'cursos' && (
+            {/* Modal: Asistencia Anual (mismo formato que Reporte Anual de Asistencia / S-88) */}
+            {presModal === 'asistencia' && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
-                    <div className="bg-slate-100 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
-                        <div className="bg-gradient-to-r from-teal-700 to-teal-900 p-6 md:p-8 flex justify-between items-center">
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-6xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="bg-gradient-to-r from-sky-700 to-sky-900 p-6 md:p-8 flex justify-between items-center">
                             <div>
-                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Cursos Bíblicos</h3>
-                                <p className="text-teal-300 text-xs font-bold mt-1">Por publicador, precursores y cuántos informan</p>
+                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Asistencia Anual</h3>
+                                <p className="text-sky-200 text-xs font-bold mt-1">Registro de asistencia a las reuniones de congregación</p>
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
-                        <div className="p-5 md:p-6 overflow-y-auto max-h-[70vh]">
-                            <DashboardCursos publishers={publishers} serviceReports={serviceReports} />
+                        <div className="p-5 md:p-6 overflow-y-auto max-h-[70vh] space-y-8">
+                            {[
+                                { title: 'Reunión de entre semana', data: attendanceMidweek },
+                                { title: 'Reunión del fin de semana', data: attendanceWeekend }
+                            ].map(section => (
+                                <div key={section.title}>
+                                    <h4 className="text-base md:text-lg font-black text-white uppercase tracking-tight mb-3">{section.title}</h4>
+                                    <div className="overflow-x-auto rounded-2xl border border-white/10">
+                                        <table className="min-w-full divide-y divide-white/10 text-center">
+                                            <thead className="bg-white/5">
+                                                <tr>
+                                                    <th className="px-3 py-3 text-left text-[10px] font-black text-sky-400 uppercase tracking-widest">Año de servicio<br /><span className="text-sky-300 text-xs">{currentServiceYear}</span></th>
+                                                    <th className="px-3 py-3 text-[10px] font-black text-slate-300 uppercase tracking-widest">Número de reuniones</th>
+                                                    <th className="px-3 py-3 text-[10px] font-black text-slate-300 uppercase tracking-widest">Asistencia total</th>
+                                                    <th className="px-3 py-3 text-[10px] font-black text-slate-300 uppercase tracking-widest">Promedio de asistencia semanal</th>
+                                                    <th className="px-3 py-3 text-left text-[10px] font-black text-sky-400 uppercase tracking-widest border-l border-white/10">Año de servicio<br /><span className="text-sky-300 text-xs">{currentServiceYear + 1}</span></th>
+                                                    <th className="px-3 py-3 text-[10px] font-black text-slate-300 uppercase tracking-widest">Número de reuniones</th>
+                                                    <th className="px-3 py-3 text-[10px] font-black text-slate-300 uppercase tracking-widest">Asistencia total</th>
+                                                    <th className="px-3 py-3 text-[10px] font-black text-slate-300 uppercase tracking-widest">Promedio de asistencia semanal</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {section.data.rows.map(row => (
+                                                    <tr key={row.month} className="hover:bg-white/5">
+                                                        <td className="px-3 py-2 text-left text-sm font-bold text-white">{row.month}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{row.y1.count || ''}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{row.y1.total || ''}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{row.y1.avg}</td>
+                                                        <td className="px-3 py-2 text-left text-sm font-bold text-white border-l border-white/10">{row.month}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{row.y2.count || ''}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{row.y2.total || ''}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{row.y2.avg}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="bg-white/5 font-black">
+                                                    <td className="px-3 py-3 text-left text-sm text-white">Totales Anuales</td>
+                                                    <td className="px-3 py-3 text-sm text-slate-400"></td>
+                                                    <td className="px-3 py-3 text-sm text-sky-400">{section.data.totalY1 || ''}</td>
+                                                    <td className="px-3 py-3 text-sm text-sky-400">{section.data.avgY1}</td>
+                                                    <td className="px-3 py-3 text-left text-sm text-white border-l border-white/10">Totales Anuales</td>
+                                                    <td className="px-3 py-3 text-sm text-slate-400"></td>
+                                                    <td className="px-3 py-3 text-sm text-sky-400">{section.data.totalY2 || ''}</td>
+                                                    <td className="px-3 py-3 text-sm text-sky-400">{section.data.avgY2}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="p-6 flex justify-end bg-white">
-                            <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-teal-600 text-white font-black rounded-2xl hover:bg-teal-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
+                        <div className="p-6 flex justify-end bg-white/5">
+                            <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-sky-600 text-white font-black rounded-2xl hover:bg-sky-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
                         </div>
                     </div>
                 </div>
@@ -772,6 +938,8 @@ interface VisitaSCProps {
     territoryRecords: TerritoryRecord[];
     serviceReports: ServiceReport[];
     territoryResponsible?: TerritoryResponsible | null;
+    territoryMarkers?: TerritoryMarker[];
+    territoryMaps?: TerritoryMap[];
 }
 
 const VisitaSC: React.FC<VisitaSCProps> = ({
@@ -783,11 +951,12 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
     attendanceRecords,
     territoryRecords,
     serviceReports,
-    territoryResponsible
+    territoryResponsible,
+    territoryMarkers,
+    territoryMaps
 }) => {
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isPresentationMode, setIsPresentationMode] = useState(false);
-    const hasInitializedRef = useRef(false);
 
     // Initial load from URL params
     useEffect(() => {
@@ -801,25 +970,11 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
             if (visit) {
                 setDraft(JSON.parse(JSON.stringify(visit)));
             }
-        } else if (!hasInitializedRef.current && visitaData.length > 0) {
-            // Sin fecha en la URL: en vez de mostrar el calendario vacío,
-            // se carga automáticamente la visita más relevante (la próxima
-            // programada, o si no hay ninguna futura, la última que se
-            // programó) para facilitar encontrarla.
-            const todayIso = new Date().toISOString().split('T')[0];
-            const sorted = [...visitaData].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio));
-            const upcoming = sorted.find(v => v.fechaInicio >= todayIso);
-            const defaultVisit = upcoming || sorted[sorted.length - 1];
-            if (defaultVisit) {
-                setSelectedDate(defaultVisit.fechaInicio);
-                setDraft(JSON.parse(JSON.stringify(defaultVisit)));
-            }
         }
 
         if (presParam === '1') {
             setIsPresentationMode(true);
         }
-        hasInitializedRef.current = true;
     }, [visitaData]);
 
     const [isLoading, setIsLoading] = useState(false);
@@ -1169,32 +1324,50 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
             pdf.setFont('helvetica', 'bold');
             pdf.text('REGISTRO DE ASISTENCIA A LAS REUNIONES DE CONGREGACIÓN', pageWidth / 2, 15, { align: 'center' });
 
-            const months = ['Septiembre', 'Octubre', 'Noviembre', 'Diciembre', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto'];
+            // Mismo cálculo que la pestaña "Reporte Anual de Asistencia" (AsistenciaReporte.tsx):
+            // se muestran dos años de servicio consecutivos, cada uno calculado de forma
+            // independiente a partir de sus propios registros (Sep-Dic del año calendario
+            // anterior + Ene-Ago del año calendario que da nombre al año de servicio).
+            const calcMonthData = (endYear: number, month: string, index: number, prefix: 'es' | 'fs') => {
+                const calYear = index < 4 ? endYear - 1 : endYear;
+                const record = attendanceRecords.find(r => r.mes === month && r.ano === calYear);
+                let total = 0;
+                let count = 0;
+                for (let i = 1; i <= 5; i++) {
+                    const valueStr = (record as any)?.[`${prefix}_sem${i}`];
+                    if (valueStr && String(valueStr).trim() !== '') {
+                        const value = parseInt(valueStr, 10);
+                        if (!isNaN(value) && value > 0) {
+                            total += value;
+                            count++;
+                        }
+                    }
+                }
+                return { total, count, avg: count > 0 ? (total / count).toFixed(1) : '' };
+            };
 
             const drawAttendanceSection = (title: string, y: number, isWeekend: boolean) => {
                 pdf.setFontSize(12);
                 pdf.setFont('helvetica', 'bold');
                 pdf.text(title, 15, y);
 
-                const tableData = months.map(month => {
-                    const calYear = ['Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].includes(month) ? currentServiceYear - 1 : currentServiceYear;
-                    const record = attendanceRecords.find(r => r.mes === month && r.ano === calYear);
+                const prefix = isWeekend ? 'fs' : 'es';
+                let totalY1 = 0, countY1 = 0, totalY2 = 0, countY2 = 0;
 
-                    const prefix = isWeekend ? 'fs_sem' : 'es_sem';
-                    const values = [1, 2, 3, 4, 5].map(i => Number((record as any)?.[`${prefix}${i}`] || 0)).filter(v => v > 0);
-                    const total = values.reduce((a, b) => a + b, 0);
-                    const count = values.length;
-                    const avg = count > 0 ? (total / count).toFixed(1) : '';
+                const tableData = SERVICE_YEAR_MONTHS.map((month, index) => {
+                    const d1 = calcMonthData(currentServiceYear, month, index, prefix);
+                    const d2 = calcMonthData(currentServiceYear + 1, month, index, prefix);
+                    totalY1 += d1.total; countY1 += d1.count;
+                    totalY2 += d2.total; countY2 += d2.count;
 
                     return [
-                        month,
-                        count || '',
-                        total || '',
-                        avg || '',
-                        month, // Empty for 2nd year if needed, but here we show both columns similarly or for two years?
-                        '', '', '' // The original format has two columns for two different years usually.
+                        month, d1.count || '', d1.total || '', d1.avg,
+                        month, d2.count || '', d2.total || '', d2.avg
                     ];
                 });
+
+                const avgY1 = countY1 > 0 ? (totalY1 / countY1).toFixed(2) : '0.00';
+                const avgY2 = countY2 > 0 ? (totalY2 / countY2).toFixed(2) : '0.00';
 
                 autoTable(pdf, {
                     startY: y + 2,
@@ -1218,7 +1391,10 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                         0: { halign: 'left' },
                         4: { halign: 'left' }
                     },
-                    foot: [['Promedio de asistencia mensual', '', '', '', 'Promedio de asistencia mensual', '', '', '']],
+                    foot: [[
+                        'Totales Anuales', '', totalY1 || '', avgY1,
+                        'Totales Anuales', '', totalY2 || '', avgY2
+                    ]],
                     footStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontSize: 7, fontStyle: 'bold' }
                 });
                 return (pdf as any).lastAutoTable?.finalY + 10 || y + 50;
@@ -1868,26 +2044,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                         </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                        {visitaData.length > 0 && (
-                            <div className="w-full flex flex-col items-end gap-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Buscar visita programada</label>
-                                <select
-                                    value={selectedDate && visitaData.some(v => v.fechaInicio === selectedDate) ? selectedDate : ''}
-                                    onChange={(e) => e.target.value && handleDateChange(e.target.value)}
-                                    className="w-full max-w-xs text-sm font-bold p-3 bg-white border-none shadow-md rounded-xl focus:ring-4 focus:ring-blue-100 transition-all outline-none"
-                                >
-                                    <option value="">Seleccione una visita...</option>
-                                    {[...visitaData]
-                                        .sort((a, b) => b.fechaInicio.localeCompare(a.fechaInicio))
-                                        .map(v => (
-                                            <option key={v.fechaInicio} value={v.fechaInicio}>
-                                                {v.fechaInicio} al {v.fechaFin}{v.scName ? ` — ${v.scName}` : ''}
-                                            </option>
-                                        ))}
-                                </select>
-                            </div>
-                        )}
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">O elija la fecha de inicio (Martes)</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Fecha de Inicio (Martes)</label>
                         <input
                             type="date"
                             value={selectedDate}
@@ -2031,10 +2188,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                                                         {displayVym.studentAssignments?.map((p: any, i: number) => (
                                                             <div key={i} className="flex flex-col md:flex-row md:justify-between items-start md:items-center py-2 border-b border-slate-50 gap-1 md:gap-4">
                                                                 <span className="text-sm font-bold text-slate-700 leading-tight">{p.title}</span>
-                                                                <span className="text-xs font-black text-green-600 bg-green-50 px-2 py-1 rounded-md uppercase tracking-tighter shrink-0">
-                                                                    {getPublisherName(p.studentId)}
-                                                                    {p.helperId && ` / ${getPublisherName(p.helperId)}`}
-                                                                </span>
+                                                                <span className="text-xs font-black text-green-600 bg-green-50 px-2 py-1 rounded-md uppercase tracking-tighter shrink-0">{getPublisherName(p.studentId)}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -2068,7 +2222,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
 
                                                     <div className="flex justify-between border-t border-b py-4 font-black text-slate-800">
                                                         <span>Oración Final</span>
-                                                        <span className="text-blue-600">{draft?.scName || 'Superintendente de Circuito'}</span>
+                                                        <span className="text-blue-600">Superintendente de Circuito</span>
                                                     </div>
                                                 </div>
                                             </>
@@ -2256,9 +2410,14 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     selectedDate={selectedDate}
                     onClose={() => setIsPresentationMode(false)}
                     serviceReports={serviceReports}
-                    attendanceRecords={attendanceRecords}
                     onDownload={handleDownloadFullVisitProgram}
                     getPublisherName={getPublisherName}
+                    territoryRecords={territoryRecords}
+                    territoryMaps={territoryMaps || []}
+                    territoryMarkers={territoryMarkers || []}
+                    territoryResponsible={territoryResponsible}
+                    onShowModal={onShowModal}
+                    attendanceRecords={attendanceRecords}
                 />
             )}
         </div>
@@ -2362,31 +2521,16 @@ const VyMProgramModal: React.FC<VyMModalProps> = ({ draft, setDraft, programText
                             <div className="space-y-4">
                                 <h4 className="font-black text-xs text-green-600 uppercase tracking-widest">Maestros</h4>
                                 {draft.vymProgram.studentAssignments.map((p: any, i: number) => (
-                                    <div key={i} className="flex flex-col gap-1">
-                                        <div className="flex gap-4 items-center">
-                                            <span className="text-xs font-bold w-48 truncate">{p.title}</span>
-                                            <select
-                                                value={p.studentId || ''}
-                                                onChange={(e) => handleEditChange(`studentAssignments.${i}.studentId`, e.target.value)}
-                                                className="flex-1 p-2 border rounded-lg text-sm"
-                                            >
-                                                <option value="">Vacante</option>
-                                                {getEligible('vym_revisita').map(p => <option key={p.id} value={p.id}>{p.Nombre} {p.Apellido}</option>)}
-                                            </select>
-                                        </div>
-                                        {p.type !== 'discurso_estudiante' && (
-                                            <div className="flex gap-4 items-center pl-4">
-                                                <span className="text-[10px] font-bold w-44 truncate text-slate-400 uppercase">/ Ayudante</span>
-                                                <select
-                                                    value={p.helperId || ''}
-                                                    onChange={(e) => handleEditChange(`studentAssignments.${i}.helperId`, e.target.value)}
-                                                    className="flex-1 p-2 border rounded-lg text-sm"
-                                                >
-                                                    <option value="">Vacante</option>
-                                                    {getEligible('vym_revisita').filter(pub => pub.id !== p.studentId).map(pub => <option key={pub.id} value={pub.id}>{pub.Nombre} {pub.Apellido}</option>)}
-                                                </select>
-                                            </div>
-                                        )}
+                                    <div key={i} className="flex gap-4 items-center">
+                                        <span className="text-xs font-bold w-48 truncate">{p.title}</span>
+                                        <select
+                                            value={p.studentId || ''}
+                                            onChange={(e) => handleEditChange(`studentAssignments.${i}.studentId`, e.target.value)}
+                                            className="flex-1 p-2 border rounded-lg text-sm"
+                                        >
+                                            <option value="">Vacante</option>
+                                            {getEligible('vym_revisita').map(p => <option key={p.id} value={p.id}>{p.Nombre} {p.Apellido}</option>)}
+                                        </select>
                                     </div>
                                 ))}
                             </div>

@@ -860,9 +860,9 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
             const tableHeaders = [['Nombre del Publicador', 'Cel. Personal', 'Contacto de Emergencia', 'Tel. Emergencia']];
             const tableData = groupData.map(p => [
                 `${p.Nombre} ${p.Apellido} ${p['2do Apellido'] || ''}`.trim(),
-                p.Cel || 'N/A',
-                p['Contacto de Emergencia'] || 'N/A',
-                p['Cel de Emergencia'] || 'N/A'
+                p.Cel || '',
+                p['Contacto de Emergencia'] || '',
+                p['Cel de Emergencia'] || ''
             ]);
 
             autoTable(doc, {
@@ -880,16 +880,18 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 },
                 margin: { left: 15, right: 15 }
             });
-
-            // Pie de página
-            const pageCount = doc.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setTextColor(100);
-                doc.text(`Página ${i} de ${pageCount}`, pageWidth - 30, pageHeight - 10);
-            }
         });
+
+        // Pie de página: se aplica una sola vez, al final, para no repetir el
+        // texto de página sobre páginas ya escritas (lo que producía varias
+        // leyendas "Página X de Y" superpuestas en la hoja 1).
+        const pageCount = doc.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(8);
+            doc.setTextColor(100);
+            doc.text(`Página ${i} de ${pageCount}`, pageWidth - 30, pageHeight - 10);
+        }
 
         doc.save('Datos_Emergencia_Publicadores.pdf');
     };
