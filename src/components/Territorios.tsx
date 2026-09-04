@@ -1638,6 +1638,7 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                         maps={territoryMaps} 
                         markers={territoryMarkers} 
                         records={records}
+                        onDeleteRecord={onDelete}
                         onSaveMarker={onSaveTerritoryMarker} 
                         onDeleteMarker={onDeleteTerritoryMarker}
                         onSaveRecord={onSave}
