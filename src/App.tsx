@@ -289,7 +289,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const unsubscribers = [
             db.collection('publishers').onSnapshot((snapshot: any) => {
-                setPublishers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setPublishers(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setDataLoadError(null); // Clear error on successful load
                 setPublicDataStatus(prev => ({ ...prev, publishers: true }));
             }, (err: Error) => {
@@ -298,28 +298,28 @@ const App: React.FC = () => {
                 setPublicDataStatus(prev => ({ ...prev, publishers: true })); // Still mark as "loaded" to unblock UI
             }),
             db.collection('service_reports').onSnapshot((snapshot: any) => {
-                setServiceReports(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setServiceReports(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, serviceReports: true }));
             }, (err: Error) => {
                 console.error("Public Service Reports listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, serviceReports: true }));
             }),
             db.collection('territory_records').onSnapshot((snapshot: any) => {
-                setTerritoryRecords(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setTerritoryRecords(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, territoryRecords: true }));
             }, (err: Error) => {
                 console.error("Public Territory listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, territoryRecords: true }));
             }),
             db.collection('territory_maps').orderBy('uploadedAt', 'desc').onSnapshot((snapshot: any) => {
-                setTerritoryMaps(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setTerritoryMaps(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, territoryMaps: true }));
             }, (err: Error) => {
                 console.error("Public Territory Maps listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, territoryMaps: true }));
             }),
             db.collection('meeting_schedules').onSnapshot((snapshot: any) => {
-                const allSchedules = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as MeetingAssignmentSchedule }));
+                const allSchedules = snapshot.docs.map((doc: any) => ({ ...doc.data() as MeetingAssignmentSchedule, id: doc.id }));
                 allSchedules.sort((a, b) => {
                     if (a.year !== b.year) return b.year - a.year;
                     return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
@@ -331,7 +331,7 @@ const App: React.FC = () => {
                 setPublicDataStatus(prev => ({ ...prev, schedules: true }));
             }),
             db.collection('lm_schedules').onSnapshot((snapshot: any) => {
-                const allLmSchedules = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as LMMeetingSchedule }));
+                const allLmSchedules = snapshot.docs.map((doc: any) => ({ ...doc.data() as LMMeetingSchedule, id: doc.id }));
                 allLmSchedules.sort((a, b) => {
                     if (a.year !== b.year) return b.year - a.year;
                     return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
@@ -350,14 +350,14 @@ const App: React.FC = () => {
                 setPublicDataStatus(prev => ({ ...prev, publicTalks: true }));
             }),
             db.collection('homepage_content').onSnapshot((snapshot: any) => {
-                setHomepageContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setHomepageContent(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, homepage: true }));
             }, (err: Error) => {
                 console.error("Public Homepage Content listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, homepage: true }));
             }),
             db.collection('invitation_content').onSnapshot((snapshot: any) => {
-                setInvitationContent(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setInvitationContent(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, invitation: true }));
             }, (err: Error) => {
                 console.error("Public Invitation Content listener failed:", err);
@@ -371,31 +371,31 @@ const App: React.FC = () => {
                 setPublicDataStatus(prev => ({ ...prev, territoryResponsible: true }));
             }),
             db.collection('daily_territory_assignments').orderBy('date', 'desc').onSnapshot((snapshot: any) => {
-                setDailyTerritoryAssignments(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setDailyTerritoryAssignments(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, dailyAssignments: true }));
             }, (err: Error) => {
                 console.error("Daily Territory Assignments listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, dailyAssignments: true }));
             }),
             db.collection('territory_markers').onSnapshot((snapshot: any) => {
-                setTerritoryMarkers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setTerritoryMarkers(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, territoryMarkers: true }));
             }, (err: Error) => {
                 console.error("Territory Markers listener failed:", err);
                 setPublicDataStatus(prev => ({ ...prev, territoryMarkers: true }));
             }),
             db.collection('visita_sc').onSnapshot((snapshot: any) => {
-                setVisitaSCData(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as VisitaSCData })));
+                setVisitaSCData(snapshot.docs.map((doc: any) => ({ ...doc.data() as VisitaSCData, id: doc.id })));
             }, (err: Error) => {
                 console.error("Visita SC listener failed:", err);
             }),
             db.collection('campaigns').orderBy('startDate', 'desc').onSnapshot((snapshot: any) => {
-                setCampaigns(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
+                setCampaigns(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
             }, (err: Error) => {
                 console.error("Campaigns listener failed:", err);
             }),
             db.collection('field_service_schedules').orderBy('date', 'desc').onSnapshot((snapshot: any) => {
-                setFieldServiceSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as FieldServiceSchedule })));
+                setFieldServiceSchedules(snapshot.docs.map((doc: any) => ({ ...doc.data() as FieldServiceSchedule, id: doc.id })));
                 setPublicDataStatus(prev => ({ ...prev, fieldServiceSchedules: true }));
             }, (err: Error) => {
                 console.error("Field Service Schedules listener failed:", err);
@@ -428,11 +428,11 @@ const App: React.FC = () => {
         }
 
         const unsubscribers = [
-            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => setVigilanciaSchedules(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
-            db.collection('attendance').onSnapshot((snapshot: any) => setAttendanceRecords(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Attendance listener failed:", err)),
-            db.collection('users').onSnapshot((snapshot: any) => setUsers(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Users listener failed:", err)),
+            db.collection('vigilancia_schedules').onSnapshot((snapshot: any) => setVigilanciaSchedules(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }))), (err: Error) => console.error("Vigilancia Schedules listener failed:", err)),
+            db.collection('attendance').onSnapshot((snapshot: any) => setAttendanceRecords(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }))), (err: Error) => console.error("Attendance listener failed:", err)),
+            db.collection('users').onSnapshot((snapshot: any) => setUsers(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }))), (err: Error) => console.error("Users listener failed:", err)),
             db.collection('settings').doc('service_committee').onSnapshot((doc: any) => setCommitteeMembers(doc.data()?.members || []), (err: Error) => console.error("Committee listener failed:", err)),
-            db.collection('pioneer_applications').onSnapshot((snapshot: any) => setPioneerApplications(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))), (err: Error) => console.error("Pioneer Applications listener failed:", err)),
+            db.collection('pioneer_applications').onSnapshot((snapshot: any) => setPioneerApplications(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }))), (err: Error) => console.error("Pioneer Applications listener failed:", err)),
         ];
 
         return () => {
@@ -1035,6 +1035,7 @@ const App: React.FC = () => {
             serviceReports={serviceReports}
             territoryResponsible={territoryResponsible}
             territoryMarkers={territoryMarkers}
+            territoryMaps={territoryMaps}
         />,
         programaPredicacionSemanal: <ProgramaPredicacionSemanal
             schedules={fieldServiceSchedules}
@@ -1144,6 +1145,7 @@ const App: React.FC = () => {
                     attendanceRecords={attendanceRecords}
                     territoryRecords={territoryRecords}
                     territoryMarkers={territoryMarkers}
+                    territoryMaps={territoryMaps}
                     serviceReports={serviceReports}
                     territoryResponsible={territoryResponsible}
                     isStandalone={true}

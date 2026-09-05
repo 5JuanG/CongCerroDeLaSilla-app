@@ -2,7 +2,8 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     Publisher, LMMeetingSchedule, VisitaSCData, ModalInfo,
     AttendanceRecord, TerritoryRecord, TerritoryResponsible, ServiceReport,
-    MeetingDetails, MealPlan, PredicacionData, PastoreoVisit
+    MeetingDetails, MealPlan, PredicacionData, PastoreoVisit,
+    TerritoryMap, TerritoryMarker
 } from '../types';
 import { MONTHS, SERVICE_YEAR_MONTHS } from '../constants';
 
@@ -12,6 +13,7 @@ import html2canvas from 'html2canvas';
 
 import PublisherRecordModal from './PublisherRecordModal';
 import DashboardCursos from './DashboardCursos';
+import InteractiveMap from './InteractiveMap';
 import { QRCodeSVG } from 'qrcode.react';
 import { getCalculatedStatus, getPreviousMonthAndYear } from '../utils';
 
@@ -61,46 +63,135 @@ const MeetingMiniRow = ({ label, details, dark }: { label: string, details?: Mee
 );
 
 // Resumen de asistencia del año de servicio actual (septiembre a agosto),
-// calculado a partir de los registros mensuales de AsistenciaReporte.
-// Se define fuera de PresentationView por ser un bloque de solo lectura
-// autocontenido (mismo criterio de estabilidad usado en el resto del archivo).
+// en el MISMO formato que "Reporte Anual Asistencia" (AsistenciaReporte.tsx):
+// dos tablas (entre semana / fin de semana), dos años de servicio lado a lado
+// y fila de Totales Anuales. Solo lectura (sin edición), pensado para la
+// Vista de Presentación. Se define fuera de PresentationView por ser un
+// bloque de solo lectura autocontenido (mismo criterio de estabilidad usado
+// en el resto del archivo).
+interface AnnualMonthData {
+    numReuniones: number;
+    asistenciaTotal: number;
+    promedioSemanal: string;
+}
+interface AnnualYearData {
+    entreSemana: { [key: string]: AnnualMonthData };
+    finDeSemana: { [key: string]: AnnualMonthData };
+}
+
 const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] }> = ({ attendanceRecords }) => {
     const { serviceYear } = getPreviousMonthAndYear();
     const [selectedServiceYear, setSelectedServiceYear] = useState(serviceYear);
 
-    const monthlyAverages = useMemo(() => {
-        return SERVICE_YEAR_MONTHS.map(month => {
-            const monthIndexInCalendar = MONTHS.indexOf(month);
-            const calendarYear = monthIndexInCalendar >= 8 ? selectedServiceYear - 1 : selectedServiceYear;
-            const record = attendanceRecords.find(r => r.ano === calendarYear && r.mes === month);
-            const avg = (record: AttendanceRecord | undefined, prefix: 'es' | 'fs'): number | null => {
-                if (!record) return null;
-                const values = [1, 2, 3, 4, 5]
-                    .map(n => parseFloat((record as any)[`${prefix}_sem${n}`]))
-                    .filter(v => !isNaN(v) && v > 0);
-                if (values.length === 0) return null;
-                return values.reduce((a, b) => a + b, 0) / values.length;
-            };
-            return {
-                month,
-                midweek: avg(record, 'es'),
-                weekend: avg(record, 'fs')
-            };
-        });
-    }, [attendanceRecords, selectedServiceYear]);
-
-    const annualAverage = (key: 'midweek' | 'weekend') => {
-        const values = monthlyAverages.map(m => m[key]).filter((v): v is number => v !== null);
-        if (values.length === 0) return '---';
-        return (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
-    };
-
     const years = useMemo(() => Array.from({ length: 5 }, (_, i) => serviceYear - i), [serviceYear]);
 
+    const processDataForServiceYear = (endYear: number): AnnualYearData => {
+        const startYear = endYear - 1;
+        const data: AnnualYearData = { entreSemana: {}, finDeSemana: {} };
+
+        SERVICE_YEAR_MONTHS.forEach((month, index) => {
+            const calendarYear = index < 4 ? startYear : endYear;
+            const record = attendanceRecords.find(r => r.ano === calendarYear && r.mes === month);
+
+            const calculateMonthData = (prefix: 'es' | 'fs'): AnnualMonthData => {
+                if (!record) return { numReuniones: 0, asistenciaTotal: 0, promedioSemanal: '' };
+                let total = 0;
+                let count = 0;
+                for (let i = 1; i <= 5; i++) {
+                    const valueStr = (record as any)[`${prefix}_sem${i}`];
+                    if (valueStr && String(valueStr).trim() !== '') {
+                        const value = parseInt(valueStr, 10);
+                        if (!isNaN(value) && value > 0) {
+                            total += value;
+                            count++;
+                        }
+                    }
+                }
+                return {
+                    numReuniones: count,
+                    asistenciaTotal: total,
+                    promedioSemanal: count > 0 ? (total / count).toFixed(2) : '',
+                };
+            };
+
+            data.entreSemana[month] = calculateMonthData('es');
+            data.finDeSemana[month] = calculateMonthData('fs');
+        });
+        return data;
+    };
+
+    const year1End = selectedServiceYear;
+    const year2End = selectedServiceYear + 1;
+    const year1Data = useMemo(() => processDataForServiceYear(year1End), [attendanceRecords, year1End]);
+    const year2Data = useMemo(() => processDataForServiceYear(year2End), [attendanceRecords, year2End]);
+
+    const renderTable = (type: 'entreSemana' | 'finDeSemana', label: string) => {
+        let totalReunionesY1 = 0, totalAsistenciaY1 = 0;
+        let totalReunionesY2 = 0, totalAsistenciaY2 = 0;
+        const defaultMonthData: AnnualMonthData = { numReuniones: 0, asistenciaTotal: 0, promedioSemanal: '' };
+
+        const rows = SERVICE_YEAR_MONTHS.map(month => {
+            const d1 = year1Data[type][month] || defaultMonthData;
+            const d2 = year2Data[type][month] || defaultMonthData;
+            totalReunionesY1 += d1.numReuniones;
+            totalAsistenciaY1 += d1.asistenciaTotal;
+            totalReunionesY2 += d2.numReuniones;
+            totalAsistenciaY2 += d2.asistenciaTotal;
+            return (
+                <tr key={month} className="border-t border-white/5">
+                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
+                    <td className="p-2 text-center text-slate-300">{d1.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-slate-300">{d1.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-300 border-r-2 border-r-white/10">{d1.promedioSemanal || ''}</td>
+                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
+                    <td className="p-2 text-center text-slate-300">{d2.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-slate-300">{d2.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-300">{d2.promedioSemanal || ''}</td>
+                </tr>
+            );
+        });
+
+        const avgY1 = totalReunionesY1 > 0 ? (totalAsistenciaY1 / totalReunionesY1).toFixed(2) : '0.00';
+        const avgY2 = totalReunionesY2 > 0 ? (totalAsistenciaY2 / totalReunionesY2).toFixed(2) : '0.00';
+
+        return (
+            <div className="space-y-2">
+                <h4 className="font-black text-blue-400 uppercase text-xs tracking-widest">{label}</h4>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                    <table className="w-full text-xs border-collapse">
+                        <thead className="bg-white/5">
+                            <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
+                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year1End}</span></th>
+                                <th className="p-2 align-middle">Núm. reuniones</th>
+                                <th className="p-2 align-middle">Asistencia total</th>
+                                <th className="p-2 align-middle border-r-2 border-r-white/10">Prom. semanal</th>
+                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year2End}</span></th>
+                                <th className="p-2 align-middle">Núm. reuniones</th>
+                                <th className="p-2 align-middle">Asistencia total</th>
+                                <th className="p-2 align-middle">Prom. semanal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows}
+                            <tr className="bg-white/5 font-bold border-t border-white/10">
+                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY1 || ''}</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold border-r-2 border-r-white/10">{avgY1}</td>
+                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY2 || ''}</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{avgY2}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h4 className="font-black text-blue-400 uppercase text-xs tracking-widest">Año de servicio</h4>
+                <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro de Asistencia a las Reuniones</h3>
                 <select
                     value={selectedServiceYear}
                     onChange={e => setSelectedServiceYear(Number(e.target.value))}
@@ -109,36 +200,8 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
                     {years.map(y => <option key={y} value={y} className="text-black">{y}</option>)}
                 </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
-                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Prom. anual entre semana</span>
-                    <span className="text-white font-black text-2xl">{annualAverage('midweek')}</span>
-                </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
-                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Prom. anual fin de semana</span>
-                    <span className="text-white font-black text-2xl">{annualAverage('weekend')}</span>
-                </div>
-            </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                    <thead>
-                        <tr className="text-slate-400 uppercase tracking-widest text-[10px]">
-                            <th className="text-left py-2">Mes</th>
-                            <th className="text-right py-2">Entre semana</th>
-                            <th className="text-right py-2">Fin de semana</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {monthlyAverages.map(m => (
-                            <tr key={m.month} className="border-t border-white/5">
-                                <td className="py-2 text-white font-bold">{m.month}</td>
-                                <td className="py-2 text-right text-blue-300 font-bold">{m.midweek !== null ? m.midweek.toFixed(1) : '---'}</td>
-                                <td className="py-2 text-right text-blue-300 font-bold">{m.weekend !== null ? m.weekend.toFixed(1) : '---'}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+            {renderTable('entreSemana', 'Reunión de entre semana')}
+            {renderTable('finDeSemana', 'Reunión del fin de semana')}
         </div>
     );
 };
@@ -150,11 +213,16 @@ interface PresentationViewProps {
     onClose: () => void;
     serviceReports: ServiceReport[];
     attendanceRecords: AttendanceRecord[];
+    territoryRecords: TerritoryRecord[];
+    territoryResponsible?: TerritoryResponsible | null;
+    territoryMaps: TerritoryMap[];
+    territoryMarkers: TerritoryMarker[];
+    onShowModal: (info: ModalInfo) => void;
     onDownload: () => void;
     getPublisherName: (id: string) => string;
 }
 
-const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, selectedDate, onClose, serviceReports, attendanceRecords, onDownload, getPublisherName }) => {
+const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, selectedDate, onClose, serviceReports, attendanceRecords, territoryRecords, territoryResponsible, territoryMaps, territoryMarkers, onShowModal, onDownload, getPublisherName }) => {
     const [step, setStep] = useState(0);
     const [cardFilters, setCardFilters] = useState({
         group: 'todos',
@@ -164,7 +232,12 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
         name: ''
     });
     const [selectedPublisherForModal, setSelectedPublisherForModal] = useState<Publisher | null>(null);
-    const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'asistencia' | 'cursos' | null>(null);
+    const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'asistencia' | 'cursos' | 'territorios' | 'emergencia' | null>(null);
+    const [territorioTab, setTerritorioTab] = useState<'registro' | 'mapa'>('registro');
+    const currentServiceYear = useMemo(() => {
+        const now = new Date();
+        return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear();
+    }, []);
 
     const familyOptions = useMemo(() => {
         let filteredPublishers = publishers;
@@ -244,6 +317,8 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
         { id: 'vym', title: 'Vida y Ministerio', desc: 'Programa de la reunión semanal', color: 'from-indigo-600 to-purple-800', shadow: 'shadow-indigo-500/30', action: () => setStep(2) },
         { id: 'asistencia', title: 'Asistencia Anual', desc: 'Promedios de asistencia del año de servicio', color: 'from-rose-600 to-rose-900', shadow: 'shadow-rose-500/30', action: () => setPresModal('asistencia') },
         { id: 'cursos', title: 'Cursos Bíblicos', desc: 'Cursos por publicador y precursor', color: 'from-teal-600 to-teal-900', shadow: 'shadow-teal-500/30', action: () => setPresModal('cursos') },
+        { id: 'territorios', title: 'Territorios', desc: 'Registro de asignación y mapa interactivo', color: 'from-amber-600 to-amber-900', shadow: 'shadow-amber-500/30', action: () => setPresModal('territorios') },
+        { id: 'emergencia', title: 'Directorio para Emergencias', desc: 'Contactos de emergencia de publicadores', color: 'from-red-600 to-red-900', shadow: 'shadow-red-500/30', action: () => setPresModal('emergencia') },
     ];
 
     const steps = [
@@ -749,6 +824,176 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                 </div>
             )}
 
+            {/* Modal: Territorios (Registro de Asignación + Mapa Interactivo) */}
+            {presModal === 'territorios' && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-6xl overflow-hidden animate-in zoom-in-90 duration-300 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="bg-gradient-to-r from-amber-600 to-amber-900 p-6 md:p-8 flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Territorios</h3>
+                                <p className="text-amber-200 text-xs font-bold mt-1">Registro de asignación y mapa interactivo</p>
+                            </div>
+                            <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
+                        </div>
+                        <div className="flex gap-2 px-6 pt-4 shrink-0">
+                            <button
+                                onClick={() => setTerritorioTab('registro')}
+                                className={`px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${territorioTab === 'registro' ? 'bg-amber-500 text-black' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                            >
+                                📋 Registro de Asignación
+                            </button>
+                            <button
+                                onClick={() => setTerritorioTab('mapa')}
+                                className={`px-5 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${territorioTab === 'mapa' ? 'bg-amber-500 text-black' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                            >
+                                🗺️ Mapa Interactivo
+                            </button>
+                        </div>
+                        <div className="p-5 md:p-6 overflow-y-auto flex-1">
+                            {territorioTab === 'registro' ? (
+                                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                                    <table className="w-full text-xs border-collapse">
+                                        <thead className="bg-white/5 sticky top-0">
+                                            <tr className="text-slate-400 uppercase tracking-widest text-[10px]">
+                                                <th className="p-3 text-center">Terr.</th>
+                                                <th className="p-3 text-center">Vuelta</th>
+                                                <th className="p-3 text-center">Año Serv.</th>
+                                                <th className="p-3 text-left">Asignado a</th>
+                                                <th className="p-3 text-center">Fecha Asignado</th>
+                                                <th className="p-3 text-center">Fecha Completado</th>
+                                                {territoryResponsible?.publisherName && <th className="p-3 text-center">Responsable</th>}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {[...territoryRecords]
+                                                .sort((a, b) => {
+                                                    const numA = Number(a.terrNum) || 0;
+                                                    const numB = Number(b.terrNum) || 0;
+                                                    if (numA !== numB) return numA - numB;
+                                                    return (Number(b.vueltaNum) || 0) - (Number(a.vueltaNum) || 0);
+                                                })
+                                                .map((r, idx) => (
+                                                    <tr key={(r as any).id || idx} className="border-t border-white/5">
+                                                        <td className="p-2 text-center font-black text-white">{r.terrNum}</td>
+                                                        <td className="p-2 text-center text-slate-300">{r.vueltaNum}</td>
+                                                        <td className="p-2 text-center text-slate-300">{r.serviceYear}</td>
+                                                        <td className="p-2 text-left font-bold text-amber-300">{r.asignadoA || '---'}</td>
+                                                        <td className="p-2 text-center text-slate-400">{r.assignedDate || '---'}</td>
+                                                        <td className="p-2 text-center text-slate-400">{r.completedDate || '---'}</td>
+                                                        {territoryResponsible?.publisherName && <td className="p-2 text-center text-slate-500"></td>}
+                                                    </tr>
+                                                ))}
+                                            {territoryRecords.length === 0 && (
+                                                <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-bold">No hay registros de territorio.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                    {territoryResponsible?.publisherName && (
+                                        <div className="p-3 text-right text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-white/5">
+                                            Responsable de territorios: <span className="text-white">{territoryResponsible.publisherName}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="rounded-2xl overflow-hidden bg-white">
+                                    <InteractiveMap
+                                        maps={territoryMaps}
+                                        markers={territoryMarkers}
+                                        records={territoryRecords}
+                                        canManage={false}
+                                        onShowModal={onShowModal}
+                                        currentServiceYear={currentServiceYear}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-6 flex justify-end bg-white/5 shrink-0">
+                            <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-amber-600 text-white font-black rounded-2xl hover:bg-amber-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Directorio para Emergencias */}
+            {presModal === 'emergencia' && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-90 duration-300 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="bg-gradient-to-r from-red-700 to-red-900 p-6 md:p-8 flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Directorio para Emergencias</h3>
+                                <p className="text-red-200 text-xs font-bold mt-1">Contactos de emergencia de publicadores</p>
+                            </div>
+                            <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
+                        </div>
+                        <div className="p-5 md:p-6 overflow-y-auto flex-1 space-y-3">
+                            {publishers
+                                .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
+                                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`))
+                                .map(p => {
+                                    const emergTel = String(p['Cel de Emergencia'] || '').replace(/\D/g, '');
+                                    const ownTel = String(p.Cel || '').replace(/\D/g, '');
+                                    return (
+                                        <div key={p.id} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                                            <div className="flex items-center gap-3 p-4 border-b border-white/5">
+                                                <div className="flex-1">
+                                                    <span className="block text-white font-black text-lg leading-tight">{p.Nombre} {p.Apellido}</span>
+                                                    <span className="block text-[10px] font-black text-red-400 uppercase tracking-widest">{p.Familia || 'Sin Familia'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="p-4 flex flex-wrap gap-3 items-center">
+                                                <span className="text-slate-300 text-xs font-bold">
+                                                    Contacto de emergencia: <span className="text-white">{p['Contacto de Emergencia'] || '---'}</span>
+                                                </span>
+                                                {emergTel && (
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <a href={`https://wa.me/${emergTel}`} target="_blank" rel="noopener noreferrer"
+                                                            className="flex items-center gap-2 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 text-green-400 px-4 py-2 rounded-xl font-bold text-xs transition-all">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12 1.007C5.936 1.007 1 5.943 1 12.003c0 1.951.497 3.786 1.374 5.377L1 23.01l5.788-1.352A10.954 10.954 0 0012 23c6.06 0 10.997-4.937 10.997-10.997C22.997 5.943 18.06 1.007 12 1.007" />
+                                                            </svg>
+                                                            WhatsApp
+                                                        </a>
+                                                        <a href={`tel:${emergTel}`}
+                                                            className="flex items-center gap-2 bg-slate-700/50 hover:bg-slate-600/50 border border-white/10 text-slate-300 px-4 py-2 rounded-xl font-bold text-xs transition-all">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.49 10.61a19.79 19.79 0 01-3.07-8.68A2 2 0 012.4 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.87 6.87l1.27-.76a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                                                            </svg>
+                                                            Llamar
+                                                        </a>
+                                                        <span className="text-slate-400 font-bold text-sm">{p['Cel de Emergencia']}</span>
+                                                    </div>
+                                                )}
+                                                {!emergTel && ownTel && (
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <a href={`https://wa.me/${ownTel}`} target="_blank" rel="noopener noreferrer"
+                                                            className="flex items-center gap-2 bg-green-600/20 hover:bg-green-600/40 border border-green-500/30 text-green-400 px-4 py-2 rounded-xl font-bold text-xs transition-all">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12 1.007C5.936 1.007 1 5.943 1 12.003c0 1.951.497 3.786 1.374 5.377L1 23.01l5.788-1.352A10.954 10.954 0 0012 23c6.06 0 10.997-4.937 10.997-10.997C22.997 5.943 18.06 1.007 12 1.007" />
+                                                            </svg>
+                                                            WhatsApp
+                                                        </a>
+                                                        <a href={`tel:${ownTel}`}
+                                                            className="flex items-center gap-2 bg-slate-700/50 hover:bg-slate-600/50 border border-white/10 text-slate-300 px-4 py-2 rounded-xl font-bold text-xs transition-all">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.49 10.61a19.79 19.79 0 01-3.07-8.68A2 2 0 012.4 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.87 6.87l1.27-.76a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                                                            </svg>
+                                                            Llamar (cel. publicador)
+                                                        </a>
+                                                        <span className="text-slate-400 font-bold text-sm">{p.Cel}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                        <div className="p-6 flex justify-end bg-white/5 shrink-0">
+                            <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-red-600 text-white font-black rounded-2xl hover:bg-red-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedPublisherForModal && (
                 <div className="relative z-[300]">
                     <PublisherRecordModal
@@ -772,6 +1017,8 @@ interface VisitaSCProps {
     territoryRecords: TerritoryRecord[];
     serviceReports: ServiceReport[];
     territoryResponsible?: TerritoryResponsible | null;
+    territoryMaps: TerritoryMap[];
+    territoryMarkers: TerritoryMarker[];
 }
 
 const VisitaSC: React.FC<VisitaSCProps> = ({
@@ -783,7 +1030,9 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
     attendanceRecords,
     territoryRecords,
     serviceReports,
-    territoryResponsible
+    territoryResponsible,
+    territoryMaps,
+    territoryMarkers
 }) => {
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isPresentationMode, setIsPresentationMode] = useState(false);
@@ -2257,6 +2506,11 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     onClose={() => setIsPresentationMode(false)}
                     serviceReports={serviceReports}
                     attendanceRecords={attendanceRecords}
+                    territoryRecords={territoryRecords}
+                    territoryResponsible={territoryResponsible}
+                    territoryMaps={territoryMaps}
+                    territoryMarkers={territoryMarkers}
+                    onShowModal={onShowModal}
                     onDownload={handleDownloadFullVisitProgram}
                     getPublisherName={getPublisherName}
                 />
