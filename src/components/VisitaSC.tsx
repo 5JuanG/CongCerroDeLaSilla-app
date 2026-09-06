@@ -212,9 +212,25 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
 // "Fecha completó" por cada vuelta) y tarjetas por territorio en móvil.
 // Es de solo lectura: sin edición, sin paginación de vueltas (se muestran todas).
 const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[]; territoryResponsible?: TerritoryResponsible | null; }> = ({ territoryRecords, territoryResponsible }) => {
+    const { serviceYear: defaultServiceYear } = getPreviousMonthAndYear();
+
+    const availableYears = useMemo(() => {
+        const years = new Set<number>();
+        territoryRecords.forEach(r => { if (r.serviceYear) years.add(Number(r.serviceYear)); });
+        years.add(defaultServiceYear);
+        return Array.from(years).sort((a, b) => b - a);
+    }, [territoryRecords, defaultServiceYear]);
+
+    const [selectedYear, setSelectedYear] = useState(defaultServiceYear);
+
+    const yearRecords = useMemo(
+        () => territoryRecords.filter(r => Number(r.serviceYear) === selectedYear),
+        [territoryRecords, selectedYear]
+    );
+
     const territoryData = useMemo(() => {
         const data: { [terrNum: number]: { [vueltaNum: number]: TerritoryRecord } } = {};
-        territoryRecords.forEach(r => {
+        yearRecords.forEach(r => {
             const terr = Number(r.terrNum);
             const vuelta = Number(r.vueltaNum);
             if (!terr || !vuelta) return;
@@ -222,13 +238,13 @@ const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[];
             data[terr][vuelta] = r;
         });
         return data;
-    }, [territoryRecords]);
+    }, [yearRecords]);
 
     const territoryNumbers = useMemo(() => Object.keys(territoryData).map(Number).sort((a, b) => a - b), [territoryData]);
     const maxVuelta = useMemo(() => {
-        const all = territoryRecords.map(r => Number(r.vueltaNum) || 0);
+        const all = yearRecords.map(r => Number(r.vueltaNum) || 0);
         return all.length > 0 ? Math.max(...all) : 1;
-    }, [territoryRecords]);
+    }, [yearRecords]);
     const vueltasRange = useMemo(() => Array.from({ length: maxVuelta }, (_, i) => i + 1), [maxVuelta]);
 
     const getLastCompletedDate = (terrNum: number) => {
@@ -238,96 +254,112 @@ const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[];
         return vueltas.length > 0 ? vueltas[0].completedDate : '---';
     };
 
-    if (territoryNumbers.length === 0) {
-        return <div className="p-8 text-center text-slate-500 font-bold">No hay registros de territorio.</div>;
-    }
-
     return (
-        <div>
-            {territoryResponsible?.publisherName && (
-                <div className="mb-3 text-right text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                    Responsable de territorios: <span className="text-white">{territoryResponsible.publisherName}</span>
+        <div className="bg-white rounded-2xl p-4 md:p-5">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                <div>
+                    <h4 className="font-black text-gray-900 uppercase text-sm tracking-tight">Año de servicio</h4>
                 </div>
-            )}
-
-            {/* Vista escritorio: tabla estilo S-13, igual que en Territorios */}
-            <div className="hidden md:block overflow-x-auto rounded-2xl border border-white/10">
-                <table className="w-full border-collapse text-xs">
-                    <thead className="bg-white/5">
-                        <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
-                            <th rowSpan={2} className="p-2 border border-white/10 align-middle">Núm. de terr.</th>
-                            <th rowSpan={2} className="p-2 border border-white/10 align-middle">Última fecha completado</th>
-                            {vueltasRange.map(v => <th colSpan={2} key={v} className="p-2 border border-white/10 font-black text-amber-300 normal-case">Vuelta {v}: Asignado a</th>)}
-                        </tr>
-                        <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
-                            {vueltasRange.map(v => (
-                                <React.Fragment key={v}>
-                                    <th className="p-2 border border-white/10 font-normal">Fecha asignó</th>
-                                    <th className="p-2 border border-white/10 font-normal">Fecha completó</th>
-                                </React.Fragment>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {territoryNumbers.map(terrNum => {
-                            const vueltas = territoryData[terrNum];
-                            return (
-                                <React.Fragment key={terrNum}>
-                                    <tr className="border-t-2 border-white/10">
-                                        <td rowSpan={2} className="p-2 border border-white/10 font-black text-center align-middle text-white">{terrNum}</td>
-                                        <td rowSpan={2} className="p-2 border border-white/10 text-center align-middle text-slate-400">{getLastCompletedDate(terrNum)}</td>
-                                        {vueltasRange.map(v => (
-                                            <td colSpan={2} key={v} className="p-2 border border-white/10 text-center font-bold text-amber-300 align-bottom">
-                                                {vueltas[v]?.asignadoA || '\u00A0'}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                    <tr>
-                                        {vueltasRange.map(v => (
-                                            <React.Fragment key={v}>
-                                                <td className="p-2 border border-white/10 text-center text-slate-400">{vueltas[v]?.assignedDate || '\u00A0'}</td>
-                                                <td className="p-2 border border-white/10 text-center text-slate-400">{vueltas[v]?.completedDate || '\u00A0'}</td>
-                                            </React.Fragment>
-                                        ))}
-                                    </tr>
-                                </React.Fragment>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                <div className="flex items-center gap-3">
+                    {territoryResponsible?.publisherName && (
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                            Responsable: <span className="text-gray-900">{territoryResponsible.publisherName}</span>
+                        </span>
+                    )}
+                    <select
+                        value={selectedYear}
+                        onChange={e => setSelectedYear(Number(e.target.value))}
+                        className="bg-gray-100 border border-gray-300 text-gray-900 text-sm font-bold rounded-xl px-3 py-2 outline-none"
+                    >
+                        {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
             </div>
 
-            {/* Vista móvil: cards por territorio, igual que en Territorios */}
-            <div className="md:hidden space-y-4">
-                {territoryNumbers.map(terrNum => (
-                    <div key={terrNum} className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                        <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
-                            <h3 className="font-black text-lg text-white">Territorio #{terrNum}</h3>
-                        </div>
-                        <p className="text-xs font-bold text-slate-400 -mt-2 mb-3">
-                            Última fecha en que se completó: {getLastCompletedDate(terrNum)}
-                        </p>
-                        <div className="space-y-2">
-                            {vueltasRange.map(v => {
-                                const vueltaData = territoryData[terrNum][v];
-                                if (!vueltaData) return null;
-                                return (
-                                    <div key={v} className="p-3 rounded-xl border border-white/10 bg-white/5">
-                                        <p className="font-bold text-white">
-                                            Vuelta {v}: <span className="text-amber-300">{vueltaData.asignadoA || <span className="text-slate-500 italic font-normal">Sin asignar</span>}</span>
-                                        </p>
-                                        {vueltaData.asignadoA && (
-                                            <p className="text-xs mt-1 text-slate-400">
-                                                Asignado: {vueltaData.assignedDate || '---'} | Completado: {vueltaData.completedDate || '---'}
-                                            </p>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
+            {territoryNumbers.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 font-bold">No hay registros de territorio para el año {selectedYear}.</div>
+            ) : (
+                <>
+                    {/* Vista escritorio: tabla estilo S-13, igual que en Territorios */}
+                    <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-400">
+                        <table className="w-full border-collapse text-xs">
+                            <thead className="bg-gray-100">
+                                <tr className="text-gray-600 uppercase tracking-widest text-[9px]">
+                                    <th rowSpan={2} className="p-2 border border-gray-400 align-middle">Núm. de terr.</th>
+                                    <th rowSpan={2} className="p-2 border border-gray-400 align-middle">Última fecha completado</th>
+                                    {vueltasRange.map(v => <th colSpan={2} key={v} className="p-2 border border-gray-400 font-black text-gray-700 normal-case">Vuelta {v}: Asignado a</th>)}
+                                </tr>
+                                <tr className="text-gray-500 uppercase tracking-widest text-[9px]">
+                                    {vueltasRange.map(v => (
+                                        <React.Fragment key={v}>
+                                            <th className="p-2 border border-gray-400 font-normal">Fecha asignó</th>
+                                            <th className="p-2 border border-gray-400 font-normal">Fecha completó</th>
+                                        </React.Fragment>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {territoryNumbers.map(terrNum => {
+                                    const vueltas = territoryData[terrNum];
+                                    return (
+                                        <React.Fragment key={terrNum}>
+                                            <tr className="border-t-2 border-gray-400">
+                                                <td rowSpan={2} className="p-2 border border-gray-400 font-black text-center align-middle text-gray-900">{terrNum}</td>
+                                                <td rowSpan={2} className="p-2 border border-gray-400 text-center align-middle text-gray-600">{getLastCompletedDate(terrNum)}</td>
+                                                {vueltasRange.map(v => (
+                                                    <td colSpan={2} key={v} className="p-2 border border-gray-400 text-center font-bold text-blue-700 align-bottom">
+                                                        {vueltas[v]?.asignadoA || '\u00A0'}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                            <tr>
+                                                {vueltasRange.map(v => (
+                                                    <React.Fragment key={v}>
+                                                        <td className="p-2 border border-gray-400 text-center text-gray-700">{vueltas[v]?.assignedDate || '\u00A0'}</td>
+                                                        <td className="p-2 border border-gray-400 text-center text-gray-700">{vueltas[v]?.completedDate || '\u00A0'}</td>
+                                                    </React.Fragment>
+                                                ))}
+                                            </tr>
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
-                ))}
-            </div>
+
+                    {/* Vista móvil: cards por territorio, igual que en Territorios */}
+                    <div className="md:hidden space-y-4">
+                        {territoryNumbers.map(terrNum => (
+                            <div key={terrNum} className="bg-gray-50 border border-gray-300 rounded-2xl p-4 shadow-sm">
+                                <div className="flex justify-between items-center border-b border-gray-300 pb-2 mb-3">
+                                    <h3 className="font-black text-lg text-gray-900">Territorio #{terrNum}</h3>
+                                </div>
+                                <p className="text-xs font-bold text-gray-500 -mt-2 mb-3">
+                                    Última fecha en que se completó: {getLastCompletedDate(terrNum)}
+                                </p>
+                                <div className="space-y-2">
+                                    {vueltasRange.map(v => {
+                                        const vueltaData = territoryData[terrNum][v];
+                                        if (!vueltaData) return null;
+                                        return (
+                                            <div key={v} className="p-3 rounded-xl border border-gray-300 bg-white">
+                                                <p className="font-bold text-gray-900">
+                                                    Vuelta {v}: <span className="text-blue-700">{vueltaData.asignadoA || <span className="text-gray-400 italic font-normal">Sin asignar</span>}</span>
+                                                </p>
+                                                {vueltaData.asignadoA && (
+                                                    <p className="text-xs mt-1 text-gray-600">
+                                                        Asignado: {vueltaData.assignedDate || '---'} | Completado: {vueltaData.completedDate || '---'}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
         </div>
     );
 };
@@ -1591,15 +1623,9 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 pdf.setFont('helvetica', 'bold');
                 pdf.text('REGISTRO DE ASIGNACIÓN DE TERRITORIO', pageWidth / 2, 10, { align: 'center' });
 
-                pdf.setFontSize(10);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text('Año de servicio:', 10, 18);
-                pdf.setFont('helvetica', 'normal');
-                pdf.text(currentServiceYear.toString(), 40, 18);
-                pdf.line(40, 19, 60, 19);
-
                 const territories = Array.from({ length: endNum - startNum + 1 }, (_, i) => startNum + i);
                 const tableBody: any[] = [];
+                const pageYears: number[] = [];
 
                 // Determine the "Current" and "History" blocks based on max progress
                 const totalMaxVuelta = territoryRecords.length > 0 ? Math.max(...territoryRecords.map(r => Number(r.vueltaNum) || 0)) : 1;
@@ -1634,6 +1660,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                         const targetVuelta = currentBlockStart + v;
                         const rec = allRecords.filter(r => Number(r.vueltaNum) === targetVuelta).pop();
                         records.push(rec);
+                        if (rec?.serviceYear) pageYears.push(Number(rec.serviceYear));
                     }
 
                     // Col 1: Ultima fecha en que se completo*
@@ -1662,6 +1689,24 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     ];
                     tableBody.push(row1, row2);
                 });
+
+                // Año de servicio real de esta hoja: el más frecuente entre los
+                // registros que realmente se imprimen en esta página (no siempre
+                // coincide con el año de servicio actual, sobre todo en las
+                // páginas de "Datos Anteriores").
+                let displayYear = currentServiceYear;
+                if (pageYears.length > 0) {
+                    const counts: { [year: number]: number } = {};
+                    pageYears.forEach(y => { counts[y] = (counts[y] || 0) + 1; });
+                    displayYear = Number(Object.keys(counts).sort((a, b) => counts[Number(b)] - counts[Number(a)])[0]);
+                }
+
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Año de servicio:', 10, 18);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(displayYear.toString(), 40, 18);
+                pdf.line(40, 19, 60, 19);
 
                 autoTable(pdf, {
                     startY: 22,
