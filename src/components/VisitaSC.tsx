@@ -125,8 +125,6 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
     const year1Data = useMemo(() => processDataForServiceYear(year1End), [attendanceRecords, year1End]);
     const year2Data = useMemo(() => processDataForServiceYear(year2End), [attendanceRecords, year2End]);
 
-    // Mismo marcado, clases y textos que renderTable() en AsistenciaReporte.tsx,
-    // para que el formato sea idéntico al "Reporte Anual Asistencia" original.
     const renderTable = (type: 'entreSemana' | 'finDeSemana', label: string) => {
         let totalReunionesY1 = 0, totalAsistenciaY1 = 0;
         let totalReunionesY2 = 0, totalAsistenciaY2 = 0;
@@ -140,15 +138,15 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
             totalReunionesY2 += d2.numReuniones;
             totalAsistenciaY2 += d2.asistenciaTotal;
             return (
-                <tr key={month}>
-                    <td className="p-2 border border-gray-300 font-bold text-left" translate="no">{month}</td>
-                    <td className="p-2 border border-gray-300">{d1.numReuniones || ''}</td>
-                    <td className="p-2 border border-gray-300">{d1.asistenciaTotal || ''}</td>
-                    <td className="p-2 border border-gray-300 font-semibold border-r-2 border-r-gray-500">{d1.promedioSemanal || ''}</td>
-                    <td className="p-2 border border-gray-300 font-bold text-left" translate="no">{month}</td>
-                    <td className="p-2 border border-gray-300">{d2.numReuniones || ''}</td>
-                    <td className="p-2 border border-gray-300">{d2.asistenciaTotal || ''}</td>
-                    <td className="p-2 border border-gray-300 font-semibold">{d2.promedioSemanal || ''}</td>
+                <tr key={month} className="border-t border-white/5">
+                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
+                    <td className="p-2 text-center text-slate-300">{d1.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-slate-300">{d1.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-300 border-r-2 border-r-white/10">{d1.promedioSemanal || ''}</td>
+                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
+                    <td className="p-2 text-center text-slate-300">{d2.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-slate-300">{d2.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-300">{d2.promedioSemanal || ''}</td>
                 </tr>
             );
         });
@@ -157,37 +155,31 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
         const avgY2 = totalReunionesY2 > 0 ? (totalAsistenciaY2 / totalReunionesY2).toFixed(2) : '0.00';
 
         return (
-            <div className="mb-8">
-                <h2 className="text-xl font-semibold border-b-2 pb-2 mb-4 text-gray-800">{label}</h2>
-                <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-center text-sm">
-                        <thead className="bg-gray-100">
-                            <tr>
-                                <th className="p-2 border border-gray-300 text-center align-middle">
-                                    Año de servicio
-                                    <span className="block text-lg font-bold text-blue-700 leading-tight">{year1End}</span>
-                                </th>
-                                <th className="p-2 border border-gray-300 align-middle">Número de reuniones</th>
-                                <th className="p-2 border border-gray-300 align-middle">Asistencia total</th>
-                                <th className="p-2 border border-gray-300 border-r-2 border-r-gray-500 align-middle">Promedio de asistencia semanal</th>
-                                <th className="p-2 border border-gray-300 text-center align-middle">
-                                    Año de servicio
-                                    <span className="block text-lg font-bold text-blue-700 leading-tight">{year2End}</span>
-                                </th>
-                                <th className="p-2 border border-gray-300 align-middle">Número de reuniones</th>
-                                <th className="p-2 border border-gray-300 align-middle">Asistencia total</th>
-                                <th className="p-2 border border-gray-300 align-middle">Promedio de asistencia semanal</th>
+            <div className="space-y-2">
+                <h4 className="font-black text-blue-400 uppercase text-xs tracking-widest">{label}</h4>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                    <table className="w-full text-xs border-collapse">
+                        <thead className="bg-white/5">
+                            <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
+                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year1End}</span></th>
+                                <th className="p-2 align-middle">Núm. reuniones</th>
+                                <th className="p-2 align-middle">Asistencia total</th>
+                                <th className="p-2 align-middle border-r-2 border-r-white/10">Prom. semanal</th>
+                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year2End}</span></th>
+                                <th className="p-2 align-middle">Núm. reuniones</th>
+                                <th className="p-2 align-middle">Asistencia total</th>
+                                <th className="p-2 align-middle">Prom. semanal</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows}
-                            <tr className="bg-gray-50 font-bold">
-                                <td colSpan={2} className="p-2 border border-gray-300 text-left">Totales Anuales</td>
-                                <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700">{totalAsistenciaY1 || ''}</td>
-                                <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700 border-r-2 border-r-gray-500">{avgY1}</td>
-                                <td colSpan={2} className="p-2 border border-gray-300 text-left">Totales Anuales</td>
-                                <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700">{totalAsistenciaY2 || ''}</td>
-                                <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700">{avgY2}</td>
+                            <tr className="bg-white/5 font-bold border-t border-white/10">
+                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY1 || ''}</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold border-r-2 border-r-white/10">{avgY1}</td>
+                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY2 || ''}</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{avgY2}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -197,23 +189,145 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
     };
 
     return (
-        <div className="bg-white rounded-[2rem] p-4 md:p-6">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-6">
-                <h1 className="text-lg md:text-xl font-bold text-center sm:text-left text-gray-800">REGISTRO DE ASISTENCIA A LAS REUNIONES DE CONGREGACIÓN</h1>
-                <div className="flex items-center gap-2 shrink-0">
-                    <label htmlFor="annual-attendance-year" className="font-bold text-sm text-gray-700">Año de Servicio:</label>
-                    <select
-                        id="annual-attendance-year"
-                        value={selectedServiceYear}
-                        onChange={e => setSelectedServiceYear(Number(e.target.value))}
-                        className="p-2 border border-gray-300 rounded-md text-sm font-bold text-gray-800 bg-white"
-                    >
-                        {years.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                </div>
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro de Asistencia a las Reuniones</h3>
+                <select
+                    value={selectedServiceYear}
+                    onChange={e => setSelectedServiceYear(Number(e.target.value))}
+                    className="bg-white/10 border border-white/10 text-white text-sm font-bold rounded-xl px-3 py-2 outline-none"
+                >
+                    {years.map(y => <option key={y} value={y} className="text-black">{y}</option>)}
+                </select>
             </div>
             {renderTable('entreSemana', 'Reunión de entre semana')}
             {renderTable('finDeSemana', 'Reunión del fin de semana')}
+        </div>
+    );
+};
+
+// Registro de Asignación de Territorio, en el MISMO formato que la pestaña
+// "Registro de Asignaciones" de Territorios.tsx: tabla estilo S-13 en escritorio
+// (territorio + última fecha completada + columnas "Asignado a"/"Fecha asignó"/
+// "Fecha completó" por cada vuelta) y tarjetas por territorio en móvil.
+// Es de solo lectura: sin edición, sin paginación de vueltas (se muestran todas).
+const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[]; territoryResponsible?: TerritoryResponsible | null; }> = ({ territoryRecords, territoryResponsible }) => {
+    const territoryData = useMemo(() => {
+        const data: { [terrNum: number]: { [vueltaNum: number]: TerritoryRecord } } = {};
+        territoryRecords.forEach(r => {
+            const terr = Number(r.terrNum);
+            const vuelta = Number(r.vueltaNum);
+            if (!terr || !vuelta) return;
+            if (!data[terr]) data[terr] = {};
+            data[terr][vuelta] = r;
+        });
+        return data;
+    }, [territoryRecords]);
+
+    const territoryNumbers = useMemo(() => Object.keys(territoryData).map(Number).sort((a, b) => a - b), [territoryData]);
+    const maxVuelta = useMemo(() => {
+        const all = territoryRecords.map(r => Number(r.vueltaNum) || 0);
+        return all.length > 0 ? Math.max(...all) : 1;
+    }, [territoryRecords]);
+    const vueltasRange = useMemo(() => Array.from({ length: maxVuelta }, (_, i) => i + 1), [maxVuelta]);
+
+    const getLastCompletedDate = (terrNum: number) => {
+        const vueltas = Object.values(territoryData[terrNum] || {})
+            .filter(v => v.completedDate)
+            .sort((a, b) => new Date(b.completedDate!).getTime() - new Date(a.completedDate!).getTime());
+        return vueltas.length > 0 ? vueltas[0].completedDate : '---';
+    };
+
+    if (territoryNumbers.length === 0) {
+        return <div className="p-8 text-center text-slate-500 font-bold">No hay registros de territorio.</div>;
+    }
+
+    return (
+        <div>
+            {territoryResponsible?.publisherName && (
+                <div className="mb-3 text-right text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                    Responsable de territorios: <span className="text-white">{territoryResponsible.publisherName}</span>
+                </div>
+            )}
+
+            {/* Vista escritorio: tabla estilo S-13, igual que en Territorios */}
+            <div className="hidden md:block overflow-x-auto rounded-2xl border border-white/10">
+                <table className="w-full border-collapse text-xs">
+                    <thead className="bg-white/5">
+                        <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
+                            <th rowSpan={2} className="p-2 border border-white/10 align-middle">Núm. de terr.</th>
+                            <th rowSpan={2} className="p-2 border border-white/10 align-middle">Última fecha completado</th>
+                            {vueltasRange.map(v => <th colSpan={2} key={v} className="p-2 border border-white/10 font-black text-amber-300 normal-case">Vuelta {v}: Asignado a</th>)}
+                        </tr>
+                        <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
+                            {vueltasRange.map(v => (
+                                <React.Fragment key={v}>
+                                    <th className="p-2 border border-white/10 font-normal">Fecha asignó</th>
+                                    <th className="p-2 border border-white/10 font-normal">Fecha completó</th>
+                                </React.Fragment>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {territoryNumbers.map(terrNum => {
+                            const vueltas = territoryData[terrNum];
+                            return (
+                                <React.Fragment key={terrNum}>
+                                    <tr className="border-t-2 border-white/10">
+                                        <td rowSpan={2} className="p-2 border border-white/10 font-black text-center align-middle text-white">{terrNum}</td>
+                                        <td rowSpan={2} className="p-2 border border-white/10 text-center align-middle text-slate-400">{getLastCompletedDate(terrNum)}</td>
+                                        {vueltasRange.map(v => (
+                                            <td colSpan={2} key={v} className="p-2 border border-white/10 text-center font-bold text-amber-300 align-bottom">
+                                                {vueltas[v]?.asignadoA || '\u00A0'}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                    <tr>
+                                        {vueltasRange.map(v => (
+                                            <React.Fragment key={v}>
+                                                <td className="p-2 border border-white/10 text-center text-slate-400">{vueltas[v]?.assignedDate || '\u00A0'}</td>
+                                                <td className="p-2 border border-white/10 text-center text-slate-400">{vueltas[v]?.completedDate || '\u00A0'}</td>
+                                            </React.Fragment>
+                                        ))}
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Vista móvil: cards por territorio, igual que en Territorios */}
+            <div className="md:hidden space-y-4">
+                {territoryNumbers.map(terrNum => (
+                    <div key={terrNum} className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                        <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
+                            <h3 className="font-black text-lg text-white">Territorio #{terrNum}</h3>
+                        </div>
+                        <p className="text-xs font-bold text-slate-400 -mt-2 mb-3">
+                            Última fecha en que se completó: {getLastCompletedDate(terrNum)}
+                        </p>
+                        <div className="space-y-2">
+                            {vueltasRange.map(v => {
+                                const vueltaData = territoryData[terrNum][v];
+                                if (!vueltaData) return null;
+                                return (
+                                    <div key={v} className="p-3 rounded-xl border border-white/10 bg-white/5">
+                                        <p className="font-bold text-white">
+                                            Vuelta {v}: <span className="text-amber-300">{vueltaData.asignadoA || <span className="text-slate-500 italic font-normal">Sin asignar</span>}</span>
+                                        </p>
+                                        {vueltaData.asignadoA && (
+                                            <p className="text-xs mt-1 text-slate-400">
+                                                Asignado: {vueltaData.assignedDate || '---'} | Completado: {vueltaData.completedDate || '---'}
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
@@ -246,7 +360,6 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
     const [selectedPublisherForModal, setSelectedPublisherForModal] = useState<Publisher | null>(null);
     const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'asistencia' | 'cursos' | 'territorios' | 'emergencia' | null>(null);
     const [territorioTab, setTerritorioTab] = useState<'registro' | 'mapa'>('registro');
-    const [emergencyFilters, setEmergencyFilters] = useState({ group: 'todos', family: 'todos' });
     const currentServiceYear = useMemo(() => {
         const now = new Date();
         return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear();
@@ -276,39 +389,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             return a.localeCompare(b);
         });
     }, [publishers]);
-
-    // Opciones de filtro para el Directorio para Emergencias (independientes de
-    // cardFilters, que es del paso "Tarjetas de Registro"). Mismo criterio que
-    // los filtros de Grupo/Familia en Publicadores.tsx.
-    const emergencyFamilyOptions = useMemo(() => {
-        let filteredPublishers = publishers;
-        if (emergencyFilters.group !== 'todos') {
-            const fGroup = String(emergencyFilters.group).trim().toLowerCase();
-            filteredPublishers = publishers.filter(p => String(p.Grupo || '').trim().toLowerCase() === fGroup);
-        }
-        const families = filteredPublishers
-            .map(p => p.Familia)
-            .filter(f => f && typeof f === 'string' && f.trim().length > 0);
-        return [...new Set(families)].sort();
-    }, [publishers, emergencyFilters.group]);
-
-    const filteredEmergencyPublishers = useMemo(() => {
-        return publishers
-            .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
-            .filter(p => {
-                const pGroup = String(p.Grupo || '').trim().toLowerCase();
-                const fGroup = String(emergencyFilters.group).trim().toLowerCase();
-                const matchesGroup = fGroup === 'todos' || pGroup === fGroup;
-
-                const pFamily = String(p.Familia || '').trim().toLowerCase();
-                const fFamily = String(emergencyFilters.family).trim().toLowerCase();
-                const matchesFamily = fFamily === 'todos' || pFamily === fFamily;
-
-                return matchesGroup && matchesFamily;
-            })
-            .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
-    }, [publishers, emergencyFilters]);
-
+    
     const publishersWithStatus = useMemo(() => {
         return publishers.map(p => ({
             ...p,
@@ -830,18 +911,18 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             {/* Modal: Asistencia Anual */}
             {presModal === 'asistencia' && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
-                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-90 duration-300 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                        <div className="bg-gradient-to-r from-rose-700 to-rose-900 p-6 md:p-8 flex justify-between items-center shrink-0">
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="bg-gradient-to-r from-rose-700 to-rose-900 p-6 md:p-8 flex justify-between items-center">
                             <div>
                                 <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Asistencia Anual</h3>
                                 <p className="text-rose-300 text-xs font-bold mt-1">Promedios de asistencia por mes</p>
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
-                        <div className="p-5 md:p-6 overflow-y-auto flex-1">
+                        <div className="p-5 md:p-6 overflow-y-auto max-h-[65vh]">
                             <AnnualAttendanceSummary attendanceRecords={attendanceRecords} />
                         </div>
-                        <div className="p-6 flex justify-end bg-white/5 shrink-0">
+                        <div className="p-6 flex justify-end bg-white/5">
                             <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-rose-600 text-white font-black rounded-2xl hover:bg-rose-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
                         </div>
                     </div>
@@ -896,49 +977,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                         </div>
                         <div className="p-5 md:p-6 overflow-y-auto flex-1">
                             {territorioTab === 'registro' ? (
-                                <div className="overflow-x-auto rounded-2xl border border-white/10">
-                                    <table className="w-full text-xs border-collapse">
-                                        <thead className="bg-white/5 sticky top-0">
-                                            <tr className="text-slate-400 uppercase tracking-widest text-[10px]">
-                                                <th className="p-3 text-center">Terr.</th>
-                                                <th className="p-3 text-center">Vuelta</th>
-                                                <th className="p-3 text-center">Año Serv.</th>
-                                                <th className="p-3 text-left">Asignado a</th>
-                                                <th className="p-3 text-center">Fecha Asignado</th>
-                                                <th className="p-3 text-center">Fecha Completado</th>
-                                                {territoryResponsible?.publisherName && <th className="p-3 text-center">Responsable</th>}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {[...territoryRecords]
-                                                .sort((a, b) => {
-                                                    const numA = Number(a.terrNum) || 0;
-                                                    const numB = Number(b.terrNum) || 0;
-                                                    if (numA !== numB) return numA - numB;
-                                                    return (Number(b.vueltaNum) || 0) - (Number(a.vueltaNum) || 0);
-                                                })
-                                                .map((r, idx) => (
-                                                    <tr key={(r as any).id || idx} className="border-t border-white/5">
-                                                        <td className="p-2 text-center font-black text-white">{r.terrNum}</td>
-                                                        <td className="p-2 text-center text-slate-300">{r.vueltaNum}</td>
-                                                        <td className="p-2 text-center text-slate-300">{r.serviceYear}</td>
-                                                        <td className="p-2 text-left font-bold text-amber-300">{r.asignadoA || '---'}</td>
-                                                        <td className="p-2 text-center text-slate-400">{r.assignedDate || '---'}</td>
-                                                        <td className="p-2 text-center text-slate-400">{r.completedDate || '---'}</td>
-                                                        {territoryResponsible?.publisherName && <td className="p-2 text-center text-slate-500"></td>}
-                                                    </tr>
-                                                ))}
-                                            {territoryRecords.length === 0 && (
-                                                <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-bold">No hay registros de territorio.</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                    {territoryResponsible?.publisherName && (
-                                        <div className="p-3 text-right text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-white/5">
-                                            Responsable de territorios: <span className="text-white">{territoryResponsible.publisherName}</span>
-                                        </div>
-                                    )}
-                                </div>
+                                <TerritoryRegistroReadOnly territoryRecords={territoryRecords} territoryResponsible={territoryResponsible} />
                             ) : (
                                 <div className="rounded-2xl overflow-hidden bg-white">
                                     <InteractiveMap
@@ -970,28 +1009,10 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
-                        <div className="p-5 md:p-6 pb-0 flex flex-wrap gap-3 shrink-0">
-                            <select
-                                className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-red-500 outline-none"
-                                value={emergencyFilters.group}
-                                onChange={(e) => setEmergencyFilters({ group: e.target.value, family: 'todos' })}
-                            >
-                                <option value="todos" className="text-black">Todos los Grupos</option>
-                                {groupOptions.map(g => (<option key={g} value={g} className="text-black">Grupo {g}</option>))}
-                            </select>
-                            <select
-                                className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-red-500 outline-none"
-                                value={emergencyFilters.family}
-                                onChange={(e) => setEmergencyFilters({ ...emergencyFilters, family: e.target.value })}
-                            >
-                                <option value="todos" className="text-black">Todas las Familias</option>
-                                {emergencyFamilyOptions.map(f => (<option key={f} value={f} className="text-black">{f}</option>))}
-                            </select>
-                        </div>
                         <div className="p-5 md:p-6 overflow-y-auto flex-1 space-y-3">
-                            {filteredEmergencyPublishers.length === 0 ? (
-                                <div className="text-center text-slate-500 font-bold text-sm uppercase tracking-widest border-4 border-dashed border-white/5 rounded-3xl py-16">No se encontraron publicadores con estos filtros</div>
-                            ) : filteredEmergencyPublishers
+                            {publishers
+                                .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
+                                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`))
                                 .map(p => {
                                     const emergTel = String(p['Cel de Emergencia'] || '').replace(/\D/g, '');
                                     const ownTel = String(p.Cel || '').replace(/\D/g, '');
