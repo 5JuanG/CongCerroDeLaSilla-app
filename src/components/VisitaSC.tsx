@@ -211,8 +211,11 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
 // (territorio + última fecha completada + columnas "Asignado a"/"Fecha asignó"/
 // "Fecha completó" por cada vuelta) y tarjetas por territorio en móvil.
 // Es de solo lectura: sin edición, sin paginación de vueltas (se muestran todas).
-const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[]; territoryResponsible?: TerritoryResponsible | null; }> = ({ territoryRecords, territoryResponsible }) => {
+const TOTAL_TERRITORIES = 40; // Debe coincidir con el total usado en Territorios.tsx
+
+const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[]; territoryResponsible?: TerritoryResponsible | null; territoryMaps: TerritoryMap[]; }> = ({ territoryRecords, territoryResponsible, territoryMaps }) => {
     const { serviceYear: defaultServiceYear } = getPreviousMonthAndYear();
+    const [viewingMapUrl, setViewingMapUrl] = useState<string | null>(null);
 
     const availableYears = useMemo(() => {
         const years = new Set<number>();
@@ -228,23 +231,25 @@ const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[];
         [territoryRecords, selectedYear]
     );
 
-    const territoryData = useMemo(() => {
+    // Igual que en Territorios.tsx: siempre se muestran TODOS los territorios
+    // (1 a TOTAL_TERRITORIES), no solo los que tienen registros ese año.
+    const { territoryData, maxVuelta } = useMemo(() => {
         const data: { [terrNum: number]: { [vueltaNum: number]: TerritoryRecord } } = {};
+        for (let i = 1; i <= TOTAL_TERRITORIES; i++) data[i] = {};
+        let maxV = 0;
         yearRecords.forEach(r => {
             const terr = Number(r.terrNum);
             const vuelta = Number(r.vueltaNum);
-            if (!terr || !vuelta) return;
-            if (!data[terr]) data[terr] = {};
+            if (!terr || !vuelta || !data[terr]) return;
             data[terr][vuelta] = r;
+            if (vuelta > maxV) maxV = vuelta;
         });
-        return data;
+        let effectiveMaxVuelta = Math.max(4, maxV);
+        if (maxV > 0 && maxV % 4 === 0) effectiveMaxVuelta = maxV + 1;
+        return { territoryData: data, maxVuelta: effectiveMaxVuelta };
     }, [yearRecords]);
 
-    const territoryNumbers = useMemo(() => Object.keys(territoryData).map(Number).sort((a, b) => a - b), [territoryData]);
-    const maxVuelta = useMemo(() => {
-        const all = yearRecords.map(r => Number(r.vueltaNum) || 0);
-        return all.length > 0 ? Math.max(...all) : 1;
-    }, [yearRecords]);
+    const territoryNumbers = useMemo(() => Array.from({ length: TOTAL_TERRITORIES }, (_, i) => i + 1), []);
     const vueltasRange = useMemo(() => Array.from({ length: maxVuelta }, (_, i) => i + 1), [maxVuelta]);
 
     const getLastCompletedDate = (terrNum: number) => {
@@ -252,6 +257,21 @@ const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[];
             .filter(v => v.completedDate)
             .sort((a, b) => new Date(b.completedDate!).getTime() - new Date(a.completedDate!).getTime());
         return vueltas.length > 0 ? vueltas[0].completedDate : '---';
+    };
+
+    const handleViewTerritoryMap = (terrNum: number) => {
+        const map = territoryMaps.find(m => m.territoryId === terrNum.toString());
+        if (map) setViewingMapUrl(map.mapUrl);
+    };
+
+    const TerritoryNumberButton = ({ terrNum, className }: { terrNum: number; className: string }) => {
+        const hasMap = territoryMaps.some(m => m.territoryId === terrNum.toString());
+        if (!hasMap) return <span className={className}>{terrNum}</span>;
+        return (
+            <button type="button" onClick={() => handleViewTerritoryMap(terrNum)} className={`${className} underline decoration-dotted hover:text-blue-600 transition-colors`}>
+                {terrNum}
+            </button>
+        );
     };
 
     return (
@@ -276,71 +296,79 @@ const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[];
                 </div>
             </div>
 
-            {territoryNumbers.length === 0 ? (
-                <div className="p-8 text-center text-gray-500 font-bold">No hay registros de territorio para el año {selectedYear}.</div>
-            ) : (
-                <>
-                    {/* Vista escritorio: tabla estilo S-13, igual que en Territorios */}
-                    <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-400">
-                        <table className="w-full border-collapse text-xs">
-                            <thead className="bg-gray-100">
-                                <tr className="text-gray-600 uppercase tracking-widest text-[9px]">
-                                    <th rowSpan={2} className="p-2 border border-gray-400 align-middle">Núm. de terr.</th>
-                                    <th rowSpan={2} className="p-2 border border-gray-400 align-middle">Última fecha completado</th>
-                                    {vueltasRange.map(v => <th colSpan={2} key={v} className="p-2 border border-gray-400 font-black text-gray-700 normal-case">Vuelta {v}: Asignado a</th>)}
-                                </tr>
-                                <tr className="text-gray-500 uppercase tracking-widest text-[9px]">
-                                    {vueltasRange.map(v => (
-                                        <React.Fragment key={v}>
-                                            <th className="p-2 border border-gray-400 font-normal">Fecha asignó</th>
-                                            <th className="p-2 border border-gray-400 font-normal">Fecha completó</th>
-                                        </React.Fragment>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {territoryNumbers.map(terrNum => {
-                                    const vueltas = territoryData[terrNum];
-                                    return (
-                                        <React.Fragment key={terrNum}>
-                                            <tr className="border-t-2 border-gray-400">
-                                                <td rowSpan={2} className="p-2 border border-gray-400 font-black text-center align-middle text-gray-900">{terrNum}</td>
-                                                <td rowSpan={2} className="p-2 border border-gray-400 text-center align-middle text-gray-600">{getLastCompletedDate(terrNum)}</td>
-                                                {vueltasRange.map(v => (
-                                                    <td colSpan={2} key={v} className="p-2 border border-gray-400 text-center font-bold text-blue-700 align-bottom">
-                                                        {vueltas[v]?.asignadoA || '\u00A0'}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                            <tr>
-                                                {vueltasRange.map(v => (
-                                                    <React.Fragment key={v}>
-                                                        <td className="p-2 border border-gray-400 text-center text-gray-700">{vueltas[v]?.assignedDate || '\u00A0'}</td>
-                                                        <td className="p-2 border border-gray-400 text-center text-gray-700">{vueltas[v]?.completedDate || '\u00A0'}</td>
-                                                    </React.Fragment>
-                                                ))}
-                                            </tr>
-                                        </React.Fragment>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+            {/* Vista escritorio: tabla estilo S-13, igual que en Territorios (con scroll horizontal) */}
+            <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-400">
+                <table className="min-w-max border-collapse text-xs">
+                    <thead className="bg-gray-100">
+                        <tr className="text-gray-600 uppercase tracking-widest text-[9px]">
+                            <th rowSpan={2} className="p-2 border border-gray-400 align-middle whitespace-nowrap">Núm. de terr.</th>
+                            <th rowSpan={2} className="p-2 border border-gray-400 align-middle whitespace-nowrap">Última fecha completado</th>
+                            {vueltasRange.map(v => <th colSpan={2} key={v} className="p-2 border border-gray-400 font-black text-gray-700 normal-case whitespace-nowrap">Vuelta {v}: Asignado a</th>)}
+                        </tr>
+                        <tr className="text-gray-500 uppercase tracking-widest text-[9px]">
+                            {vueltasRange.map(v => (
+                                <React.Fragment key={v}>
+                                    <th className="p-2 border border-gray-400 font-normal whitespace-nowrap">Fecha asignó</th>
+                                    <th className="p-2 border border-gray-400 font-normal whitespace-nowrap">Fecha completó</th>
+                                </React.Fragment>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {territoryNumbers.map(terrNum => {
+                            const vueltas = territoryData[terrNum];
+                            return (
+                                <React.Fragment key={terrNum}>
+                                    <tr className="border-t-2 border-gray-400">
+                                        <td rowSpan={2} className="p-2 border border-gray-400 font-black text-center align-middle text-gray-900 whitespace-nowrap">
+                                            <TerritoryNumberButton terrNum={terrNum} className="font-black text-gray-900" />
+                                        </td>
+                                        <td rowSpan={2} className="p-2 border border-gray-400 text-center align-middle text-gray-600 whitespace-nowrap">{getLastCompletedDate(terrNum)}</td>
+                                        {vueltasRange.map(v => (
+                                            <td colSpan={2} key={v} className="p-2 border border-gray-400 text-center font-bold text-blue-700 align-bottom whitespace-nowrap">
+                                                {vueltas[v]?.asignadoA || '\u00A0'}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                    <tr>
+                                        {vueltasRange.map(v => (
+                                            <React.Fragment key={v}>
+                                                <td className="p-2 border border-gray-400 text-center text-gray-700 whitespace-nowrap">{vueltas[v]?.assignedDate || '\u00A0'}</td>
+                                                <td className="p-2 border border-gray-400 text-center text-gray-700 whitespace-nowrap">{vueltas[v]?.completedDate || '\u00A0'}</td>
+                                            </React.Fragment>
+                                        ))}
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
 
-                    {/* Vista móvil: cards por territorio, igual que en Territorios */}
-                    <div className="md:hidden space-y-4">
-                        {territoryNumbers.map(terrNum => (
-                            <div key={terrNum} className="bg-gray-50 border border-gray-300 rounded-2xl p-4 shadow-sm">
-                                <div className="flex justify-between items-center border-b border-gray-300 pb-2 mb-3">
-                                    <h3 className="font-black text-lg text-gray-900">Territorio #{terrNum}</h3>
-                                </div>
-                                <p className="text-xs font-bold text-gray-500 -mt-2 mb-3">
-                                    Última fecha en que se completó: {getLastCompletedDate(terrNum)}
-                                </p>
+            {/* Vista móvil: cards por territorio, igual que en Territorios */}
+            <div className="md:hidden space-y-4">
+                {territoryNumbers.map(terrNum => {
+                    const hasMap = territoryMaps.some(m => m.territoryId === terrNum.toString());
+                    const vueltasTrabajadas = vueltasRange.filter(v => territoryData[terrNum][v]);
+                    return (
+                        <div key={terrNum} className="bg-gray-50 border border-gray-300 rounded-2xl p-4 shadow-sm">
+                            <div className="flex justify-between items-center border-b border-gray-300 pb-2 mb-3">
+                                <h3 className="font-black text-lg text-gray-900">Territorio #{terrNum}</h3>
+                                {hasMap && (
+                                    <button type="button" onClick={() => handleViewTerritoryMap(terrNum)} className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1">
+                                        Ver Mapa
+                                    </button>
+                                )}
+                            </div>
+                            <p className="text-xs font-bold text-gray-500 -mt-2 mb-3">
+                                Última fecha en que se completó: {getLastCompletedDate(terrNum)}
+                            </p>
+                            {vueltasTrabajadas.length === 0 ? (
+                                <p className="text-xs text-gray-400 italic">Sin registros este año de servicio.</p>
+                            ) : (
                                 <div className="space-y-2">
-                                    {vueltasRange.map(v => {
+                                    {vueltasTrabajadas.map(v => {
                                         const vueltaData = territoryData[terrNum][v];
-                                        if (!vueltaData) return null;
                                         return (
                                             <div key={v} className="p-3 rounded-xl border border-gray-300 bg-white">
                                                 <p className="font-bold text-gray-900">
@@ -355,10 +383,20 @@ const TerritoryRegistroReadOnly: React.FC<{ territoryRecords: TerritoryRecord[];
                                         );
                                     })}
                                 </div>
-                            </div>
-                        ))}
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Visor de mapa de territorio individual */}
+            {viewingMapUrl && (
+                <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-4" onClick={() => setViewingMapUrl(null)}>
+                    <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
+                        <img src={viewingMapUrl} alt="Mapa de territorio" className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-xl mx-auto" />
+                        <button onClick={() => setViewingMapUrl(null)} className="absolute -top-10 right-0 text-white text-3xl font-thin">✕</button>
                     </div>
-                </>
+                </div>
             )}
         </div>
     );
@@ -1009,7 +1047,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                         </div>
                         <div className="p-5 md:p-6 overflow-y-auto flex-1">
                             {territorioTab === 'registro' ? (
-                                <TerritoryRegistroReadOnly territoryRecords={territoryRecords} territoryResponsible={territoryResponsible} />
+                                <TerritoryRegistroReadOnly territoryRecords={territoryRecords} territoryResponsible={territoryResponsible} territoryMaps={territoryMaps} />
                             ) : (
                                 <div className="rounded-2xl overflow-hidden bg-white">
                                     <InteractiveMap
