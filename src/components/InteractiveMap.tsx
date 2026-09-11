@@ -40,6 +40,11 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     // final position on mouse/touch release.
     const [draggingMarkerId, setDraggingMarkerId] = useState<string | null>(null);
     const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+    // When true (the default), pins cannot be dragged out of place — a tap
+    // still opens the assignment form as usual. This prevents accidental
+    // moves while working on assignments. The person managing territories
+    // must explicitly unlock to reposition a pin, then can lock it again.
+    const [pinsLocked, setPinsLocked] = useState(true);
     // Distinguishes a real drag from a simple click/tap, so a click still
     // opens the edit modal instead of being swallowed by the drag handler.
     const dragMovedRef = useRef(false);
@@ -79,14 +84,18 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     const handleMarkerPointerDown = (e: React.PointerEvent<HTMLDivElement>, marker: TerritoryMarker) => {
         if (!canManage) return;
         e.stopPropagation();
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
         dragMovedRef.current = false;
+        // While pins are locked, don't start a drag at all — pointerUp below
+        // will still see wasDragged=false and treat this as a normal tap,
+        // opening the assignment form instead of moving the pin.
+        if (pinsLocked) return;
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
         setDraggingMarkerId(marker.id);
         setDragPosition({ x: marker.x, y: marker.y });
     };
 
     const handleMarkerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-        if (!draggingMarkerId || !containerRef.current) return;
+        if (pinsLocked || !draggingMarkerId || !containerRef.current) return;
         dragMovedRef.current = true;
         setDragPosition(getRelativePosition(e.clientX, e.clientY));
     };
@@ -276,9 +285,28 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm border gap-4">
                 <div className="flex-1">
                     <h3 className="text-lg font-bold text-gray-800">Mapa Territorial Interactivo</h3>
-                    <p className="text-sm text-gray-500">{canManage ? 'Haz clic en el mapa para ubicar o gestionar territorios.' : 'Vista rápida del estado de los territorios.'}</p>
+                    <p className="text-sm text-gray-500">
+                        {canManage
+                            ? (pinsLocked
+                                ? 'Haz clic en un pin para registrar el trabajo. Los pines están fijos: desbloquéalos para corregir su ubicación.'
+                                : 'Modo edición de posición: arrastra un pin para moverlo, o haz clic en él para registrar el trabajo.')
+                            : 'Vista rápida del estado de los territorios.'}
+                    </p>
                 </div>
                 <div className="flex flex-wrap gap-3 items-center">
+                    {canManage && (
+                        <button
+                            onClick={() => setPinsLocked(prev => !prev)}
+                            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black rounded-xl shadow-md transition-all hover:scale-105 active:scale-95 ${
+                                pinsLocked
+                                    ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                    : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                            }`}
+                            title={pinsLocked ? 'Los pines están fijos. Haz clic para poder moverlos.' : 'Los pines se pueden mover. Haz clic para volver a fijarlos.'}
+                        >
+                            {pinsLocked ? '🔒 Pines Fijados' : '🔓 Editando Posición'}
+                        </button>
+                    )}
                     {canManage && onResetCompletedMarkers && (
                         <button
                             onClick={async () => {
@@ -350,13 +378,13 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                 marker.status === 'assigned' ? 'bg-red-500' : 
                                 marker.status === 'delayed' ? 'bg-orange-500 animate-pulse' :
                                 'bg-gray-500'
-                            } ${canManage ? 'cursor-grab active:cursor-grabbing hover:scale-125 touch-none' : ''}`}
+                            } ${canManage ? (pinsLocked ? 'cursor-pointer hover:scale-110' : 'cursor-grab active:cursor-grabbing hover:scale-125 touch-none') : ''}`}
                             style={{ left: `${displayX}%`, top: `${displayY}%` }}
                             onPointerDown={(e) => handleMarkerPointerDown(e, marker)}
                             onPointerMove={handleMarkerPointerMove}
                             onPointerUp={(e) => handleMarkerPointerUp(e, marker)}
                             onClick={(e) => e.stopPropagation()}
-                            title={`Territorio ${marker.terrNum}${canManage ? ' (clic para editar, arrastra para mover)' : ''}`}
+                            title={`Territorio ${marker.terrNum}${canManage ? (pinsLocked ? ' (clic para registrar trabajo — posición fija)' : ' (clic para registrar trabajo, arrastra para mover)') : ''}`}
                         >
                             <span className="hidden sm:inline">{marker.terrNum}</span>
                             <span className="sm:hidden font-black" style={{ fontSize: !canManage ? '5px' : '7px', lineHeight: '1' }}>{marker.terrNum}</span>
