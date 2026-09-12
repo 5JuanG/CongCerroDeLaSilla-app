@@ -2227,7 +2227,9 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 ];
 
                 vym.studentAssignments.forEach((a: any) => {
-                    vymData.push([a.title, getPublisherName(a.studentId)]);
+                    const studentName = getPublisherName(a.studentId);
+                    const helperName = a.helperId ? getPublisherName(a.helperId) : '';
+                    vymData.push([a.title, helperName ? `${studentName} / ${helperName}` : studentName]);
                 });
 
                 vymData.push(['Canción intermedio', vym.song2 || '---']);
@@ -2236,7 +2238,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     vymData.push([a.title, a.note || getPublisherName(a.assigneeId)]);
                 });
 
-                vymData.push([`Discurso de Servicio: ${draft.discursoServicioTitulo || ''}`, '30 min.']);
+                vymData.push([`Discurso de Servicio: ${draft.discursoServicioTitulo || ''} (30 min.)`, draft.scName || 'Superintendente de Circuito']);
                 vymData.push(['Canción final', `Canción ${vym.song3 || '---'}`]);
                 vymData.push(['Oración de conclusión', 'Superintendente']);
 
@@ -2259,10 +2261,11 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 const speechTitleY = addSectionTitle('TEMAS DE LOS DISCURSOS', (pdf as any).lastAutoTable.finalY + 15, { minSpace: 40 });
                 pdf.setFontSize(10);
                 pdf.setFont('helvetica', 'normal');
-                pdf.text(`Martes (Reunión): ${draft.discursoMartesTitulo || '---'}`, margin, speechTitleY + 7);
+                const scLabel = draft.scName || 'Superintendente de Circuito';
+                pdf.text(`Martes (Reunión): ${draft.discursoMartesTitulo || '---'} — ${scLabel}`, margin, speechTitleY + 7);
                 pdf.text(`Viernes/Sábado (Ancianos/Precursores): ---`, margin, speechTitleY + 14);
-                pdf.text(`Domingo (Reunión de fin de semana): ${draft.discursoDomingoTitulo || '---'}`, margin, speechTitleY + 21);
-                pdf.text(`Conclusión: ${draft.discursoConclusionTitulo || '---'}`, margin, speechTitleY + 28);
+                pdf.text(`Domingo (Reunión de fin de semana): ${draft.discursoDomingoTitulo || '---'} — ${scLabel}`, margin, speechTitleY + 21);
+                pdf.text(`Conclusión: ${draft.discursoConclusionTitulo || '---'} — ${scLabel}`, margin, speechTitleY + 28);
             }
 
             pdf.save(`Programa_Visita_SC_${draft.fechaInicio}.pdf`);
