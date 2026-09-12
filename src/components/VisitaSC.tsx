@@ -2076,7 +2076,29 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
         try {
             const pdf = new jsPDF('p', 'mm', 'letter');
             const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
             const margin = 15;
+
+            // Draws a section title at `y`, but first checks there's enough
+            // room left on the page for the title plus at least a header row
+            // and one line of the table that follows. If not, it starts a
+            // fresh page so the title never gets stranded alone at the
+            // bottom of a page while its table spills onto the next one.
+            const addSectionTitle = (
+                text: string,
+                y: number,
+                opts: { align?: 'left' | 'center'; fontSize?: number; minSpace?: number } = {}
+            ) => {
+                const { align = 'left', fontSize = 14, minSpace = 35 } = opts;
+                if (y + minSpace > pageHeight - margin) {
+                    pdf.addPage();
+                    y = margin + 10;
+                }
+                pdf.setFontSize(fontSize);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(text, align === 'center' ? pageWidth / 2 : margin, y, align === 'center' ? { align: 'center' } : undefined);
+                return y;
+            };
 
             // --- Page 1: General Info and Meetings ---
             pdf.setFontSize(18);
@@ -2108,8 +2130,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 headStyles: { fillColor: [50, 50, 150] as any }
             });
 
-            pdf.setFontSize(14);
-            pdf.text('PLAN DE PREDICACIÓN', margin, (pdf as any).lastAutoTable.finalY + 15);
+            let sectionY = addSectionTitle('PLAN DE PREDICACIÓN', (pdf as any).lastAutoTable.finalY + 15);
 
             const preachingData: any[] = [];
             ['miercoles', 'jueves', 'viernes', 'sabado', 'domingo'].forEach(day => {
@@ -2140,7 +2161,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
             });
 
             autoTable(pdf, {
-                startY: (pdf as any).lastAutoTable.finalY + 20,
+                startY: sectionY + 5,
                 head: [['Día', 'Encuentro', 'Hora', 'Acomp. SC', 'Acomp. Esposa', 'Asignación de Territorio']],
                 body: preachingData,
                 theme: 'grid',
@@ -2148,12 +2169,11 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 styles: { fontSize: 8 }
             });
 
-            pdf.setFontSize(14);
-            pdf.text('VISITAS DE PASTOREO', margin, (pdf as any).lastAutoTable.finalY + 15);
+            sectionY = addSectionTitle('VISITAS DE PASTOREO', (pdf as any).lastAutoTable.finalY + 15);
 
             const pastoreoData = draft.pastoreo.map(v => [v.dia, v.hora, v.familia, getPublisherName(v.acompananteId), v.asunto]);
             autoTable(pdf, {
-                startY: (pdf as any).lastAutoTable.finalY + 20,
+                startY: sectionY + 5,
                 head: [['Día', 'Hora', 'Familia', 'Acompañante', 'Notas/Razón']],
                 body: pastoreoData.length ? pastoreoData : [['---', '---', '---', '---', '---']],
                 theme: 'grid',
@@ -2161,9 +2181,11 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 styles: { fontSize: 8 }
             });
 
-            // --- Page 2: Meals and VyM ---
+            // --- Programa de Alimentos: always starts on its own fresh page,
+            // and never shares a page with Vida y Ministerio below. ---
             pdf.addPage();
             pdf.setFontSize(16);
+            pdf.setFont('helvetica', 'bold');
             pdf.text('PROGRAMA DE ALIMENTOS', pageWidth / 2, 20, { align: 'center' });
 
             const mealsOrder = ['miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -2186,8 +2208,12 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
             });
 
             if (draft.vymProgram) {
+                // Always its own page too, so it never gets crowded onto the
+                // same sheet as Programa de Alimentos above.
+                pdf.addPage();
                 pdf.setFontSize(16);
-                pdf.text('PROGRAMA VIDA Y MINISTERIO (SEMANA DE VISITA)', pageWidth / 2, (pdf as any).lastAutoTable.finalY + 15, { align: 'center' });
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('PROGRAMA VIDA Y MINISTERIO (SEMANA DE VISITA)', pageWidth / 2, 20, { align: 'center' });
 
                 const vym = draft.vymProgram;
                 const vymData: any[] = [
@@ -2215,7 +2241,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 vymData.push(['Oración de conclusión', 'Superintendente']);
 
                 autoTable(pdf, {
-                    startY: (pdf as any).lastAutoTable.finalY + 20,
+                    startY: 30,
                     head: [vymData[0]],
                     body: vymData.slice(1),
                     theme: 'striped',
@@ -2227,17 +2253,16 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     }
                 });
 
-                // Add speech titles summary
-                const speechY = (pdf as any).lastAutoTable.finalY + 15;
-                if (speechY < pdf.internal.pageSize.getHeight() - 40) {
-                    pdf.setFontSize(14);
-                    pdf.text('TEMAS DE LOS DISCURSOS', margin, speechY);
-                    pdf.setFontSize(10);
-                    pdf.text(`Martes (Reunión): ${draft.discursoMartesTitulo || '---'}`, margin, speechY + 7);
-                    pdf.text(`Viernes/Sábado (Ancianos/Precursores): ---`, margin, speechY + 14);
-                    pdf.text(`Domingo (Reunión de fin de semana): ${draft.discursoDomingoTitulo || '---'}`, margin, speechY + 21);
-                    pdf.text(`Conclusión: ${draft.discursoConclusionTitulo || '---'}`, margin, speechY + 28);
-                }
+                // Add speech titles summary — reuses the same space check so
+                // it starts a new page instead of getting cut off if the
+                // table above ran long.
+                const speechTitleY = addSectionTitle('TEMAS DE LOS DISCURSOS', (pdf as any).lastAutoTable.finalY + 15, { minSpace: 40 });
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text(`Martes (Reunión): ${draft.discursoMartesTitulo || '---'}`, margin, speechTitleY + 7);
+                pdf.text(`Viernes/Sábado (Ancianos/Precursores): ---`, margin, speechTitleY + 14);
+                pdf.text(`Domingo (Reunión de fin de semana): ${draft.discursoDomingoTitulo || '---'}`, margin, speechTitleY + 21);
+                pdf.text(`Conclusión: ${draft.discursoConclusionTitulo || '---'}`, margin, speechTitleY + 28);
             }
 
             pdf.save(`Programa_Visita_SC_${draft.fechaInicio}.pdf`);
