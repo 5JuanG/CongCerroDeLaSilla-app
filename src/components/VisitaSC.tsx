@@ -1334,7 +1334,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     miercoles: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
                     jueves: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
                     viernes: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
-                    sabado: { manana: { lugar: '', hora: '09:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
+                    sabado: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
                     domingo: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } }
                 },
                 pastoreo: []
@@ -3053,6 +3053,12 @@ const PreachingModal: React.FC<ModalProps> = ({ draft, setDraft, onClose }) => (
                                         <div key={slice} className="space-y-4 bg-white p-4 rounded-xl shadow-sm">
                                             <div className="flex justify-between items-center border-b pb-2">
                                                 <span className="font-bold text-green-700 uppercase text-xs">{slice === 'manana' ? 'Mañana' : 'Tarde'}</span>
+                                                <input
+                                                    type="time"
+                                                    value={(draft?.predicacion as any)?.[day]?.[slice]?.hora || ''}
+                                                    onChange={(e) => setDraft({ ...draft!, predicacion: { ...draft!.predicacion, [day]: { ...(draft!.predicacion as any)[day], [slice]: { ...(draft!.predicacion as any)[day][slice], hora: e.target.value } } } })}
+                                                    className="text-sm font-bold p-2 bg-slate-50 border-2 border-slate-100 focus:border-green-500 rounded-lg transition-all"
+                                                />
                                             </div>
                                             <div className="space-y-4">
                                                 <input
