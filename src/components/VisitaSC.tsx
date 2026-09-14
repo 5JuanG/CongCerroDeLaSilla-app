@@ -125,7 +125,7 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
     const year1Data = useMemo(() => processDataForServiceYear(year1End), [attendanceRecords, year1End]);
     const year2Data = useMemo(() => processDataForServiceYear(year2End), [attendanceRecords, year2End]);
 
-    const renderTable = (type: 'entreSemana' | 'finDeSemana') => {
+    const renderTable = (type: 'entreSemana' | 'finDeSemana', label: string) => {
         let totalReunionesY1 = 0, totalAsistenciaY1 = 0;
         let totalReunionesY2 = 0, totalAsistenciaY2 = 0;
         const defaultMonthData: AnnualMonthData = { numReuniones: 0, asistenciaTotal: 0, promedioSemanal: '' };
@@ -138,15 +138,15 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
             totalReunionesY2 += d2.numReuniones;
             totalAsistenciaY2 += d2.asistenciaTotal;
             return (
-                <tr key={month}>
-                    <td className="p-2 border border-gray-300 font-bold text-left" translate="no">{month}</td>
-                    <td className="p-2 border border-gray-300">{d1.numReuniones || ''}</td>
-                    <td className="p-2 border border-gray-300">{d1.asistenciaTotal || ''}</td>
-                    <td className="p-2 border border-gray-300 font-semibold border-r-2 border-r-gray-500">{d1.promedioSemanal || ''}</td>
-                    <td className="p-2 border border-gray-300 font-bold text-left" translate="no">{month}</td>
-                    <td className="p-2 border border-gray-300">{d2.numReuniones || ''}</td>
-                    <td className="p-2 border border-gray-300">{d2.asistenciaTotal || ''}</td>
-                    <td className="p-2 border border-gray-300 font-semibold">{d2.promedioSemanal || ''}</td>
+                <tr key={month} className="border-t border-white/5">
+                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
+                    <td className="p-2 text-center text-slate-300">{d1.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-slate-300">{d1.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-300 border-r-2 border-r-white/10">{d1.promedioSemanal || ''}</td>
+                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
+                    <td className="p-2 text-center text-slate-300">{d2.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-slate-300">{d2.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-300">{d2.promedioSemanal || ''}</td>
                 </tr>
             );
         });
@@ -155,60 +155,53 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
         const avgY2 = totalReunionesY2 > 0 ? (totalAsistenciaY2 / totalReunionesY2).toFixed(2) : '0.00';
 
         return (
-            <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-center text-sm">
-                    <thead className="bg-gray-100">
-                        <tr>
-                            <th className="p-2 border border-gray-300 text-center align-middle">
-                                Año de servicio
-                                <span className="block text-lg font-bold text-blue-700 leading-tight">{year1End}</span>
-                            </th>
-                            <th className="p-2 border border-gray-300 align-middle">Número de reuniones</th>
-                            <th className="p-2 border border-gray-300 align-middle">Asistencia total</th>
-                            <th className="p-2 border border-gray-300 border-r-2 border-r-gray-500 align-middle">Promedio de asistencia semanal</th>
-
-                            <th className="p-2 border border-gray-300 text-center align-middle">
-                                Año de servicio
-                                <span className="block text-lg font-bold text-blue-700 leading-tight">{year2End}</span>
-                            </th>
-                            <th className="p-2 border border-gray-300 align-middle">Número de reuniones</th>
-                            <th className="p-2 border border-gray-300 align-middle">Asistencia total</th>
-                            <th className="p-2 border border-gray-300 align-middle">Promedio de asistencia semanal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows}
-                        <tr className="bg-gray-50 font-bold">
-                            <td colSpan={2} className="p-2 border border-gray-300 text-left">Totales Anuales</td>
-                            <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700">{totalAsistenciaY1 || ''}</td>
-                            <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700 border-r-2 border-r-gray-500">{avgY1}</td>
-                            <td colSpan={2} className="p-2 border border-gray-300 text-left">Totales Anuales</td>
-                            <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700">{totalAsistenciaY2 || ''}</td>
-                            <td className="p-2 border border-gray-300 text-center font-extrabold text-blue-700">{avgY2}</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div className="space-y-2">
+                <h4 className="font-black text-blue-400 uppercase text-xs tracking-widest">{label}</h4>
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                    <table className="w-full text-xs border-collapse">
+                        <thead className="bg-white/5">
+                            <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
+                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year1End}</span></th>
+                                <th className="p-2 align-middle">Núm. reuniones</th>
+                                <th className="p-2 align-middle">Asistencia total</th>
+                                <th className="p-2 align-middle border-r-2 border-r-white/10">Prom. semanal</th>
+                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year2End}</span></th>
+                                <th className="p-2 align-middle">Núm. reuniones</th>
+                                <th className="p-2 align-middle">Asistencia total</th>
+                                <th className="p-2 align-middle">Prom. semanal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows}
+                            <tr className="bg-white/5 font-bold border-t border-white/10">
+                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY1 || ''}</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold border-r-2 border-r-white/10">{avgY1}</td>
+                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY2 || ''}</td>
+                                <td className="p-2 text-center text-rose-300 font-extrabold">{avgY2}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         );
     };
 
     return (
-        <div className="container mx-auto p-4 bg-white rounded-lg shadow-md">
-            <div className="text-center mb-6">
-                <label className="mr-2 font-bold text-gray-800">Año de Servicio:</label>
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro de Asistencia a las Reuniones</h3>
                 <select
                     value={selectedServiceYear}
                     onChange={e => setSelectedServiceYear(Number(e.target.value))}
-                    className="p-2 border rounded-md"
+                    className="bg-white/10 border border-white/10 text-white text-sm font-bold rounded-xl px-3 py-2 outline-none"
                 >
-                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    {years.map(y => <option key={y} value={y} className="text-black">{y}</option>)}
                 </select>
             </div>
-            <h1 className="text-2xl font-bold text-center mb-6">REGISTRO DE ASISTENCIA A LAS REUNIONES DE CONGREGACIÓN</h1>
-            <h2 className="text-xl font-semibold border-b-2 pb-2 mb-4">Reunión de entre semana</h2>
-            {renderTable('entreSemana')}
-            <h2 className="text-xl font-semibold border-b-2 pb-2 mt-8 mb-4">Reunión del fin de semana</h2>
-            {renderTable('finDeSemana')}
+            {renderTable('entreSemana', 'Reunión de entre semana')}
+            {renderTable('finDeSemana', 'Reunión del fin de semana')}
         </div>
     );
 };
@@ -436,7 +429,6 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
     });
     const [selectedPublisherForModal, setSelectedPublisherForModal] = useState<Publisher | null>(null);
     const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'asistencia' | 'cursos' | 'territorios' | 'emergencia' | null>(null);
-    const [emergencyFilters, setEmergencyFilters] = useState({ group: 'todos', family: 'todos' });
     const [territorioTab, setTerritorioTab] = useState<'registro' | 'mapa'>('registro');
     const currentServiceYear = useMemo(() => {
         const now = new Date();
@@ -467,35 +459,6 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             return a.localeCompare(b);
         });
     }, [publishers]);
-
-    const emergencyFamilyOptions = useMemo(() => {
-        let filteredPublishers = publishers;
-        if (emergencyFilters.group !== 'todos') {
-            const fGroup = String(emergencyFilters.group).trim().toLowerCase();
-            filteredPublishers = publishers.filter(p => String(p.Grupo || '').trim().toLowerCase() === fGroup);
-        }
-        const families = filteredPublishers
-            .map(p => p.Familia)
-            .filter(f => f && typeof f === 'string' && f.trim().length > 0);
-        return [...new Set(families)].sort();
-    }, [publishers, emergencyFilters.group]);
-
-    const filteredEmergencyPublishers = useMemo(() => {
-        return publishers
-            .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
-            .filter(p => {
-                const pGroup = String(p.Grupo || '').trim().toLowerCase();
-                const fGroup = String(emergencyFilters.group || '').trim().toLowerCase();
-                const matchesGroup = fGroup === 'todos' || pGroup === fGroup;
-
-                const pFamily = String(p.Familia || '').trim().toLowerCase();
-                const fFamily = String(emergencyFilters.family || '').trim().toLowerCase();
-                const matchesFamily = fFamily === 'todos' || pFamily === fFamily;
-
-                return matchesGroup && matchesFamily;
-            })
-            .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
-    }, [publishers, emergencyFilters]);
     
     const publishersWithStatus = useMemo(() => {
         return publishers.map(p => ({
@@ -1018,7 +981,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             {/* Modal: Asistencia Anual */}
             {presModal === 'asistencia' && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
-                    <div className="bg-slate-100 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
                         <div className="bg-gradient-to-r from-rose-700 to-rose-900 p-6 md:p-8 flex justify-between items-center">
                             <div>
                                 <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Asistencia Anual</h3>
@@ -1026,10 +989,10 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
-                        <div className="p-5 md:p-6 overflow-y-auto max-h-[70vh]">
+                        <div className="p-5 md:p-6 overflow-y-auto max-h-[65vh]">
                             <AnnualAttendanceSummary attendanceRecords={attendanceRecords} />
                         </div>
-                        <div className="p-6 flex justify-end bg-white">
+                        <div className="p-6 flex justify-end bg-white/5">
                             <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-rose-600 text-white font-black rounded-2xl hover:bg-rose-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
                         </div>
                     </div>
@@ -1116,29 +1079,10 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
-                        <div className="p-4 md:p-5 flex flex-wrap gap-3 border-b border-white/5 shrink-0">
-                            <select
-                                className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-red-500 outline-none"
-                                value={emergencyFilters.group}
-                                onChange={(e) => setEmergencyFilters({ group: e.target.value, family: 'todos' })}
-                            >
-                                <option value="todos" className="text-black">Todos los Grupos</option>
-                                {groupOptions.map(g => (<option key={g} value={g} className="text-black">Grupo {g}</option>))}
-                            </select>
-                            <select
-                                className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-red-500 outline-none"
-                                value={emergencyFilters.family}
-                                onChange={(e) => setEmergencyFilters({ ...emergencyFilters, family: e.target.value })}
-                            >
-                                <option value="todos" className="text-black">Todas las Familias</option>
-                                {emergencyFamilyOptions.map(f => (<option key={f} value={f} className="text-black">{f}</option>))}
-                            </select>
-                        </div>
                         <div className="p-5 md:p-6 overflow-y-auto flex-1 space-y-3">
-                            {filteredEmergencyPublishers.length === 0 && (
-                                <p className="text-center text-slate-400 font-bold py-8">No hay publicadores que coincidan con los filtros seleccionados.</p>
-                            )}
-                            {filteredEmergencyPublishers
+                            {publishers
+                                .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
+                                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`))
                                 .map(p => {
                                     const emergTel = String(p['Cel de Emergencia'] || '').replace(/\D/g, '');
                                     const ownTel = String(p.Cel || '').replace(/\D/g, '');
@@ -1229,13 +1173,6 @@ interface VisitaSCProps {
     territoryResponsible?: TerritoryResponsible | null;
     territoryMaps: TerritoryMap[];
     territoryMarkers: TerritoryMarker[];
-    // true solo cuando este componente se carga como página pública standalone
-    // (el enlace/QR compartido con el Superintendente de Circuito). En ese caso
-    // sí se hace cumplir la fecha de caducidad de la Vista de Presentación.
-    // Cuando un admin/secretario abre "Vista de Presentación" desde dentro de
-    // la app para revisar o previsualizar, esta bandera es false y siempre
-    // puede verla, aunque la visita ya haya pasado.
-    isStandalone?: boolean;
 }
 
 const VisitaSC: React.FC<VisitaSCProps> = ({
@@ -1249,11 +1186,17 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
     serviceReports,
     territoryResponsible,
     territoryMaps,
-    territoryMarkers,
-    isStandalone = false
+    territoryMarkers
 }) => {
     const [selectedDate, setSelectedDate] = useState<string>('');
-    const [isPresentationMode, setIsPresentationMode] = useState(false);
+    // Se lee el parámetro ?presentacion=1 de la URL de forma síncrona, antes del
+    // primer render, para que un enlace de Vista de Presentación abra
+    // directamente esa pantalla sin mostrar primero (aunque sea un instante)
+    // la pantalla interna de edición mientras cargan los datos.
+    const [isPresentationMode, setIsPresentationMode] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return new URLSearchParams(window.location.search).get('presentacion') === '1';
+    });
     const hasInitializedRef = useRef(false);
 
     // Initial load from URL params
@@ -1342,7 +1285,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     miercoles: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
                     jueves: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
                     viernes: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
-                    sabado: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
+                    sabado: { manana: { lugar: '', hora: '09:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } },
                     domingo: { manana: { lugar: '', hora: '09:30', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' }, tarde: { lugar: '', hora: '16:00', publicadoresSC: '', publicadoresEsposa: '', capitan: '', notas: '' } }
                 },
                 pastoreo: []
@@ -2084,29 +2027,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
         try {
             const pdf = new jsPDF('p', 'mm', 'letter');
             const pageWidth = pdf.internal.pageSize.getWidth();
-            const pageHeight = pdf.internal.pageSize.getHeight();
             const margin = 15;
-
-            // Draws a section title at `y`, but first checks there's enough
-            // room left on the page for the title plus at least a header row
-            // and one line of the table that follows. If not, it starts a
-            // fresh page so the title never gets stranded alone at the
-            // bottom of a page while its table spills onto the next one.
-            const addSectionTitle = (
-                text: string,
-                y: number,
-                opts: { align?: 'left' | 'center'; fontSize?: number; minSpace?: number } = {}
-            ) => {
-                const { align = 'left', fontSize = 14, minSpace = 35 } = opts;
-                if (y + minSpace > pageHeight - margin) {
-                    pdf.addPage();
-                    y = margin + 10;
-                }
-                pdf.setFontSize(fontSize);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text(text, align === 'center' ? pageWidth / 2 : margin, y, align === 'center' ? { align: 'center' } : undefined);
-                return y;
-            };
 
             // --- Page 1: General Info and Meetings ---
             pdf.setFontSize(18);
@@ -2138,7 +2059,8 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 headStyles: { fillColor: [50, 50, 150] as any }
             });
 
-            let sectionY = addSectionTitle('PLAN DE PREDICACIÓN', (pdf as any).lastAutoTable.finalY + 15);
+            pdf.setFontSize(14);
+            pdf.text('PLAN DE PREDICACIÓN', margin, (pdf as any).lastAutoTable.finalY + 15);
 
             const preachingData: any[] = [];
             ['miercoles', 'jueves', 'viernes', 'sabado', 'domingo'].forEach(day => {
@@ -2169,7 +2091,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
             });
 
             autoTable(pdf, {
-                startY: sectionY + 5,
+                startY: (pdf as any).lastAutoTable.finalY + 20,
                 head: [['Día', 'Encuentro', 'Hora', 'Acomp. SC', 'Acomp. Esposa', 'Asignación de Territorio']],
                 body: preachingData,
                 theme: 'grid',
@@ -2177,11 +2099,12 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 styles: { fontSize: 8 }
             });
 
-            sectionY = addSectionTitle('VISITAS DE PASTOREO', (pdf as any).lastAutoTable.finalY + 15);
+            pdf.setFontSize(14);
+            pdf.text('VISITAS DE PASTOREO', margin, (pdf as any).lastAutoTable.finalY + 15);
 
             const pastoreoData = draft.pastoreo.map(v => [v.dia, v.hora, v.familia, getPublisherName(v.acompananteId), v.asunto]);
             autoTable(pdf, {
-                startY: sectionY + 5,
+                startY: (pdf as any).lastAutoTable.finalY + 20,
                 head: [['Día', 'Hora', 'Familia', 'Acompañante', 'Notas/Razón']],
                 body: pastoreoData.length ? pastoreoData : [['---', '---', '---', '---', '---']],
                 theme: 'grid',
@@ -2189,11 +2112,9 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 styles: { fontSize: 8 }
             });
 
-            // --- Programa de Alimentos: always starts on its own fresh page,
-            // and never shares a page with Vida y Ministerio below. ---
+            // --- Page 2: Meals and VyM ---
             pdf.addPage();
             pdf.setFontSize(16);
-            pdf.setFont('helvetica', 'bold');
             pdf.text('PROGRAMA DE ALIMENTOS', pageWidth / 2, 20, { align: 'center' });
 
             const mealsOrder = ['miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -2216,12 +2137,8 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
             });
 
             if (draft.vymProgram) {
-                // Always its own page too, so it never gets crowded onto the
-                // same sheet as Programa de Alimentos above.
-                pdf.addPage();
                 pdf.setFontSize(16);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text('PROGRAMA VIDA Y MINISTERIO (SEMANA DE VISITA)', pageWidth / 2, 20, { align: 'center' });
+                pdf.text('PROGRAMA VIDA Y MINISTERIO (SEMANA DE VISITA)', pageWidth / 2, (pdf as any).lastAutoTable.finalY + 15, { align: 'center' });
 
                 const vym = draft.vymProgram;
                 const vymData: any[] = [
@@ -2235,9 +2152,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                 ];
 
                 vym.studentAssignments.forEach((a: any) => {
-                    const studentName = getPublisherName(a.studentId);
-                    const helperName = a.helperId ? getPublisherName(a.helperId) : '';
-                    vymData.push([a.title, helperName ? `${studentName} / ${helperName}` : studentName]);
+                    vymData.push([a.title, getPublisherName(a.studentId)]);
                 });
 
                 vymData.push(['Canción intermedio', vym.song2 || '---']);
@@ -2246,12 +2161,12 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     vymData.push([a.title, a.note || getPublisherName(a.assigneeId)]);
                 });
 
-                vymData.push([`Discurso de Servicio: ${draft.discursoServicioTitulo || ''} (30 min.)`, draft.scName || 'Superintendente de Circuito']);
+                vymData.push([`Discurso de Servicio: ${draft.discursoServicioTitulo || ''}`, '30 min.']);
                 vymData.push(['Canción final', `Canción ${vym.song3 || '---'}`]);
                 vymData.push(['Oración de conclusión', 'Superintendente']);
 
                 autoTable(pdf, {
-                    startY: 30,
+                    startY: (pdf as any).lastAutoTable.finalY + 20,
                     head: [vymData[0]],
                     body: vymData.slice(1),
                     theme: 'striped',
@@ -2263,17 +2178,17 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     }
                 });
 
-                // Add speech titles summary — reuses the same space check so
-                // it starts a new page instead of getting cut off if the
-                // table above ran long.
-                const speechTitleY = addSectionTitle('TEMAS DE LOS DISCURSOS', (pdf as any).lastAutoTable.finalY + 15, { minSpace: 40 });
-                pdf.setFontSize(10);
-                pdf.setFont('helvetica', 'normal');
-                const scLabel = draft.scName || 'Superintendente de Circuito';
-                pdf.text(`Martes (Reunión): ${draft.discursoMartesTitulo || '---'} — ${scLabel}`, margin, speechTitleY + 7);
-                pdf.text(`Viernes/Sábado (Ancianos/Precursores): ---`, margin, speechTitleY + 14);
-                pdf.text(`Domingo (Reunión de fin de semana): ${draft.discursoDomingoTitulo || '---'} — ${scLabel}`, margin, speechTitleY + 21);
-                pdf.text(`Conclusión: ${draft.discursoConclusionTitulo || '---'} — ${scLabel}`, margin, speechTitleY + 28);
+                // Add speech titles summary
+                const speechY = (pdf as any).lastAutoTable.finalY + 15;
+                if (speechY < pdf.internal.pageSize.getHeight() - 40) {
+                    pdf.setFontSize(14);
+                    pdf.text('TEMAS DE LOS DISCURSOS', margin, speechY);
+                    pdf.setFontSize(10);
+                    pdf.text(`Martes (Reunión): ${draft.discursoMartesTitulo || '---'}`, margin, speechY + 7);
+                    pdf.text(`Viernes/Sábado (Ancianos/Precursores): ---`, margin, speechY + 14);
+                    pdf.text(`Domingo (Reunión de fin de semana): ${draft.discursoDomingoTitulo || '---'}`, margin, speechY + 21);
+                    pdf.text(`Conclusión: ${draft.discursoConclusionTitulo || '---'}`, margin, speechY + 28);
+                }
             }
 
             pdf.save(`Programa_Visita_SC_${draft.fechaInicio}.pdf`);
@@ -2287,6 +2202,18 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
     };
 
     // --- Main Render ---
+
+    // Mientras se abre por enlace de Vista de Presentación (?presentacion=1) y
+    // todavía no ha llegado el dato de la visita (draft), se muestra una
+    // pantalla de carga en vez de la pantalla interna de edición, para que
+    // esta última nunca sea visible ni un instante en un enlace compartido.
+    if (isPresentationMode && !draft) {
+        return (
+            <div className="fixed inset-0 bg-slate-950 flex items-center justify-center z-[999]">
+                <p className="text-white font-black text-lg animate-pulse">Cargando presentación...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 animate-fade-in p-2 sm:p-0">
@@ -2492,13 +2419,9 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => {
-                                            const url = `${window.location.origin}/?view=visitaSC&presentacion=1&date=${selectedDate}`;
+                                            const url = window.location.href; // In a real app this would be a specific shareable URL
                                             navigator.clipboard.writeText(url);
-                                            onShowModal({
-                                                type: 'success',
-                                                title: 'Enlace Copiado',
-                                                message: `El enlace de la Vista de Presentación fue copiado al portapapeles. Es válido hasta el ${draft?.fechaFin || '---'}; después de esa fecha dejará de funcionar.`
-                                            });
+                                            onShowModal({ type: 'success', title: 'Enlace Copiado', message: 'El enlace a la presentación ha sido copiado al portapapeles. Puede pegarlo para generar un código QR.' });
                                         }}
                                         className="p-3 bg-slate-100 text-slate-600 rounded-2xl hover:bg-slate-200 transition-colors flex items-center gap-2 font-bold text-xs"
                                     >
@@ -2761,17 +2684,7 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     getPublisherName={getPublisherName}
                 />
             )}
-            {isPresentationMode && draft && isStandalone && isLinkExpired && (
-                <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-center p-8 z-[999]">
-                    <span className="text-6xl mb-4">⚡</span>
-                    <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Enlace Expirado</h2>
-                    <p className="text-slate-400 max-w-md">
-                        Este enlace de Vista de Presentación era válido hasta el <span className="font-bold text-white">{draft.fechaFin}</span> y ya no está disponible.
-                        Solicite un enlace nuevo al Comité.
-                    </p>
-                </div>
-            )}
-            {isPresentationMode && draft && !(isStandalone && isLinkExpired) && (
+            {isPresentationMode && draft && (
                 <PresentationView
                     publishers={publishers}
                     draft={draft}
@@ -3078,12 +2991,6 @@ const PreachingModal: React.FC<ModalProps> = ({ draft, setDraft, onClose }) => (
                                         <div key={slice} className="space-y-4 bg-white p-4 rounded-xl shadow-sm">
                                             <div className="flex justify-between items-center border-b pb-2">
                                                 <span className="font-bold text-green-700 uppercase text-xs">{slice === 'manana' ? 'Mañana' : 'Tarde'}</span>
-                                                <input
-                                                    type="time"
-                                                    value={(draft?.predicacion as any)?.[day]?.[slice]?.hora || ''}
-                                                    onChange={(e) => setDraft({ ...draft!, predicacion: { ...draft!.predicacion, [day]: { ...(draft!.predicacion as any)[day], [slice]: { ...(draft!.predicacion as any)[day][slice], hora: e.target.value } } } })}
-                                                    className="text-sm font-bold p-2 bg-slate-50 border-2 border-slate-100 focus:border-green-500 rounded-lg transition-all"
-                                                />
                                             </div>
                                             <div className="space-y-4">
                                                 <input
