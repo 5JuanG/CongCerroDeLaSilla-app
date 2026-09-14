@@ -1229,6 +1229,13 @@ interface VisitaSCProps {
     territoryResponsible?: TerritoryResponsible | null;
     territoryMaps: TerritoryMap[];
     territoryMarkers: TerritoryMarker[];
+    // true solo cuando este componente se carga como página pública standalone
+    // (el enlace/QR compartido con el Superintendente de Circuito). En ese caso
+    // sí se hace cumplir la fecha de caducidad de la Vista de Presentación.
+    // Cuando un admin/secretario abre "Vista de Presentación" desde dentro de
+    // la app para revisar o previsualizar, esta bandera es false y siempre
+    // puede verla, aunque la visita ya haya pasado.
+    isStandalone?: boolean;
 }
 
 const VisitaSC: React.FC<VisitaSCProps> = ({
@@ -1242,7 +1249,8 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
     serviceReports,
     territoryResponsible,
     territoryMaps,
-    territoryMarkers
+    territoryMarkers,
+    isStandalone = false
 }) => {
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isPresentationMode, setIsPresentationMode] = useState(false);
@@ -2484,9 +2492,13 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => {
-                                            const url = window.location.href; // In a real app this would be a specific shareable URL
+                                            const url = `${window.location.origin}/?view=visitaSC&presentacion=1&date=${selectedDate}`;
                                             navigator.clipboard.writeText(url);
-                                            onShowModal({ type: 'success', title: 'Enlace Copiado', message: 'El enlace a la presentación ha sido copiado al portapapeles. Puede pegarlo para generar un código QR.' });
+                                            onShowModal({
+                                                type: 'success',
+                                                title: 'Enlace Copiado',
+                                                message: `El enlace de la Vista de Presentación fue copiado al portapapeles. Es válido hasta el ${draft?.fechaFin || '---'}; después de esa fecha dejará de funcionar.`
+                                            });
                                         }}
                                         className="p-3 bg-slate-100 text-slate-600 rounded-2xl hover:bg-slate-200 transition-colors flex items-center gap-2 font-bold text-xs"
                                     >
@@ -2749,7 +2761,17 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                     getPublisherName={getPublisherName}
                 />
             )}
-            {isPresentationMode && draft && (
+            {isPresentationMode && draft && isStandalone && isLinkExpired && (
+                <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-center p-8 z-[999]">
+                    <span className="text-6xl mb-4">⚡</span>
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Enlace Expirado</h2>
+                    <p className="text-slate-400 max-w-md">
+                        Este enlace de Vista de Presentación era válido hasta el <span className="font-bold text-white">{draft.fechaFin}</span> y ya no está disponible.
+                        Solicite un enlace nuevo al Comité.
+                    </p>
+                </div>
+            )}
+            {isPresentationMode && draft && !(isStandalone && isLinkExpired) && (
                 <PresentationView
                     publishers={publishers}
                     draft={draft}
