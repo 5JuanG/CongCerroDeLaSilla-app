@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Publisher, LMMeetingSchedule, VisitaSCData, ModalInfo,
     AttendanceRecord, TerritoryRecord, TerritoryResponsible, ServiceReport,
@@ -138,15 +139,15 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
             totalReunionesY2 += d2.numReuniones;
             totalAsistenciaY2 += d2.asistenciaTotal;
             return (
-                <tr key={month} className="border-t border-white/5">
-                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
-                    <td className="p-2 text-center text-slate-300">{d1.numReuniones || ''}</td>
-                    <td className="p-2 text-center text-slate-300">{d1.asistenciaTotal || ''}</td>
-                    <td className="p-2 text-center font-semibold text-blue-300 border-r-2 border-r-white/10">{d1.promedioSemanal || ''}</td>
-                    <td className="p-2 text-left font-bold text-white" translate="no">{month}</td>
-                    <td className="p-2 text-center text-slate-300">{d2.numReuniones || ''}</td>
-                    <td className="p-2 text-center text-slate-300">{d2.asistenciaTotal || ''}</td>
-                    <td className="p-2 text-center font-semibold text-blue-300">{d2.promedioSemanal || ''}</td>
+                <tr key={month} className="border-t border-gray-200">
+                    <td className="p-2 text-left font-bold text-gray-700" translate="no">{month}</td>
+                    <td className="p-2 text-center text-gray-600">{d1.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-gray-600">{d1.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-700 border-r-2 border-r-gray-300">{d1.promedioSemanal || ''}</td>
+                    <td className="p-2 text-left font-bold text-gray-700" translate="no">{month}</td>
+                    <td className="p-2 text-center text-gray-600">{d2.numReuniones || ''}</td>
+                    <td className="p-2 text-center text-gray-600">{d2.asistenciaTotal || ''}</td>
+                    <td className="p-2 text-center font-semibold text-blue-700">{d2.promedioSemanal || ''}</td>
                 </tr>
             );
         });
@@ -156,30 +157,30 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
 
         return (
             <div className="space-y-2">
-                <h4 className="font-black text-blue-400 uppercase text-xs tracking-widest">{label}</h4>
-                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                <h4 className="font-black text-blue-700 uppercase text-xs tracking-widest">{label}</h4>
+                <div className="overflow-x-auto rounded-2xl border border-gray-300 bg-white">
                     <table className="w-full text-xs border-collapse">
-                        <thead className="bg-white/5">
-                            <tr className="text-slate-400 uppercase tracking-widest text-[9px]">
-                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year1End}</span></th>
-                                <th className="p-2 align-middle">Núm. reuniones</th>
-                                <th className="p-2 align-middle">Asistencia total</th>
-                                <th className="p-2 align-middle border-r-2 border-r-white/10">Prom. semanal</th>
-                                <th className="p-2 text-center align-middle">Año de servicio<span className="block text-sm font-black text-blue-400 normal-case tracking-normal">{year2End}</span></th>
-                                <th className="p-2 align-middle">Núm. reuniones</th>
-                                <th className="p-2 align-middle">Asistencia total</th>
-                                <th className="p-2 align-middle">Prom. semanal</th>
+                        <thead className="bg-gray-100">
+                            <tr className="text-gray-500 uppercase tracking-widest text-[9px]">
+                                <th className="p-2 text-center align-middle border border-gray-300">Año de servicio<span className="block text-sm font-black text-blue-700 normal-case tracking-normal">{year1End}</span></th>
+                                <th className="p-2 align-middle border border-gray-300">Núm. reuniones</th>
+                                <th className="p-2 align-middle border border-gray-300">Asistencia total</th>
+                                <th className="p-2 align-middle border border-gray-300 border-r-2 border-r-gray-400">Prom. semanal</th>
+                                <th className="p-2 text-center align-middle border border-gray-300">Año de servicio<span className="block text-sm font-black text-blue-700 normal-case tracking-normal">{year2End}</span></th>
+                                <th className="p-2 align-middle border border-gray-300">Núm. reuniones</th>
+                                <th className="p-2 align-middle border border-gray-300">Asistencia total</th>
+                                <th className="p-2 align-middle border border-gray-300">Prom. semanal</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows}
-                            <tr className="bg-white/5 font-bold border-t border-white/10">
-                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
-                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY1 || ''}</td>
-                                <td className="p-2 text-center text-rose-300 font-extrabold border-r-2 border-r-white/10">{avgY1}</td>
-                                <td colSpan={2} className="p-2 text-left text-white">Totales Anuales</td>
-                                <td className="p-2 text-center text-rose-300 font-extrabold">{totalAsistenciaY2 || ''}</td>
-                                <td className="p-2 text-center text-rose-300 font-extrabold">{avgY2}</td>
+                            <tr className="bg-gray-50 font-bold border-t border-gray-300">
+                                <td colSpan={2} className="p-2 text-left text-gray-800 border border-gray-300">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-700 font-extrabold border border-gray-300">{totalAsistenciaY1 || ''}</td>
+                                <td className="p-2 text-center text-rose-700 font-extrabold border border-gray-300 border-r-2 border-r-gray-400">{avgY1}</td>
+                                <td colSpan={2} className="p-2 text-left text-gray-800 border border-gray-300">Totales Anuales</td>
+                                <td className="p-2 text-center text-rose-700 font-extrabold border border-gray-300">{totalAsistenciaY2 || ''}</td>
+                                <td className="p-2 text-center text-rose-700 font-extrabold border border-gray-300">{avgY2}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -191,11 +192,11 @@ const AnnualAttendanceSummary: React.FC<{ attendanceRecords: AttendanceRecord[] 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h3 className="text-lg font-black text-white uppercase tracking-tight">Registro de Asistencia a las Reuniones</h3>
+                <h3 className="text-lg font-black text-gray-800 uppercase tracking-tight">Registro de Asistencia a las Reuniones</h3>
                 <select
                     value={selectedServiceYear}
                     onChange={e => setSelectedServiceYear(Number(e.target.value))}
-                    className="bg-white/10 border border-white/10 text-white text-sm font-bold rounded-xl px-3 py-2 outline-none"
+                    className="bg-white border border-gray-300 text-gray-800 text-sm font-bold rounded-xl px-3 py-2 outline-none"
                 >
                     {years.map(y => <option key={y} value={y} className="text-black">{y}</option>)}
                 </select>
@@ -429,6 +430,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
     });
     const [selectedPublisherForModal, setSelectedPublisherForModal] = useState<Publisher | null>(null);
     const [presModal, setPresModal] = useState<'discursos' | 'reuniones' | 'hospitalidad' | 'predicacion' | 'asistencia' | 'cursos' | 'territorios' | 'emergencia' | null>(null);
+    const [emergencyFilters, setEmergencyFilters] = useState({ group: 'todos', family: 'todos' });
     const [territorioTab, setTerritorioTab] = useState<'registro' | 'mapa'>('registro');
     const currentServiceYear = useMemo(() => {
         const now = new Date();
@@ -459,6 +461,29 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             return a.localeCompare(b);
         });
     }, [publishers]);
+
+    const emergencyFamilyOptions = useMemo(() => {
+        let filteredPublishers = publishers;
+        if (emergencyFilters.group !== 'todos') {
+            const fGroup = String(emergencyFilters.group).trim().toLowerCase();
+            filteredPublishers = publishers.filter(p => String(p.Grupo || '').trim().toLowerCase() === fGroup);
+        }
+        const families = filteredPublishers
+            .map(p => p.Familia)
+            .filter(f => f && typeof f === 'string' && f.trim().length > 0);
+        return [...new Set(families)].sort();
+    }, [publishers, emergencyFilters.group]);
+
+    const filteredEmergencyPublishers = useMemo(() => {
+        return publishers
+            .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
+            .filter(p => {
+                const matchesGroup = emergencyFilters.group === 'todos' || String(p.Grupo || '').trim().toLowerCase() === String(emergencyFilters.group).trim().toLowerCase();
+                const matchesFamily = emergencyFilters.family === 'todos' || String(p.Familia || '').trim().toLowerCase() === String(emergencyFilters.family).trim().toLowerCase();
+                return matchesGroup && matchesFamily;
+            })
+            .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+    }, [publishers, emergencyFilters]);
     
     const publishersWithStatus = useMemo(() => {
         return publishers.map(p => ({
@@ -723,7 +748,22 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
         }
     ];
 
-    return (
+    // La Vista de Presentación se renderiza en un portal directo a document.body
+    // (ver el "return createPortal(...)" más abajo) para que "fixed inset-0" quede
+    // siempre relativo a la ventana, sin importar si algún ancestro del panel
+    // editable normal tiene una animación/transform que cree su propio contexto de
+    // posicionamiento. Además se bloquea el scroll del body mientras está abierta,
+    // así nunca se puede "hacer scroll" hasta la página editable de atrás; antes,
+    // al llegar al final del contenido, se seguía viendo esa página por debajo.
+    useEffect(() => {
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, []);
+
+    return createPortal(
         <div className="fixed inset-0 bg-slate-950 z-[100] overflow-hidden flex flex-col font-sans">
             {/* Header */}
             <div className="p-4 md:p-6 flex justify-between items-center bg-white/5 backdrop-blur-md shrink-0">
@@ -981,7 +1021,7 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
             {/* Modal: Asistencia Anual */}
             {presModal === 'asistencia' && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4" onClick={() => setPresModal(null)}>
-                    <div className="bg-slate-900 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="bg-slate-100 border border-white/10 rounded-[3rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-90 duration-300" onClick={e => e.stopPropagation()}>
                         <div className="bg-gradient-to-r from-rose-700 to-rose-900 p-6 md:p-8 flex justify-between items-center">
                             <div>
                                 <h3 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Asistencia Anual</h3>
@@ -989,10 +1029,10 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
-                        <div className="p-5 md:p-6 overflow-y-auto max-h-[65vh]">
+                        <div className="p-5 md:p-6 overflow-y-auto max-h-[70vh]">
                             <AnnualAttendanceSummary attendanceRecords={attendanceRecords} />
                         </div>
-                        <div className="p-6 flex justify-end bg-white/5">
+                        <div className="p-6 flex justify-end bg-white">
                             <button onClick={() => setPresModal(null)} className="px-8 py-3 bg-rose-600 text-white font-black rounded-2xl hover:bg-rose-500 transition-all uppercase text-sm tracking-widest">Cerrar</button>
                         </div>
                     </div>
@@ -1079,10 +1119,31 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                             </div>
                             <button onClick={() => setPresModal(null)} className="text-white/60 hover:text-white text-3xl font-thin transition-colors w-10 h-10 flex items-center justify-center">✕</button>
                         </div>
+                        <div className="px-5 md:px-6 pt-4 flex flex-wrap gap-3 shrink-0">
+                            <select
+                                className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-red-500 outline-none"
+                                value={emergencyFilters.group}
+                                onChange={(e) => setEmergencyFilters({ group: e.target.value, family: 'todos' })}
+                            >
+                                <option value="todos" className="text-black">Todos los Grupos</option>
+                                {groupOptions.map(g => (<option key={g} value={g} className="text-black">Grupo {g}</option>))}
+                            </select>
+                            <select
+                                className="bg-white/10 text-white p-3 rounded-2xl text-xs border border-white/10 focus:ring-2 focus:ring-red-500 outline-none"
+                                value={emergencyFilters.family}
+                                onChange={(e) => setEmergencyFilters({ ...emergencyFilters, family: e.target.value })}
+                            >
+                                <option value="todos" className="text-black">Todas las Familias</option>
+                                {emergencyFamilyOptions.map(f => (<option key={f} value={f} className="text-black">{f}</option>))}
+                            </select>
+                        </div>
                         <div className="p-5 md:p-6 overflow-y-auto flex-1 space-y-3">
-                            {publishers
-                                .filter(p => !(p.Baja === true || String(p.Baja || '').toLowerCase().trim().startsWith('s') || p.Baja === 'sí' || p.Baja === '1'))
-                                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`))
+                            {filteredEmergencyPublishers.length === 0 && (
+                                <div className="w-full flex items-center justify-center text-slate-500 font-bold text-sm uppercase tracking-widest border-2 border-dashed border-white/10 rounded-3xl py-10">
+                                    No se encontraron contactos con estos filtros
+                                </div>
+                            )}
+                            {filteredEmergencyPublishers
                                 .map(p => {
                                     const emergTel = String(p['Cel de Emergencia'] || '').replace(/\D/g, '');
                                     const ownTel = String(p.Cel || '').replace(/\D/g, '');
@@ -1157,7 +1218,8 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                     />
                 </div>
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 
