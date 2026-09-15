@@ -1259,6 +1259,15 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
         if (typeof window === 'undefined') return false;
         return new URLSearchParams(window.location.search).get('presentacion') === '1';
     });
+    // A diferencia de isPresentationMode (que se apaga al pulsar "Cerrar" dentro
+    // de la Vista de Presentación), esta bandera se calcula una sola vez, al
+    // montar el componente, y ya no cambia: recuerda si esta sesión se abrió
+    // desde el enlace público compartido con el Superintendente de Circuito. Se
+    // usa para no revelar nunca el panel editable interno a alguien que entró
+    // por ese enlace, ni siquiera después de cerrar la presentación.
+    const isLinkSessionRef = useRef(
+        typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('presentacion') === '1'
+    );
     const hasInitializedRef = useRef(false);
 
     // Initial load from URL params
@@ -2273,6 +2282,21 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
         return (
             <div className="fixed inset-0 bg-slate-950 flex items-center justify-center z-[999]">
                 <p className="text-white font-black text-lg animate-pulse">Cargando presentación...</p>
+            </div>
+        );
+    }
+
+    // Si esta sesión se abrió por el enlace público y el Superintendente de
+    // Circuito ya cerró la Vista de Presentación (isPresentationMode ahora en
+    // false), nunca se debe caer al panel editable interno — se muestra una
+    // pantalla de despedida simple en su lugar.
+    if (isLinkSessionRef.current && !isPresentationMode) {
+        return (
+            <div className="fixed inset-0 bg-slate-950 flex items-center justify-center z-[999] p-6 text-center">
+                <div>
+                    <p className="text-white font-black text-xl uppercase tracking-tight">Presentación cerrada</p>
+                    <p className="text-slate-400 font-bold mt-2 text-sm">Ya puede cerrar esta pestaña.</p>
+                </div>
             </div>
         );
     }
