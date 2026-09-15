@@ -986,9 +986,9 @@ const PresentationView: React.FC<PresentationViewProps> = ({ publishers, draft, 
                                                                 </div>
                                                                 <p className="text-white font-bold text-sm leading-tight">📍 {event.lugar || '---'}</p>
                                                                 {event.direccion && <p className="text-slate-400 text-[10px] mt-1 leading-tight">{event.direccion}</p>}
-                                                                {event.capitan && <p className="text-slate-400 text-xs"><span className="text-amber-400 font-bold">Asignación:</span> {event.capitan}</p>}
                                                                 {event.publicadoresSC && <p className="text-slate-400 text-xs"><span className="text-blue-400 font-bold">Con SC:</span> {event.publicadoresSC}</p>}
                                                                 {event.publicadoresEsposa && <p className="text-slate-400 text-xs"><span className="text-pink-400 font-bold">Con esposa:</span> {event.publicadoresEsposa}</p>}
+                                                                {event.capitan && <p className="text-slate-400 text-xs"><span className="text-amber-400 font-bold">Capitán de Territorio:</span> {event.capitan}</p>}
                                                                 {event.notas && <p className="text-slate-500 text-xs italic">{event.notas}</p>}
                                                             </div>
                                                         );
