@@ -163,6 +163,13 @@ export interface TerritoryMarker {
     y: number; // Porcentaje 0-100
     status: 'available' | 'assigned' | 'completed' | 'delayed';
     assigneeName?: string;
+    // Zona de predicación (1-8). 0 = sin zona. Si no existe, se usa la
+    // distribución original definida en src/zonas.ts.
+    zona?: number;
+    // Posición del pin en el mapa de SU zona (porcentaje 0-100). Es distinta
+    // de x/y, que son la posición en el mapa global.
+    zoneX?: number | null;
+    zoneY?: number | null;
     lastUpdated: any;
 }
 

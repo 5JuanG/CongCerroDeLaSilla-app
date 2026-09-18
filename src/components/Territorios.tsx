@@ -6,6 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { DEFAULT_AVATAR, DEFAULT_MAP_ERROR } from '../constants';
 import InteractiveMap from './InteractiveMap';
+import AsignacionZonas from './AsignacionZonas';
 
 interface TerritoriosProps {
     records: TerritoryRecord[];
@@ -1629,6 +1630,9 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                     <button onClick={() => setActiveTab('mapa')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'mapa' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                         Mapa Interactivo
                     </button>
+                    <button onClick={() => setActiveTab('zonas')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'zonas' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        Zonas
+                    </button>
                 </nav>
             </div>
 
@@ -1646,6 +1650,17 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                         canManage={canManage} 
                         onShowModal={onShowModal} 
                         currentServiceYear={currentServiceYear}
+                    />
+                </div>
+            )}
+
+            {activeTab === 'zonas' && (
+                <div className="fade-in-up">
+                    <AsignacionZonas
+                        markers={territoryMarkers}
+                        onSaveMarker={onSaveTerritoryMarker}
+                        canManage={canManage}
+                        onShowModal={onShowModal}
                     />
                 </div>
             )}

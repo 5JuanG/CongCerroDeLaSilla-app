@@ -1,7 +1,21 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { TerritoryMarker, TerritoryRecord, TerritoryMap, ModalInfo } from '../types';
 import { DEFAULT_MAP_ERROR } from '../constants';
+import { ZONES, TERRITORY_COUNT, DEFAULT_ZONE_BY_TERRITORY, getMarkerZone } from '../zonas';
+
+// Estado de zoom/desplazamiento del mapa: escala (k) y traslación en píxeles.
+type MapView = { k: number; tx: number; ty: number };
+type Gesture =
+    | { mode: 'pan'; startX: number; startY: number; startTx: number; startTy: number; startK: number }
+    | { mode: 'pinch'; startDist: number; startK: number; startCx: number; startCy: number; startTx: number; startTy: number };
+
+const MAX_ZOOM = 6;          // acercamiento máximo respecto al mapa ajustado a pantalla
+const PAN_THRESHOLD = 6;     // píxeles que debe moverse el dedo para considerarse arrastre (y no un toque)
+const NUMBERS_ZOOM = 2;      // en celular, los números de los pines aparecen a partir de este zoom
+const PIN_MOBILE = 10;       // tamaño (px en pantalla) de los pines en celular, alejado
+const PIN_MOBILE_ZOOMED = 16; // tamaño de los pines en celular con zoom (con número)
+const PIN_DESKTOP = 20;      // tamaño de los pines en pantallas grandes
 
 interface InteractiveMapProps {
     maps: TerritoryMap[];
@@ -48,14 +62,117 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     // Distinguishes a real drag from a simple click/tap, so a click still
     // opens the edit modal instead of being swallowed by the drag handler.
     const dragMovedRef = useRef(false);
-    const containerRef = useRef<HTMLDivElement>(null);
 
     const globalMap = maps.find(m => m.territoryId === 'global');
+
+    // ───────── Vista por zonas ─────────
+    // null = mapa global; 1..8 = mapa de esa zona (imagen "zona-N" de Mapas de Territorio).
+    const [selectedZone, setSelectedZone] = useState<number | null>(null);
+    // Territorio de la zona que se va a ubicar tocando el mapa (solo quien administra).
+    const [placingTerrNum, setPlacingTerrNum] = useState<number | null>(null);
+    const activeMap = selectedZone === null ? globalMap : maps.find(m => m.territoryId === `zona-${selectedZone}`);
+    const showViewport = !!activeMap;
+
+    // ───────── Zoom y desplazamiento ─────────
+    const [view, setView] = useState<MapView>({ k: 1, tx: 0, ty: 0 });
+    const [dims, setDims] = useState({ w: 0, winH: typeof window !== 'undefined' ? window.innerHeight : 800 });
+    // Proporción alto/ancho de cada imagen, para calcular el tamaño del mapa sin depender del DOM.
+    const [ratios, setRatios] = useState<Record<string, number>>({});
+    const [isMobile, setIsMobile] = useState(
+        () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(max-width: 639px)').matches
+    );
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
+    const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+    const gestureRef = useRef<Gesture | null>(null);
+    // true si el gesto actual fue un arrastre del mapa o un pellizco (no un toque).
+    const panMovedRef = useRef(false);
+
+    const imgRatio = (activeMap && ratios[activeMap.mapUrl]) || 0.75;
+    const vw = dims.w;                       // ancho visible del mapa
+    const contentH = vw * imgRatio;          // alto del mapa a escala 1
+    // El alto visible se limita al 80% de la pantalla para poder seguir haciendo scroll en la página.
+    const vh = vw > 0 ? Math.min(contentH, Math.max(220, dims.winH * 0.8)) : 0;
+    const minK = contentH > 0 ? Math.min(1, vh / contentH) : 1; // escala que muestra el mapa completo
+
+    // Mantiene el mapa dentro del área visible (o centrado si es más pequeño que ella).
+    const clampView = (v: MapView): MapView => {
+        if (vw <= 0 || contentH <= 0) return v;
+        const k = Math.min(MAX_ZOOM, Math.max(minK, v.k));
+        const cw = vw * k;
+        const ch = contentH * k;
+        const tx = cw <= vw ? (vw - cw) / 2 : Math.min(0, Math.max(vw - cw, v.tx));
+        const ty = ch <= vh ? (vh - ch) / 2 : Math.min(0, Math.max(vh - ch, v.ty));
+        return { k, tx, ty };
+    };
+
+    // Cambia la escala manteniendo fijo el punto (px, py) del área visible.
+    const zoomAt = (v: MapView, newK: number, px: number, py: number): MapView => {
+        const k = Math.min(MAX_ZOOM, Math.max(minK, newK));
+        const cx = (px - v.tx) / v.k;
+        const cy = (py - v.ty) / v.k;
+        return clampView({ k, tx: px - cx * k, ty: py - cy * k });
+    };
+
+    const fitKey = `${selectedZone ?? 'g'}|${activeMap?.mapUrl ?? ''}|${vw > 0 ? 1 : 0}|${activeMap && ratios[activeMap.mapUrl] ? 1 : 0}`;
+    // Al cambiar de mapa (o cuando se conocen sus medidas) se ajusta para verlo completo.
+    useEffect(() => {
+        setView(clampView({ k: minK, tx: 0, ty: 0 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fitKey]);
+    // Si cambia el tamaño de la ventana, solo se vuelve a encuadrar (sin perder el zoom).
+    useEffect(() => {
+        setView(v => clampView(v));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vw, vh, contentH]);
+
+    useEffect(() => {
+        const el = viewportRef.current;
+        if (!el) return;
+        const update = () => {
+            const w = el.clientWidth;
+            const h = window.innerHeight;
+            setDims(prev => (prev.w === w && prev.winH === h ? prev : { w, winH: h }));
+        };
+        update();
+        if (typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(update);
+            ro.observe(el);
+            return () => ro.disconnect();
+        }
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
+    }, [showViewport]);
+
+    // Zoom con Ctrl + rueda (o pellizco en el trackpad). Sin Ctrl la rueda sigue haciendo scroll en la página.
+    useEffect(() => {
+        const el = viewportRef.current;
+        if (!el) return;
+        const onWheel = (e: WheelEvent) => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            const rect = el.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            setView(v => zoomAt(v, v.k * Math.exp(-e.deltaY * 0.004), px, py));
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showViewport, vw, vh, contentH]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const mq = window.matchMedia('(max-width: 639px)');
+        const onChange = () => setIsMobile(mq.matches);
+        mq.addEventListener?.('change', onChange);
+        return () => mq.removeEventListener?.('change', onChange);
+    }, []);
 
     const clampPercent = (value: number) => Math.min(100, Math.max(0, value));
 
     const getRelativePosition = (clientX: number, clientY: number) => {
-        const rect = containerRef.current!.getBoundingClientRect();
+        const rect = contentRef.current!.getBoundingClientRect();
         return {
             x: clampPercent(((clientX - rect.left) / rect.width) * 100),
             y: clampPercent(((clientY - rect.top) / rect.height) * 100),
@@ -63,17 +180,26 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     };
 
     const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!canManage || !containerRef.current) return;
+        if (!canManage || !contentRef.current) return;
+        // Si el gesto fue un arrastre del mapa o un pellizco, no es un toque.
+        if (panMovedRef.current) return;
         // Only treat this as "add a new marker on empty space" if the click
         // landed on the map container or its background image directly —
         // never on a marker (or anything rendered on top of it). This avoids
         // accidentally resetting the edit modal to a blank marker when a
         // click on a pin also bubbles up here.
         const target = e.target as HTMLElement;
-        const isBackground = target === e.currentTarget || target.tagName === 'IMG';
+        const isBackground = target === e.currentTarget || target === contentRef.current || target.tagName === 'IMG';
         if (!isBackground) return;
 
         const { x, y } = getRelativePosition(e.clientX, e.clientY);
+
+        if (selectedZone !== null) {
+            // En el mapa de una zona, tocar el fondo solo sirve para ubicar el pin
+            // del territorio elegido; los pines nuevos se crean en la vista Global.
+            if (placingTerrNum !== null) placeZonePin(placingTerrNum, x, y);
+            return;
+        }
 
         setEditingMarker({ x, y, status: 'available', terrNum: 0 });
         setEditingRecord(null);
@@ -81,27 +207,122 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         setTerritoryRecordOptions([]);
     };
 
+    const selectZone = (zone: number | null) => {
+        setSelectedZone(zone);
+        setPlacingTerrNum(null);
+    };
+
+    // Guarda la posición del territorio en el mapa de la zona (campos zoneX/zoneY del mismo pin).
+    const placeZonePin = async (terrNum: number, x: number, y: number) => {
+        if (!onSaveMarker || selectedZone === null) return;
+        const targets = markers.filter(m => m.terrNum === terrNum && getMarkerZone(m) === selectedZone);
+        setPlacingTerrNum(null);
+        try {
+            for (const m of targets) {
+                await onSaveMarker({ ...m, zoneX: x, zoneY: y });
+            }
+        } catch (error) {
+            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo ubicar el territorio en el mapa de la zona.' });
+        }
+    };
+
+    const resetView = () => setView(clampView({ k: minK, tx: 0, ty: 0 }));
+    const zoomByButton = (factor: number) => setView(v => zoomAt(v, v.k * factor, vw / 2, vh / 2));
+
+    const onViewportPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const rect = viewportRef.current!.getBoundingClientRect();
+        if (pointersRef.current.size === 1) {
+            panMovedRef.current = false;
+            gestureRef.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, startTx: view.tx, startTy: view.ty, startK: view.k };
+        } else if (pointersRef.current.size === 2) {
+            panMovedRef.current = true;
+            const [a, b] = Array.from(pointersRef.current.values());
+            gestureRef.current = {
+                mode: 'pinch',
+                startDist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+                startK: view.k,
+                startCx: (a.x + b.x) / 2 - rect.left,
+                startCy: (a.y + b.y) / 2 - rect.top,
+                startTx: view.tx,
+                startTy: view.ty,
+            };
+        }
+    };
+
+    const onViewportPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!pointersRef.current.has(e.pointerId)) return;
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const g = gestureRef.current;
+        if (!g) return;
+        const rect = viewportRef.current!.getBoundingClientRect();
+        if (g.mode === 'pan' && pointersRef.current.size === 1) {
+            const dx = e.clientX - g.startX;
+            const dy = e.clientY - g.startY;
+            if (!panMovedRef.current) {
+                if (Math.hypot(dx, dy) < PAN_THRESHOLD) return;
+                panMovedRef.current = true;
+                try { viewportRef.current!.setPointerCapture(e.pointerId); } catch { /* noop */ }
+            }
+            setView(clampView({ k: g.startK, tx: g.startTx + dx, ty: g.startTy + dy }));
+        } else if (g.mode === 'pinch' && pointersRef.current.size === 2) {
+            const [a, b] = Array.from(pointersRef.current.values());
+            const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+            const mx = (a.x + b.x) / 2 - rect.left;
+            const my = (a.y + b.y) / 2 - rect.top;
+            const k = Math.min(MAX_ZOOM, Math.max(minK, g.startK * (dist / g.startDist)));
+            // Punto del mapa que estaba bajo el centro del pellizco al empezar: debe seguir bajo los dedos.
+            const cx = (g.startCx - g.startTx) / g.startK;
+            const cy = (g.startCy - g.startTy) / g.startK;
+            setView(clampView({ k, tx: mx - cx * k, ty: my - cy * k }));
+        }
+    };
+
+    const onViewportPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!pointersRef.current.delete(e.pointerId)) return;
+        const remaining = Array.from(pointersRef.current.values());
+        if (remaining.length === 1) {
+            // Se levantó un dedo del pellizco: el otro sigue moviendo el mapa sin saltos.
+            gestureRef.current = { mode: 'pan', startX: remaining[0].x, startY: remaining[0].y, startTx: view.tx, startTy: view.ty, startK: view.k };
+        } else if (remaining.length === 0) {
+            gestureRef.current = null;
+        }
+    };
+
     const handleMarkerPointerDown = (e: React.PointerEvent<HTMLDivElement>, marker: TerritoryMarker) => {
         if (!canManage) return;
-        e.stopPropagation();
         dragMovedRef.current = false;
-        // While pins are locked, don't start a drag at all — pointerUp below
-        // will still see wasDragged=false and treat this as a normal tap,
-        // opening the assignment form instead of moving the pin.
+        // While pins are locked, don't start a drag at all. The event keeps
+        // bubbling to the map so it can still be panned/pinched even when the
+        // finger lands on a pin; a plain tap is resolved in pointerUp below.
         if (pinsLocked) return;
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
         setDraggingMarkerId(marker.id);
-        setDragPosition({ x: marker.x, y: marker.y });
+        setDragPosition(
+            selectedZone === null
+                ? { x: marker.x, y: marker.y }
+                : { x: marker.zoneX as number, y: marker.zoneY as number }
+        );
     };
 
     const handleMarkerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-        if (pinsLocked || !draggingMarkerId || !containerRef.current) return;
+        if (pinsLocked || !draggingMarkerId || !contentRef.current) return;
         dragMovedRef.current = true;
         setDragPosition(getRelativePosition(e.clientX, e.clientY));
     };
 
     const handleMarkerPointerUp = async (e: React.PointerEvent<HTMLDivElement>, marker: TerritoryMarker) => {
         if (!canManage) return;
+
+        if (pinsLocked) {
+            // Toque simple sobre un pin fijo: abre el formulario, salvo que el gesto
+            // haya sido un arrastre del mapa o un pellizco.
+            if (!panMovedRef.current) handleSelectMarker(marker);
+            return;
+        }
+
         e.stopPropagation();
 
         const wasDragged = dragMovedRef.current;
@@ -111,7 +332,12 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
         if (wasDragged && finalPosition && onSaveMarker) {
             try {
-                await onSaveMarker({ ...marker, x: finalPosition.x, y: finalPosition.y });
+                // En la vista global se mueve x/y; en el mapa de una zona, zoneX/zoneY.
+                await onSaveMarker(
+                    selectedZone === null
+                        ? { ...marker, x: finalPosition.x, y: finalPosition.y }
+                        : { ...marker, zoneX: finalPosition.x, zoneY: finalPosition.y }
+                );
             } catch (error) {
                 onShowModal({ type: 'error', title: 'Error', message: 'No se pudo mover el marcador.' });
             }
@@ -280,17 +506,47 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         );
     }
 
+    // ───────── Datos de la vista actual ─────────
+    const hasZonePos = (m: TerritoryMarker) => typeof m.zoneX === 'number' && typeof m.zoneY === 'number';
+    const zoneMarkers = selectedZone === null ? [] : markers.filter(m => getMarkerZone(m) === selectedZone);
+    const pins: { marker: TerritoryMarker; x: number; y: number }[] =
+        selectedZone === null
+            ? markers.map(m => ({ marker: m, x: m.x, y: m.y }))
+            : zoneMarkers.filter(hasZonePos).map(m => ({ marker: m, x: m.zoneX as number, y: m.zoneY as number }));
+    const unplacedTerrNums = Array.from(new Set(zoneMarkers.filter(m => !hasZonePos(m)).map(m => m.terrNum))).sort((a, b) => a - b);
+    // Territorios que pertenecen a la zona pero todavía no tienen pin en el mapa global.
+    const missingPinTerrs =
+        selectedZone === null
+            ? []
+            : Array.from({ length: TERRITORY_COUNT }, (_, i) => i + 1).filter(
+                  n => DEFAULT_ZONE_BY_TERRITORY[n] === selectedZone && !markers.some(m => m.terrNum === n)
+              );
+    const zoneCount = (status: TerritoryMarker['status']) => zoneMarkers.filter(m => m.status === status).length;
+    const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+    const pillClass = (active: boolean) =>
+        `whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+            active ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+        }`;
+    const ctrlClass =
+        'w-9 h-9 rounded-lg bg-white/95 shadow-md border border-slate-200 text-slate-700 text-lg font-black leading-none active:scale-95 flex items-center justify-center';
+    const pinSize = isMobile ? (view.k >= NUMBERS_ZOOM ? PIN_MOBILE_ZOOMED : PIN_MOBILE) : PIN_DESKTOP;
+    const showPinNumber = !isMobile || view.k >= NUMBERS_ZOOM;
+    const pinHit = Math.max(pinSize + 8, 24); // área táctil un poco mayor que el pin visible
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg shadow-sm border gap-4">
                 <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-800">Mapa Territorial Interactivo</h3>
+                    <h3 className="text-lg font-bold text-gray-800">
+                        {selectedZone === null ? 'Mapa Territorial Interactivo' : `Mapa de la Zona ${selectedZone}`}
+                    </h3>
                     <p className="text-sm text-gray-500">
                         {canManage
                             ? (pinsLocked
                                 ? 'Haz clic en un pin para registrar el trabajo. Los pines están fijos: desbloquéalos para corregir su ubicación.'
                                 : 'Modo edición de posición: arrastra un pin para moverlo, o haz clic en él para registrar el trabajo.')
                             : 'Vista rápida del estado de los territorios.'}
+                        {' '}Pellizca o usa + / − para acercar y arrastra para moverte por el mapa.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-3 items-center">
@@ -351,47 +607,162 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 </div>
             </div>
 
-            <div
-                ref={containerRef}
-                className={`relative overflow-hidden rounded-xl shadow-2xl border-4 border-white ${canManage ? 'cursor-crosshair' : 'cursor-default'}`}
-                onClick={handleMapClick}
-            >
-                <img
-                    src={globalMap.mapUrl}
-                    alt="Mapa Global"
-                    className="w-full h-auto block select-none"
-                    draggable={false}
-                    onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_MAP_ERROR; }}
-                />
-
-                {markers.map(marker => {
-                    const isDraggingThis = draggingMarkerId === marker.id;
-                    const displayX = isDraggingThis && dragPosition ? dragPosition.x : marker.x;
-                    const displayY = isDraggingThis && dragPosition ? dragPosition.y : marker.y;
-                    return (
-                        <div
-                            key={marker.id}
-                            className={`absolute ${!canManage ? 'w-3 h-3 opacity-90 text-[5px] sm:text-[9px]' : 'w-[18px] h-[18px] text-[8px] sm:text-[9px]'} sm:w-5 sm:h-5 translate-x-[-50%] translate-y-[-50%] rounded-full border-[0.5px] border-white/50 shadow-md flex items-center justify-center font-bold text-white z-10 ${
-                                isDraggingThis ? 'scale-150 z-20 shadow-xl' : 'transition-all active:scale-[3]'
-                            } ${
-                                marker.status === 'completed' ? 'bg-green-500' : 
-                                marker.status === 'assigned' ? 'bg-red-500' : 
-                                marker.status === 'delayed' ? 'bg-orange-500 animate-pulse' :
-                                'bg-gray-500'
-                            } ${canManage ? (pinsLocked ? 'cursor-pointer hover:scale-110' : 'cursor-grab active:cursor-grabbing hover:scale-125 touch-none') : ''}`}
-                            style={{ left: `${displayX}%`, top: `${displayY}%` }}
-                            onPointerDown={(e) => handleMarkerPointerDown(e, marker)}
-                            onPointerMove={handleMarkerPointerMove}
-                            onPointerUp={(e) => handleMarkerPointerUp(e, marker)}
-                            onClick={(e) => e.stopPropagation()}
-                            title={`Territorio ${marker.terrNum}${canManage ? (pinsLocked ? ' (clic para registrar trabajo — posición fija)' : ' (clic para registrar trabajo, arrastra para mover)') : ''}`}
-                        >
-                            <span className="hidden sm:inline">{marker.terrNum}</span>
-                            <span className="sm:hidden font-black" style={{ fontSize: !canManage ? '5px' : '7px', lineHeight: '1' }}>{marker.terrNum}</span>
-                        </div>
-                    );
-                })}
+            <div className="bg-white p-3 rounded-lg shadow-sm border">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                    <button onClick={() => selectZone(null)} className={pillClass(selectedZone === null)}>🌎 Global</button>
+                    {ZONES.map(z => (
+                        <button key={z} onClick={() => selectZone(z)} className={pillClass(selectedZone === z)}>Zona {z}</button>
+                    ))}
+                </div>
             </div>
+
+            {selectedZone !== null && (
+                <div className="bg-white p-3 rounded-lg shadow-sm border space-y-2 text-sm">
+                    <div className="text-gray-700">
+                        <span className="font-bold">Zona {selectedZone}:</span>{' '}
+                        {zoneMarkers.length === 0
+                            ? 'no tiene territorios asignados (se asignan en la pestaña Zonas).'
+                            : `${plural(zoneMarkers.length, 'territorio', 'territorios')} · ${plural(zoneCount('completed'), 'completado', 'completados')} · ${plural(zoneCount('assigned'), 'asignado', 'asignados')} · ${plural(zoneCount('delayed'), 'rezagado', 'rezagados')}`}
+                    </div>
+                    {missingPinTerrs.length > 0 && (
+                        <div className="text-xs text-amber-700">
+                            Sin pin en el mapa global: {missingPinTerrs.join(', ')}. Colócalos primero en la vista Global.
+                        </div>
+                    )}
+                    {canManage && placingTerrNum !== null ? (
+                        <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                            <span className="text-blue-800 font-semibold text-xs sm:text-sm">Toca el mapa donde va el Territorio {placingTerrNum}.</span>
+                            <button onClick={() => setPlacingTerrNum(null)} className="text-xs font-bold text-blue-700 underline whitespace-nowrap">Cancelar</button>
+                        </div>
+                    ) : unplacedTerrNums.length > 0 && (
+                        canManage ? (
+                            <div>
+                                <div className="text-xs text-gray-500 mb-1">Por ubicar en este mapa — elige un territorio y toca el mapa:</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {unplacedTerrNums.map(n => (
+                                        <button
+                                            key={n}
+                                            onClick={() => setPlacingTerrNum(n)}
+                                            className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-700 text-xs font-bold border border-slate-200"
+                                        >
+                                            Territorio {n}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-gray-500">Aún sin ubicar en este mapa: {unplacedTerrNums.join(', ')}.</div>
+                        )
+                    )}
+                </div>
+            )}
+
+            {!activeMap ? (
+                <div className="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 text-center">
+                    <span className="text-4xl mb-4">🗺️</span>
+                    <p className="text-gray-500 max-w-md">Aún no se ha subido el mapa de la Zona {selectedZone}.</p>
+                    {canManage && (
+                        <p className="text-xs text-gray-400 mt-2 max-w-md">
+                            Súbelo en «Mapas de Territorio» → Zonas de Predicación → Zona {selectedZone}.
+                        </p>
+                    )}
+                </div>
+            ) : (
+                <div className="relative overflow-hidden rounded-xl shadow-2xl border-4 border-white bg-slate-100">
+                    <div
+                        ref={viewportRef}
+                        className={`relative overflow-hidden select-none ${
+                            canManage && (selectedZone === null || placingTerrNum !== null) ? 'cursor-crosshair' : 'cursor-grab'
+                        }`}
+                        style={{ height: vw > 0 ? vh : 240, touchAction: 'none' }}
+                        onPointerDown={onViewportPointerDown}
+                        onPointerMove={onViewportPointerMove}
+                        onPointerUp={onViewportPointerEnd}
+                        onPointerCancel={onViewportPointerEnd}
+                        onClick={handleMapClick}
+                    >
+                        <div
+                            ref={contentRef}
+                            className="absolute left-0 top-0"
+                            style={{
+                                width: vw > 0 ? vw : '100%',
+                                height: vw > 0 ? contentH : undefined,
+                                transformOrigin: '0 0',
+                                transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.k})`,
+                                willChange: 'transform',
+                            }}
+                        >
+                            <img
+                                key={activeMap.mapUrl}
+                                src={activeMap.mapUrl}
+                                alt={selectedZone === null ? 'Mapa Global' : `Mapa Zona ${selectedZone}`}
+                                className="w-full h-full block select-none"
+                                draggable={false}
+                                onLoad={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.naturalWidth > 0) {
+                                        const r = img.naturalHeight / img.naturalWidth;
+                                        const url = activeMap.mapUrl;
+                                        setRatios(prev => (Math.abs((prev[url] ?? 0) - r) < 0.001 ? prev : { ...prev, [url]: r }));
+                                    }
+                                }}
+                                onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_MAP_ERROR; }}
+                            />
+
+                            {pins.map(({ marker, x, y }) => {
+                                const isDraggingThis = draggingMarkerId === marker.id;
+                                const displayX = isDraggingThis && dragPosition ? dragPosition.x : x;
+                                const displayY = isDraggingThis && dragPosition ? dragPosition.y : y;
+                                return (
+                                    <div
+                                        key={marker.id}
+                                        className={`absolute flex items-center justify-center ${isDraggingThis ? 'z-20' : 'z-10'} ${
+                                            canManage ? (pinsLocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing') : ''
+                                        }`}
+                                        // El pin se contrarresta con la escala del mapa (1/k) para que mantenga
+                                        // su tamaño en pantalla al hacer zoom y los pines se vayan separando.
+                                        style={{
+                                            left: `${displayX}%`,
+                                            top: `${displayY}%`,
+                                            width: pinHit,
+                                            height: pinHit,
+                                            marginLeft: -pinHit / 2,
+                                            marginTop: -pinHit / 2,
+                                            transform: `scale(${1 / view.k})`,
+                                            transformOrigin: 'center center',
+                                        }}
+                                        onPointerDown={(e) => handleMarkerPointerDown(e, marker)}
+                                        onPointerMove={handleMarkerPointerMove}
+                                        onPointerUp={(e) => handleMarkerPointerUp(e, marker)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        title={`Territorio ${marker.terrNum}${canManage ? (pinsLocked ? ' (clic para registrar trabajo — posición fija)' : ' (clic para registrar trabajo, arrastra para mover)') : ''}`}
+                                    >
+                                        <div
+                                            className={`rounded-full border-[0.5px] border-white/60 shadow-md flex items-center justify-center font-bold text-white ${!canManage ? 'opacity-90' : ''} ${
+                                                isDraggingThis ? 'scale-150 shadow-xl' : 'transition-transform active:scale-[2.5]'
+                                            } ${
+                                                marker.status === 'completed' ? 'bg-green-500' :
+                                                marker.status === 'assigned' ? 'bg-red-500' :
+                                                marker.status === 'delayed' ? 'bg-orange-500 animate-pulse' :
+                                                'bg-gray-500'
+                                            }`}
+                                            style={{ width: pinSize, height: pinSize, fontSize: pinSize >= 20 ? 9 : 8 }}
+                                        >
+                                            {showPinNumber && <span style={{ lineHeight: 1 }}>{marker.terrNum}</span>}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="absolute top-2 right-2 flex flex-col gap-1 z-30">
+                        <button type="button" aria-label="Acercar" title="Acercar" onClick={() => zoomByButton(1.5)} className={ctrlClass}>+</button>
+                        <button type="button" aria-label="Alejar" title="Alejar" onClick={() => zoomByButton(1 / 1.5)} className={ctrlClass}>−</button>
+                        <button type="button" aria-label="Ver mapa completo" title="Ver mapa completo" onClick={resetView} className={ctrlClass}>⤢</button>
+                    </div>
+                </div>
+            )}
 
             {canManage && editingMarker && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[100] p-4">
