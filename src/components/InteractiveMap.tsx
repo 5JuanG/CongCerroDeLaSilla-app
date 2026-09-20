@@ -16,6 +16,21 @@ const NUMBERS_ZOOM = 2;      // en celular, los números de los pines aparecen a
 const PIN_MOBILE = 10;       // tamaño (px en pantalla) de los pines en celular, alejado
 const PIN_MOBILE_ZOOMED = 16; // tamaño de los pines en celular con zoom (con número)
 const PIN_DESKTOP = 20;      // tamaño de los pines en pantallas grandes
+const WRITE_TIMEOUT_MS = 12000; // tiempo máximo esperando la confirmación de Firestore antes de liberar la modal
+const WRITE_TIMEOUT_TAG = 'WRITE_TIMEOUT';
+
+// Firestore solo resuelve una escritura cuando el servidor la confirma; con mala señal
+// puede tardar indefinidamente y dejar la modal congelada. Esto la libera tras un tiempo
+// límite (la escritura sigue su curso en segundo plano y se aplica en cuanto haya conexión).
+const withTimeout = <T,>(p: Promise<T>, ms: number = WRITE_TIMEOUT_MS): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error(WRITE_TIMEOUT_TAG)), ms);
+        p.then(
+            v => { clearTimeout(t); resolve(v); },
+            e => { clearTimeout(t); reject(e); }
+        );
+    });
+const isWriteTimeout = (e: unknown) => (e as Error)?.message === WRITE_TIMEOUT_TAG;
 
 interface InteractiveMapProps {
     maps: TerritoryMap[];
@@ -68,8 +83,10 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     // ───────── Vista por zonas ─────────
     // null = mapa global; 1..8 = mapa de esa zona (imagen "zona-N" de Mapas de Territorio).
     const [selectedZone, setSelectedZone] = useState<number | null>(null);
-    // Territorio de la zona que se va a ubicar tocando el mapa (solo quien administra).
-    const [placingTerrNum, setPlacingTerrNum] = useState<number | null>(null);
+    // Pin (manzana) concreto de la zona que se va a ubicar tocando el mapa (solo quien administra).
+    const [placingMarkerId, setPlacingMarkerId] = useState<string | null>(null);
+    // Territorio al que se le va a AGREGAR un pin nuevo (otra manzana) tocando el mapa de la zona.
+    const [addingTerrNum, setAddingTerrNum] = useState<number | null>(null);
     const activeMap = selectedZone === null ? globalMap : maps.find(m => m.territoryId === `zona-${selectedZone}`);
     const showViewport = !!activeMap;
 
@@ -197,7 +214,8 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         if (selectedZone !== null) {
             // En el mapa de una zona, tocar el fondo solo sirve para ubicar el pin
             // del territorio elegido; los pines nuevos se crean en la vista Global.
-            if (placingTerrNum !== null) placeZonePin(placingTerrNum, x, y);
+            if (placingMarkerId !== null) placeZonePin(placingMarkerId, x, y);
+            else if (addingTerrNum !== null) addZonePin(addingTerrNum, x, y);
             return;
         }
 
@@ -209,20 +227,56 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
     const selectZone = (zone: number | null) => {
         setSelectedZone(zone);
-        setPlacingTerrNum(null);
+        setPlacingMarkerId(null);
+        setAddingTerrNum(null);
     };
 
-    // Guarda la posición del territorio en el mapa de la zona (campos zoneX/zoneY del mismo pin).
-    const placeZonePin = async (terrNum: number, x: number, y: number) => {
+    // Guarda la posición de UN pin en el mapa de la zona (campos zoneX/zoneY de ese pin).
+    // Antes se movían todos los pines del mismo territorio al mismo punto, por eso las
+    // manzanas de un territorio quedaban encimadas como si fuera un solo pin.
+    const placeZonePin = async (markerId: string, x: number, y: number) => {
         if (!onSaveMarker || selectedZone === null) return;
-        const targets = markers.filter(m => m.terrNum === terrNum && getMarkerZone(m) === selectedZone);
-        setPlacingTerrNum(null);
+        const target = markers.find(m => m.id === markerId);
+        setPlacingMarkerId(null);
+        if (!target) return;
         try {
-            for (const m of targets) {
-                await onSaveMarker({ ...m, zoneX: x, zoneY: y });
-            }
+            await withTimeout(onSaveMarker({ ...target, zoneX: x, zoneY: y }));
         } catch (error) {
-            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo ubicar el territorio en el mapa de la zona.' });
+            showWriteError(error, 'No se pudo ubicar el pin en el mapa de la zona.');
+        }
+    };
+
+    // Agrega un pin nuevo (otra manzana) a un territorio, directamente desde el mapa de la zona.
+    // Hereda estatus/asignado del pin hermano; la posición en el mapa global queda junto al
+    // hermano (se puede arrastrar después desde la vista Global con los pines desbloqueados).
+    const addZonePin = async (terrNum: number, x: number, y: number) => {
+        if (!onSaveMarker || selectedZone === null) return;
+        setAddingTerrNum(null);
+        const siblings = markers.filter(m => m.terrNum === terrNum);
+        const base = siblings.find(m => getMarkerZone(m) === selectedZone) || siblings[0];
+        if (!base) {
+            onShowModal({ type: 'error', title: 'Error', message: `El Territorio ${terrNum} aún no tiene ningún pin. Colócalo primero en la vista Global.` });
+            return;
+        }
+        try {
+            await withTimeout(onSaveMarker({
+                terrNum,
+                status: base.status,
+                ...(base.assigneeName ? { assigneeName: base.assigneeName } : {}),
+                zona: selectedZone,
+                x: clampPercent(base.x + 1.5),
+                y: clampPercent(base.y + 1.5),
+                zoneX: x,
+                zoneY: y,
+                lastUpdated: null,
+            }));
+            onShowModal({
+                type: 'success',
+                title: 'Pin agregado',
+                message: `Se agregó un pin al Territorio ${terrNum}. En la vista Global aparece junto a los demás pines de ese territorio; desbloquéalo (🔓) y arrástralo a su manzana.`,
+            });
+        } catch (error) {
+            showWriteError(error, 'No se pudo agregar el pin.');
         }
     };
 
@@ -397,13 +451,32 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         setOriginalEditingRecord(null);
     };
 
+    const closeMarkerModal = () => {
+        setEditingMarker(null);
+        setEditingRecord(null);
+        setOriginalEditingRecord(null);
+        setTerritoryRecordOptions([]);
+    };
+
+    const showWriteError = (error: unknown, fallbackMessage: string) => {
+        if (isWriteTimeout(error)) {
+            onShowModal({
+                type: 'error',
+                title: 'Sin confirmación del servidor',
+                message: 'El cambio quedó guardado en este dispositivo pero el servidor no lo confirmó (¿conexión lenta?). Mantén la página abierta unos segundos o recárgala y verifica que el cambio se vea reflejado.',
+            });
+        } else {
+            onShowModal({ type: 'error', title: 'Error', message: fallbackMessage });
+        }
+    };
+
     const handleDeleteRecordOnly = async () => {
         if (!originalEditingRecord?.id || !onDeleteRecord) return;
         if (!window.confirm(`¿Eliminar solo el registro (Vuelta ${originalEditingRecord.vueltaNum}, Año ${originalEditingRecord.serviceYear}) de este territorio?\n\nEl marcador en el mapa NO se eliminará. Esta acción no se puede deshacer.`)) return;
 
         setIsDeleting(true);
         try {
-            await onDeleteRecord(originalEditingRecord);
+            await withTimeout(onDeleteRecord(originalEditingRecord));
             const remaining = territoryRecordOptions.filter(r => r.id !== originalEditingRecord.id);
             setTerritoryRecordOptions(remaining);
             const next = remaining.find(r => r.serviceYear === currentServiceYear) || remaining[0];
@@ -415,7 +488,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             }
             onShowModal({ type: 'success', title: 'Eliminado', message: 'Registro eliminado con éxito.' });
         } catch (error) {
-            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo eliminar el registro.' });
+            showWriteError(error, 'No se pudo eliminar el registro.');
         } finally {
             setIsDeleting(false);
         }
@@ -424,28 +497,34 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     const handleDeleteMarker = async () => {
         if (!onDeleteMarker || !editingMarker?.id) return;
 
-        const confirmMsg = originalEditingRecord?.id
-            ? `¿Eliminar el marcador del Territorio ${editingMarker.terrNum}?\n\nEsto también eliminará su registro de asignación (S-13) del año de servicio actual. Esta acción no se puede deshacer.`
-            : `¿Eliminar el marcador del Territorio ${editingMarker.terrNum}? Esta acción no se puede deshacer.`;
+        const markerId = editingMarker.id;
+        const terrNum = editingMarker.terrNum;
+        // Los registros de asignación (S-13) se enlazan por NÚMERO de territorio, no por pin.
+        // Si el territorio tiene más pines (otras manzanas), el registro es compartido y NO debe
+        // borrarse junto con este pin, porque los demás pines lo siguen usando.
+        const otherPins = markers.filter(m => m.terrNum === terrNum && m.id !== markerId).length;
+        const recordToDelete = otherPins === 0 && originalEditingRecord?.id ? originalEditingRecord : null;
+
+        const confirmMsg = otherPins > 0
+            ? `¿Eliminar este pin del Territorio ${terrNum}?\n\nEse territorio tiene ${otherPins} ${otherPins === 1 ? 'pin más' : 'pines más'} (otras manzanas). Su registro de asignación (S-13) NO se borrará y los demás pines no cambian. Esta acción no se puede deshacer.`
+            : recordToDelete
+                ? `¿Eliminar el marcador del Territorio ${terrNum}?\n\nEs el único pin de ese territorio, así que también se eliminará su registro de asignación (S-13) del año de servicio actual. Esta acción no se puede deshacer.`
+                : `¿Eliminar el marcador del Territorio ${terrNum}? Esta acción no se puede deshacer.`;
 
         if (!window.confirm(confirmMsg)) return;
 
         setIsDeleting(true);
         try {
-            // Delete the linked S-13 record first (if any) so it doesn't become
-            // an orphan once the marker itself is gone.
-            if (originalEditingRecord?.id && onDeleteRecord) {
-                await onDeleteRecord(originalEditingRecord);
-            }
-            await onDeleteMarker(editingMarker.id);
+            // Ambas escrituras se lanzan a la vez y se espera una sola confirmación con tiempo límite.
+            const ops: Promise<void>[] = [onDeleteMarker(markerId)];
+            if (recordToDelete && onDeleteRecord) ops.push(onDeleteRecord(recordToDelete));
+            await withTimeout(Promise.all(ops));
 
-            setEditingMarker(null);
-            setEditingRecord(null);
-            setOriginalEditingRecord(null);
-            setTerritoryRecordOptions([]);
+            closeMarkerModal();
             onShowModal({ type: 'success', title: 'Eliminado', message: 'Marcador eliminado con éxito.' });
         } catch (error) {
-            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo eliminar el marcador.' });
+            if (isWriteTimeout(error)) closeMarkerModal();
+            showWriteError(error, 'No se pudo eliminar el marcador.');
         } finally {
             setIsDeleting(false);
         }
@@ -463,7 +542,12 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 } else if (editingRecord.completedDate) {
                     finalStatus = 'completed';
                 }
-                if (editingRecord.vueltaNum) {
+            }
+
+            // Toda la secuencia corre como una sola operación con tiempo límite: si el servidor
+            // tarda, la modal se libera pero las escrituras siguen su curso en segundo plano.
+            await withTimeout((async () => {
+                if (editingRecord && editingRecord.vueltaNum) {
                     // If we were editing an existing record and the vuelta number
                     // AND/OR the service year was changed, saving would create a NEW
                     // record for that combination (App.tsx matches by
@@ -481,17 +565,15 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
                     await onSaveRecord(editingRecord as Omit<TerritoryRecord, 'id'>);
                 }
-            }
 
-            await onSaveMarker({ ...(editingMarker as any), status: finalStatus });
-            
-            setEditingMarker(null);
-            setEditingRecord(null);
-            setOriginalEditingRecord(null);
-            setTerritoryRecordOptions([]);
+                await onSaveMarker({ ...(editingMarker as any), status: finalStatus });
+            })());
+
+            closeMarkerModal();
             onShowModal({ type: 'success', title: 'Éxito', message: 'Marcador y registro actualizados.' });
         } catch (error) {
-            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo completar la operación.' });
+            if (isWriteTimeout(error)) closeMarkerModal();
+            showWriteError(error, 'No se pudo completar la operación.');
         } finally {
             setIsSaving(false);
         }
@@ -513,7 +595,15 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         selectedZone === null
             ? markers.map(m => ({ marker: m, x: m.x, y: m.y }))
             : zoneMarkers.filter(hasZonePos).map(m => ({ marker: m, x: m.zoneX as number, y: m.zoneY as number }));
-    const unplacedTerrNums = Array.from(new Set(zoneMarkers.filter(m => !hasZonePos(m)).map(m => m.terrNum))).sort((a, b) => a - b);
+    // Pines de la zona que aún no tienen posición en este mapa (uno por manzana, no por territorio).
+    const unplacedMarkers = zoneMarkers
+        .filter(m => !hasZonePos(m))
+        .sort((a, b) => (a.terrNum - b.terrNum) || String(a.id).localeCompare(String(b.id)));
+    const pinLabel = (m: TerritoryMarker) => {
+        const sibs = markers.filter(k => k.terrNum === m.terrNum).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        return sibs.length > 1 ? `Territorio ${m.terrNum} · pin ${sibs.findIndex(k => k.id === m.id) + 1} de ${sibs.length}` : `Territorio ${m.terrNum}`;
+    };
+    const zoneTerrNums = Array.from(new Set(zoneMarkers.map(m => m.terrNum))).sort((a, b) => a - b);
     // Territorios que pertenecen a la zona pero todavía no tienen pin en el mapa global.
     const missingPinTerrs =
         selectedZone === null
@@ -622,37 +712,64 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                         <span className="font-bold">Zona {selectedZone}:</span>{' '}
                         {zoneMarkers.length === 0
                             ? 'no tiene territorios asignados (se asignan en la pestaña Zonas).'
-                            : `${plural(zoneMarkers.length, 'territorio', 'territorios')} · ${plural(zoneCount('completed'), 'completado', 'completados')} · ${plural(zoneCount('assigned'), 'asignado', 'asignados')} · ${plural(zoneCount('delayed'), 'rezagado', 'rezagados')}`}
+                            : `${plural(zoneTerrNums.length, 'territorio', 'territorios')} · ${plural(zoneMarkers.length, 'pin', 'pines')} · ${plural(zoneCount('completed'), 'completado', 'completados')} · ${plural(zoneCount('assigned'), 'asignado', 'asignados')} · ${plural(zoneCount('delayed'), 'rezagado', 'rezagados')}`}
                     </div>
                     {missingPinTerrs.length > 0 && (
                         <div className="text-xs text-amber-700">
                             Sin pin en el mapa global: {missingPinTerrs.join(', ')}. Colócalos primero en la vista Global.
                         </div>
                     )}
-                    {canManage && placingTerrNum !== null ? (
+                    {canManage && placingMarkerId !== null ? (
                         <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                            <span className="text-blue-800 font-semibold text-xs sm:text-sm">Toca el mapa donde va el Territorio {placingTerrNum}.</span>
-                            <button onClick={() => setPlacingTerrNum(null)} className="text-xs font-bold text-blue-700 underline whitespace-nowrap">Cancelar</button>
+                            <span className="text-blue-800 font-semibold text-xs sm:text-sm">
+                                Toca el mapa donde va el {pinLabel(markers.find(m => m.id === placingMarkerId) || ({ terrNum: 0, id: '' } as TerritoryMarker))}.
+                            </span>
+                            <button onClick={() => setPlacingMarkerId(null)} className="text-xs font-bold text-blue-700 underline whitespace-nowrap">Cancelar</button>
                         </div>
-                    ) : unplacedTerrNums.length > 0 && (
-                        canManage ? (
-                            <div>
-                                <div className="text-xs text-gray-500 mb-1">Por ubicar en este mapa — elige un territorio y toca el mapa:</div>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {unplacedTerrNums.map(n => (
-                                        <button
-                                            key={n}
-                                            onClick={() => setPlacingTerrNum(n)}
-                                            className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-700 text-xs font-bold border border-slate-200"
-                                        >
-                                            Territorio {n}
-                                        </button>
-                                    ))}
+                    ) : canManage && addingTerrNum !== null ? (
+                        <div className="flex items-center justify-between gap-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                            <span className="text-green-800 font-semibold text-xs sm:text-sm">Toca el mapa donde va el pin NUEVO del Territorio {addingTerrNum}.</span>
+                            <button onClick={() => setAddingTerrNum(null)} className="text-xs font-bold text-green-700 underline whitespace-nowrap">Cancelar</button>
+                        </div>
+                    ) : (
+                        <>
+                            {unplacedMarkers.length > 0 && (
+                                canManage ? (
+                                    <div>
+                                        <div className="text-xs text-gray-500 mb-1">Por ubicar en este mapa — elige un pin y toca el mapa:</div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {unplacedMarkers.map(m => (
+                                                <button
+                                                    key={m.id}
+                                                    onClick={() => setPlacingMarkerId(m.id)}
+                                                    className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-700 text-xs font-bold border border-slate-200"
+                                                >
+                                                    {pinLabel(m)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-gray-500">Aún sin ubicar en este mapa: {Array.from(new Set(unplacedMarkers.map(m => m.terrNum))).join(', ')}.</div>
+                                )
+                            )}
+                            {canManage && zoneTerrNums.length > 0 && (
+                                <div>
+                                    <div className="text-xs text-gray-500 mb-1">➕ Agregar otro pin (otra manzana) a un territorio — elígelo y toca el mapa:</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {zoneTerrNums.map(n => (
+                                            <button
+                                                key={n}
+                                                onClick={() => setAddingTerrNum(n)}
+                                                className="px-2.5 py-1 rounded-full bg-green-50 hover:bg-green-100 text-green-800 text-xs font-bold border border-green-200"
+                                            >
+                                                + Territorio {n}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="text-xs text-gray-500">Aún sin ubicar en este mapa: {unplacedTerrNums.join(', ')}.</div>
-                        )
+                            )}
+                        </>
                     )}
                 </div>
             )}
@@ -672,7 +789,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                     <div
                         ref={viewportRef}
                         className={`relative overflow-hidden select-none ${
-                            canManage && (selectedZone === null || placingTerrNum !== null) ? 'cursor-crosshair' : 'cursor-grab'
+                            canManage && (selectedZone === null || placingMarkerId !== null || addingTerrNum !== null) ? 'cursor-crosshair' : 'cursor-grab'
                         }`}
                         style={{ height: vw > 0 ? vh : 240, touchAction: 'none' }}
                         onPointerDown={onViewportPointerDown}
@@ -909,7 +1026,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                     {isDeleting ? 'Eliminando...' : '🗑️ Eliminar Marcador'}
                                 </button>
                             )}
-                            <button onClick={() => { setEditingMarker(null); setEditingRecord(null); setOriginalEditingRecord(null); setTerritoryRecordOptions([]); }} disabled={isSaving || isDeleting} className="w-full py-3 bg-white text-slate-600 font-bold rounded-xl border border-slate-200 disabled:opacity-60">Cancelar</button>
+                            <button onClick={closeMarkerModal} className="w-full py-3 bg-white text-slate-600 font-bold rounded-xl border border-slate-200">{isSaving || isDeleting ? 'Cerrar' : 'Cancelar'}</button>
                         </div>
                     </div>
                 </div>
