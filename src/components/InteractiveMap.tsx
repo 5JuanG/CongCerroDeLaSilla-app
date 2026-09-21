@@ -825,28 +825,37 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                 }}
                                 onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_MAP_ERROR; }}
                             />
+                        </div>
 
+                        {/* Los pines se dibujan en una capa aparte, hermana de la capa con el
+                            transform de zoom (no dentro de ella). Antes cada pin llevaba su propio
+                            transform: scale(1/k) para "cancelar" el scale(k) del mapa y así no
+                            crecer con el zoom; matemáticamente el resultado final era correcto,
+                            pero a mucho zoom (k alto, 1/k muy chico) el navegador puede rasterizar
+                            ese texto en una capa intermedia diminuta antes de recomponerlo, dejando
+                            el número borroso o invisible. Calculando la posición en píxeles de
+                            pantalla directamente (sin transform anidado) el pin y su número se
+                            pintan siempre a tamaño real y nítido, a cualquier nivel de zoom. */}
+                        <div className="absolute left-0 top-0 pointer-events-none" style={{ width: vw, height: vh }}>
                             {pins.map(({ marker, x, y }) => {
                                 const isDraggingThis = draggingMarkerId === marker.id;
                                 const displayX = isDraggingThis && dragPosition ? dragPosition.x : x;
                                 const displayY = isDraggingThis && dragPosition ? dragPosition.y : y;
+                                const screenX = view.tx + (displayX / 100) * vw * view.k;
+                                const screenY = view.ty + (displayY / 100) * contentH * view.k;
                                 return (
                                     <div
                                         key={marker.id}
-                                        className={`absolute flex items-center justify-center ${isDraggingThis ? 'z-20' : 'z-10'} ${
+                                        className={`absolute flex items-center justify-center pointer-events-auto ${isDraggingThis ? 'z-20' : 'z-10'} ${
                                             canManage ? (pinsLocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing') : ''
                                         }`}
-                                        // El pin se contrarresta con la escala del mapa (1/k) para que mantenga
-                                        // su tamaño en pantalla al hacer zoom y los pines se vayan separando.
                                         style={{
-                                            left: `${displayX}%`,
-                                            top: `${displayY}%`,
+                                            left: screenX,
+                                            top: screenY,
                                             width: pinHit,
                                             height: pinHit,
                                             marginLeft: -pinHit / 2,
                                             marginTop: -pinHit / 2,
-                                            transform: `scale(${1 / view.k})`,
-                                            transformOrigin: 'center center',
                                         }}
                                         onPointerDown={(e) => handleMarkerPointerDown(e, marker)}
                                         onPointerMove={handleMarkerPointerMove}
