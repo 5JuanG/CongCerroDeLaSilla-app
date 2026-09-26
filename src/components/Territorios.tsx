@@ -538,7 +538,7 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
             const pdf = new jsPDF('p', 'mm', 'letter', true);
             const pageWidth = pdf.internal.pageSize.getWidth();
             const today = new Date();
-            const serviceYearY = today.getMonth() >= 8 ? today.getFullYear() + 1 : today.getFullYear();
+            const fallbackServiceYear = today.getMonth() >= 8 ? today.getFullYear() + 1 : today.getFullYear();
 
             const drawTerritoryPage = (startNum: number, endNum: number, isSecondPage: boolean, isHistory: boolean) => {
                 if (isSecondPage || isHistory) pdf.addPage();
@@ -547,15 +547,9 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                 pdf.setFont('helvetica', 'bold');
                 pdf.text('REGISTRO DE ASIGNACIÓN DE TERRITORIO', pageWidth / 2, 10, { align: 'center' });
 
-                pdf.setFontSize(10);
-                pdf.setFont('helvetica', 'bold');
-                pdf.text('Año de servicio:', 10, 18);
-                pdf.setFont('helvetica', 'normal');
-                pdf.text(serviceYearY.toString(), 40, 18);
-                pdf.line(40, 19, 60, 19);
-
                 const territories = Array.from({ length: endNum - startNum + 1 }, (_, i) => startNum + i);
                 const tableBody: any[] = [];
+                const yearsInPage = new Set<number>();
 
                 // Determine the "Current" and "History" blocks based on max progress
                 const totalMaxVuelta = records.length > 0 ? Math.max(...records.map(r => Number(r.vueltaNum) || 0)) : 1;
@@ -592,6 +586,10 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                         recordsToDraw.push(rec);
                     }
 
+                    recordsToDraw.forEach(rec => {
+                        if (rec?.serviceYear) yearsInPage.add(Number(rec.serviceYear));
+                    });
+
                     // Col 1: Ultima fecha en que se completo*
                     const prevVueltaNum = currentBlockStart - 1;
                     const lastCompRecord = allRecordsForTerr.filter(r => Number(r.vueltaNum) === prevVueltaNum).pop();
@@ -617,6 +615,19 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                     ];
                     tableBody.push(row1, row2);
                 });
+
+                pdf.setFontSize(10);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Año de servicio:', 10, 18);
+                pdf.setFont('helvetica', 'normal');
+                const sortedYears = Array.from(yearsInPage).sort((a, b) => a - b);
+                const serviceYearLabel = sortedYears.length === 0
+                    ? fallbackServiceYear.toString()
+                    : sortedYears.length === 1
+                        ? sortedYears[0].toString()
+                        : `${sortedYears[0]}-${sortedYears[sortedYears.length - 1]}`;
+                pdf.text(serviceYearLabel, 40, 18);
+                pdf.line(40, 19, 60, 19);
 
                 autoTable(pdf, {
                     startY: 22,
