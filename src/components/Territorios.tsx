@@ -539,6 +539,37 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
             const pageWidth = pdf.internal.pageSize.getWidth();
             const today = new Date();
             const fallbackServiceYear = today.getMonth() >= 8 ? today.getFullYear() + 1 : today.getFullYear();
+            // El año a exportar como "reciente" es el que está seleccionado arriba en el filtro
+            // "Año de servicio" (currentServiceYear ya viene por defecto en el año de servicio actual).
+            const exportServiceYear = currentServiceYear || fallbackServiceYear;
+
+            // La vuelta se reinicia en 1 cada año de servicio, así que el bloque "reciente" debe
+            // calcularse SOLO con los registros del año exportado (no con el máximo global, que
+            // seguiría apuntando al año anterior mientras este apenas empieza).
+            const currentYearRecords = records.filter(r => Number(r.serviceYear) === exportServiceYear);
+            const currentYearMaxVuelta = currentYearRecords.length > 0
+                ? Math.max(...currentYearRecords.map(r => Number(r.vueltaNum) || 0))
+                : 0;
+            const recentBlockStart = Math.max(1, Math.floor((currentYearMaxVuelta - 1) / 4) * 4 + 1);
+            const recentServiceYear = exportServiceYear;
+
+            // Si el bloque reciente ya arrancó (vuelta > 4) la "historia" es el bloque anterior del
+            // MISMO año; si el año apenas comienza (bloque 1-4), la "historia" es el último bloque
+            // del año de servicio anterior.
+            let historyServiceYear = exportServiceYear;
+            let historyBlockStart = -1;
+            if (recentBlockStart > 4) {
+                historyBlockStart = recentBlockStart - 4;
+            } else {
+                const prevYearRecords = records.filter(r => Number(r.serviceYear) === exportServiceYear - 1);
+                const prevYearMaxVuelta = prevYearRecords.length > 0
+                    ? Math.max(...prevYearRecords.map(r => Number(r.vueltaNum) || 0))
+                    : 0;
+                historyServiceYear = exportServiceYear - 1;
+                historyBlockStart = prevYearMaxVuelta > 0
+                    ? Math.max(1, Math.floor((prevYearMaxVuelta - 1) / 4) * 4 + 1)
+                    : -1;
+            }
 
             const drawTerritoryPage = (startNum: number, endNum: number, isSecondPage: boolean, isHistory: boolean) => {
                 if (isSecondPage || isHistory) pdf.addPage();
@@ -549,12 +580,9 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
 
                 const territories = Array.from({ length: endNum - startNum + 1 }, (_, i) => startNum + i);
                 const tableBody: any[] = [];
-                const yearsInPage = new Set<number>();
 
-                // Determine the "Current" and "History" blocks based on max progress
-                const totalMaxVuelta = records.length > 0 ? Math.max(...records.map(r => Number(r.vueltaNum) || 0)) : 1;
-                const recentBlockStart = Math.max(1, Math.floor((totalMaxVuelta - 1) / 4) * 4 + 1);
-                const historyBlockStart = recentBlockStart > 4 ? recentBlockStart - 4 : -1;
+                const currentBlockStart = isHistory ? historyBlockStart : recentBlockStart;
+                const blockServiceYear = isHistory ? historyServiceYear : recentServiceYear;
 
                 territories.forEach(num => {
                     const allRecordsForTerr = [...records]
@@ -566,10 +594,7 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                             return (Number(a.vueltaNum) || 0) - (Number(b.vueltaNum) || 0);
                         });
 
-                    // Map records to Stable Round Numbers
-                    const currentBlockStart = isHistory ? historyBlockStart : recentBlockStart;
-
-                    if (currentBlockStart === -1 && isHistory) {
+                    if (currentBlockStart === -1) {
                         const emptyRow = [
                             { content: num.toString(), rowSpan: 2, styles: { valign: 'middle', fontStyle: 'bold', fontSize: 10, halign: 'center' } },
                             { content: '', rowSpan: 2 },
@@ -579,21 +604,30 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                         return;
                     }
 
+                    // Registros de ESTE territorio dentro del año de servicio que corresponde a esta hoja
+                    const recordsForBlockYear = allRecordsForTerr.filter(r => Number(r.serviceYear) === blockServiceYear);
+
                     const recordsToDraw: (TerritoryRecord | undefined)[] = [];
                     for (let v = 0; v < 4; v++) {
                         const targetVuelta = currentBlockStart + v;
-                        const rec = allRecordsForTerr.filter(r => Number(r.vueltaNum) === targetVuelta).pop();
+                        const rec = recordsForBlockYear.filter(r => Number(r.vueltaNum) === targetVuelta).pop();
                         recordsToDraw.push(rec);
                     }
 
-                    recordsToDraw.forEach(rec => {
-                        if (rec?.serviceYear) yearsInPage.add(Number(rec.serviceYear));
-                    });
-
                     // Col 1: Ultima fecha en que se completo*
-                    const prevVueltaNum = currentBlockStart - 1;
-                    const lastCompRecord = allRecordsForTerr.filter(r => Number(r.vueltaNum) === prevVueltaNum).pop();
-                    const lastComp = lastCompRecord?.completedDate || '';
+                    // Si el bloque es el primero del año (vuelta 1), la última vez completada
+                    // corresponde a la última vuelta del año de servicio anterior.
+                    let lastComp = '';
+                    if (currentBlockStart > 1) {
+                        const prevVueltaNum = currentBlockStart - 1;
+                        const lastCompRecord = recordsForBlockYear.filter(r => Number(r.vueltaNum) === prevVueltaNum).pop();
+                        lastComp = lastCompRecord?.completedDate || '';
+                    } else {
+                        const prevYearRecordsForTerr = allRecordsForTerr
+                            .filter(r => Number(r.serviceYear) === blockServiceYear - 1)
+                            .sort((a, b) => (Number(a.vueltaNum) || 0) - (Number(b.vueltaNum) || 0));
+                        lastComp = prevYearRecordsForTerr.pop()?.completedDate || '';
+                    }
 
                     const row1 = [
                         { content: num.toString(), rowSpan: 2, styles: { valign: 'middle', fontStyle: 'bold', fontSize: 10, halign: 'center' } },
@@ -620,13 +654,7 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
                 pdf.setFont('helvetica', 'bold');
                 pdf.text('Año de servicio:', 10, 18);
                 pdf.setFont('helvetica', 'normal');
-                const sortedYears = Array.from(yearsInPage).sort((a, b) => a - b);
-                const serviceYearLabel = sortedYears.length === 0
-                    ? fallbackServiceYear.toString()
-                    : sortedYears.length === 1
-                        ? sortedYears[0].toString()
-                        : `${sortedYears[0]}-${sortedYears[sortedYears.length - 1]}`;
-                pdf.text(serviceYearLabel, 40, 18);
+                pdf.text(blockServiceYear.toString(), 40, 18);
                 pdf.line(40, 19, 60, 19);
 
                 autoTable(pdf, {
@@ -728,7 +756,7 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
             console.error(error);
             onShowModal({ type: 'error', title: 'Error', message: 'No se pudo generar el registro de territorios.' });
         }
-    }, [records, onShowModal]);
+    }, [records, onShowModal, currentServiceYear]);
 
     // Calculate comprehensive territory statistics
     const calculateTerritoryStats = useMemo(() => {
