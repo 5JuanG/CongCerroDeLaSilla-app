@@ -1031,9 +1031,10 @@ ${assignment.observations ? `\n📝 Observaciones: ${assignment.observations}` :
             let maxNextVuelta = 1;
 
             formData.territories.forEach(terrNum => {
-                // Filter records for this specific territory across ALL service years
+                // Filter records for this specific territory dentro del MISMO año de servicio de la fecha
+                // (la vuelta se reinicia en 1 cada año de servicio, no debe seguir la numeración histórica global)
                 const specificRecords = records.filter(r =>
-                    String(r.terrNum) == String(terrNum)
+                    String(r.terrNum) == String(terrNum) && Number(r.serviceYear) === targetServiceYear
                 );
 
                 const vueltas = specificRecords.map(r => Number(r.vueltaNum)).sort((a, b) => b - a);
