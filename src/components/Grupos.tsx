@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Publisher } from '../types';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface GruposProps {
     publishers: Publisher[];
@@ -26,6 +28,118 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
     };
 
     const getPublisherFullName = (p: Publisher) => [p.Nombre, p.Apellido, p['2do Apellido'], p['Apellido de casada']].filter(namePart => namePart && namePart.toLowerCase() !== 'n/a').join(' ');
+
+
+    const handleDownloadGroupsPDF = () => {
+        const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
+        const byGroup: Record<string, Publisher[]> = {};
+        activePublishers.forEach(p => {
+            const key = p.Grupo || 'Sin Grupo';
+            (byGroup[key] = byGroup[key] || []).push(p);
+        });
+
+        const rank = (p: Publisher) =>
+            p['Responsabilidad en el Grupo'] === 'Superintendente de Grupo' ? 0
+                : p['Responsabilidad en el Grupo'] === 'Auxiliar de Grupo' ? 1 : 2;
+
+        const groupKeys = Object.keys(byGroup).sort((a, b) => {
+            if (a === 'Sin Grupo') return 1;
+            if (b === 'Sin Grupo') return -1;
+            return a.localeCompare(b, 'es', { numeric: true });
+        });
+
+        const GREEN: [number, number, number] = [34, 197, 94];        // Superintendente
+        const LIME: [number, number, number] = [190, 242, 100];       // Auxiliar
+        const YELLOW: [number, number, number] = [255, 255, 0];       // Precursor regular (fosforescente)
+
+        const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const margin = 14;
+        let y = 16;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(15);
+        doc.text('GRUPOS DE SERVICIO - CONG. CERRO DE LA SILLA-GPE', pageW / 2, y, { align: 'center' });
+        y += 6;
+
+        // Leyenda
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        const legend: { label: string; color: [number, number, number] }[] = [
+            { label: 'Superintendente de grupo', color: GREEN },
+            { label: 'Auxiliar de grupo', color: LIME },
+            { label: 'Precursor regular', color: YELLOW },
+        ];
+        let lx = margin;
+        legend.forEach(item => {
+            doc.setFillColor(...item.color);
+            doc.setDrawColor(120);
+            doc.rect(lx, y, 5, 4, 'FD');
+            doc.setTextColor(0);
+            doc.text(item.label, lx + 7, y + 3.2);
+            lx += 7 + doc.getTextWidth(item.label) + 8;
+        });
+        y += 9;
+
+        groupKeys.forEach(groupName => {
+            const members = [...byGroup[groupName]].sort((a, b) => {
+                const r = rank(a) - rank(b);
+                if (r !== 0) return r;
+                return getPublisherFullName(a).localeCompare(getPublisherFullName(b), 'es');
+            });
+            const prCount = members.filter(p => p['Priv Adicional'] === 'Precursor Regular').length;
+
+            // Alto estimado del bloque (encabezado + filas + total) para no partir un grupo si cabe en una hoja
+            const rowH = 6;
+            const blockH = (members.length + 2) * rowH + 6;
+            if (y + blockH > pageH - 12 && blockH <= pageH - 30) {
+                doc.addPage();
+                y = 16;
+            }
+
+            const body: any[] = members.map(p => {
+                const resp = p['Responsabilidad en el Grupo'];
+                const isReg = p['Priv Adicional'] === 'Precursor Regular';
+                let fill: [number, number, number] | undefined;
+                let note = '';
+                if (resp === 'Superintendente de Grupo') { fill = GREEN; note = 'Superintendente'; }
+                else if (resp === 'Auxiliar de Grupo') { fill = LIME; note = 'Auxiliar'; }
+                else if (isReg) { fill = YELLOW; }
+                if (isReg) note = note ? `${note} / Prec. Regular` : 'Prec. Regular';
+                const style = fill ? { fillColor: fill } : {};
+                return [
+                    { content: getPublisherFullName(p), styles: { ...style, fontStyle: fill ? 'bold' : 'normal' } },
+                    { content: note, styles: style },
+                ];
+            });
+
+            autoTable(doc, {
+                startY: y,
+                margin: { left: margin, right: margin },
+                head: [[{ content: groupName, colSpan: 2, styles: { halign: 'left', fillColor: [37, 99, 235], textColor: 255, fontSize: 11 } }]],
+                body,
+                foot: [[{
+                    content: `Total de miembros: ${members.length}          Precursores regulares: ${prCount}`,
+                    colSpan: 2,
+                    styles: { halign: 'left', fillColor: [229, 231, 235], textColor: 0, fontStyle: 'bold' },
+                }]],
+                showFoot: 'lastPage',
+                theme: 'grid',
+                styles: { fontSize: 10, cellPadding: 1.6, textColor: 0, lineColor: [180, 180, 180], lineWidth: 0.2 },
+                columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 'auto' } },
+                rowPageBreak: 'avoid',
+            });
+            y = (doc as any).lastAutoTable.finalY + 8;
+        });
+
+        if (groupKeys.length === 0) {
+            doc.setFontSize(11);
+            doc.text('No hay publicadores activos con grupo asignado.', margin, y + 6);
+        }
+
+        doc.save(`Grupos_${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
 
     const AdminView: React.FC = () => {
         const [currentPage, setCurrentPage] = useState(1);
@@ -233,11 +347,16 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                 <h1 className="text-2xl font-bold text-blue-800">
                     {view === 'summary' ? 'Resumen de Grupos CONG. CERRO DE LA SILLA-GPE' : 'Administrar Grupos de Publicadores'}
                 </h1>
-                {canManage && (
-                    <button onClick={() => setView(v => v === 'summary' ? 'admin' : 'summary')} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
-                        {view === 'summary' ? 'Ir a Administrar' : 'Volver a Resumen'}
+                <div className="flex items-center gap-2">
+                    <button onClick={handleDownloadGroupsPDF} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+                        Descargar PDF
                     </button>
-                )}
+                    {canManage && (
+                        <button onClick={() => setView(v => v === 'summary' ? 'admin' : 'summary')} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                            {view === 'summary' ? 'Ir a Administrar' : 'Volver a Resumen'}
+                        </button>
+                    )}
+                </div>
             </div>
 
             {view === 'summary' ? <SummaryView /> : <AdminView />}
