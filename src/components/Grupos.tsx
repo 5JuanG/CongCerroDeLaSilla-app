@@ -58,31 +58,42 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
         const margin = 14;
         let y = 16;
 
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(15);
-        doc.text('GRUPOS DE SERVICIO - CONG. CERRO DE LA SILLA-GPE', pageW / 2, y, { align: 'center' });
-        y += 6;
-
-        // Leyenda
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        const legend: { label: string; color: [number, number, number] }[] = [
-            { label: 'Superintendente de grupo', color: GREEN },
-            { label: 'Auxiliar de grupo', color: LIME },
-            { label: 'Precursor regular', color: YELLOW },
-        ];
-        let lx = margin;
-        legend.forEach(item => {
-            doc.setFillColor(...item.color);
-            doc.setDrawColor(120);
-            doc.rect(lx, y, 5, 4, 'FD');
+        const drawPageHeader = () => {
+            y = 16;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(15);
             doc.setTextColor(0);
-            doc.text(item.label, lx + 7, y + 3.2);
-            lx += 7 + doc.getTextWidth(item.label) + 8;
-        });
-        y += 9;
+            doc.text('GRUPOS DE SERVICIO - CONG. CERRO DE LA SILLA-GPE', pageW / 2, y, { align: 'center' });
+            y += 6;
 
-        groupKeys.forEach(groupName => {
+            // Leyenda
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            const legend: { label: string; color: [number, number, number] }[] = [
+                { label: 'Superintendente de grupo', color: GREEN },
+                { label: 'Auxiliar de grupo', color: LIME },
+                { label: 'Precursor regular', color: YELLOW },
+            ];
+            let lx = margin;
+            legend.forEach(item => {
+                doc.setFillColor(...item.color);
+                doc.setDrawColor(120);
+                doc.rect(lx, y, 5, 4, 'FD');
+                doc.setTextColor(0);
+                doc.text(item.label, lx + 7, y + 3.2);
+                lx += 7 + doc.getTextWidth(item.label) + 8;
+            });
+            y += 9;
+        };
+
+        // "Grupo" + número (si el nombre ya empieza con "Grupo" se respeta tal cual)
+        const groupTitle = (name: string) => {
+            if (name === 'Sin Grupo') return 'Sin Grupo';
+            if (/^grupo\b/i.test(name.trim())) return name.trim();
+            return `Grupo ${name.trim()}`;
+        };
+
+        groupKeys.forEach((groupName, groupIndex) => {
             const members = [...byGroup[groupName]].sort((a, b) => {
                 const r = rank(a) - rank(b);
                 if (r !== 0) return r;
@@ -90,13 +101,9 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             });
             const prCount = members.filter(p => p['Priv Adicional'] === 'Precursor Regular').length;
 
-            // Alto estimado del bloque (encabezado + filas + total) para no partir un grupo si cabe en una hoja
-            const rowH = 6;
-            const blockH = (members.length + 2) * rowH + 6;
-            if (y + blockH > pageH - 12 && blockH <= pageH - 30) {
-                doc.addPage();
-                y = 16;
-            }
+            // Cada grupo en su propia hoja
+            if (groupIndex > 0) doc.addPage();
+            drawPageHeader();
 
             const body: any[] = members.map(p => {
                 const resp = p['Responsabilidad en el Grupo'];
@@ -117,7 +124,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             autoTable(doc, {
                 startY: y,
                 margin: { left: margin, right: margin },
-                head: [[{ content: groupName, colSpan: 2, styles: { halign: 'left', fillColor: [37, 99, 235], textColor: 255, fontSize: 11 } }]],
+                head: [[{ content: groupTitle(groupName), colSpan: 2, styles: { halign: 'left', fillColor: [37, 99, 235], textColor: 255, fontSize: 11 } }]],
                 body,
                 foot: [[{
                     content: `Total de miembros: ${members.length}          Precursores regulares: ${prCount}`,
@@ -130,10 +137,10 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                 columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 'auto' } },
                 rowPageBreak: 'avoid',
             });
-            y = (doc as any).lastAutoTable.finalY + 8;
         });
 
         if (groupKeys.length === 0) {
+            drawPageHeader();
             doc.setFontSize(11);
             doc.text('No hay publicadores activos con grupo asignado.', margin, y + 6);
         }
