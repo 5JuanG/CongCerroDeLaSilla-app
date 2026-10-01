@@ -42,7 +42,8 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             p['Responsabilidad en el Grupo'] === 'Superintendente de Grupo' ? 0
                 : p['Responsabilidad en el Grupo'] === 'Auxiliar de Grupo' ? 1 : 2;
 
-        const groupKeys = Object.keys(byGroup).sort((a, b) => {
+        // Solo grupos numerados (se omiten "Sin Grupo", "Se cambió de congregación", etc.)
+        const groupKeys = Object.keys(byGroup).filter(name => /\d/.test(name)).sort((a, b) => {
             if (a === 'Sin Grupo') return 1;
             if (b === 'Sin Grupo') return -1;
             return a.localeCompare(b, 'es', { numeric: true });
