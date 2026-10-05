@@ -319,15 +319,37 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
 
     const isGlobalView = useMemo(() => selectedFilter.startsWith('global_'), [selectedFilter]);
 
+    // Estatus que ya no cuentan como parte de un grupo activo
+    const OTHER_STATUSES = ['Se cambió de congregación', 'Falleció', 'Sacado de la congregación'];
+    const FILTER_OTHER_STATUS = 'status_otros';
+    const FILTER_NO_GROUP = 'status_singrupo';
+
+    // Un "grupo" cuyo nombre es en realidad un estatus (ej. "Se cambió de congregación") no es un grupo real
+    const isStatusLikeGroup = (g: string) => {
+        const n = g.toLowerCase();
+        return (n.includes('congregaci') && (n.includes('cambi') || n.includes('mud'))) || n.includes('falleci') || n.includes('sacado');
+    };
+
     const groups = useMemo(() => {
-        return [...new Set(publishers.map(p => p.Grupo).filter(Boolean) as string[])].sort();
+        return [...new Set(publishers.map(p => p.Grupo).filter(Boolean) as string[])].filter(g => !isStatusLikeGroup(g)).sort();
     }, [publishers]);
+
+    const getPublishersForFilter = (filter: string) => {
+        if (!filter || filter.startsWith('global_')) return [];
+        let list;
+        if (filter === FILTER_OTHER_STATUS) {
+            list = publishers.filter(p => OTHER_STATUSES.includes(p.Estatus));
+        } else if (filter === FILTER_NO_GROUP) {
+            list = publishers.filter(p => !OTHER_STATUSES.includes(p.Estatus) && (!p.Grupo || isStatusLikeGroup(p.Grupo)));
+        } else {
+            list = publishers.filter(p => p.Grupo === filter);
+        }
+        return [...list].sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+    };
 
     const filteredPublishers = useMemo(() => {
         if (isGlobalView || !selectedFilter) return [];
-        return publishers
-            .filter(p => p.Grupo === selectedFilter)
-            .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+        return getPublishersForFilter(selectedFilter);
     }, [selectedFilter, publishers, isGlobalView]);
 
     const selectedPublisher = useMemo(() => {
@@ -350,9 +372,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
         if (groups.length > 0 && !selectedFilter) {
             // Set initial filter and first publisher atomically
             const initialGroup = groups[0];
-            const initialPublishers = publishers
-                .filter(p => p.Grupo === initialGroup)
-                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+            const initialPublishers = getPublishersForFilter(initialGroup);
 
             setSelectedFilter(initialGroup);
             if (initialPublishers.length > 0) {
@@ -369,9 +389,7 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
         if (isNewFilterGlobal) {
             setSelectedPublisherId('');
         } else {
-            const newPublishersInGroup = publishers
-                .filter(p => p.Grupo === newFilter)
-                .sort((a, b) => `${a.Nombre} ${a.Apellido}`.localeCompare(`${b.Nombre} ${b.Apellido}`));
+            const newPublishersInGroup = getPublishersForFilter(newFilter);
 
             if (newPublishersInGroup.length > 0) {
                 setSelectedPublisherId(newPublishersInGroup[0].id);
@@ -637,6 +655,10 @@ const RegistrosServicio: React.FC<RegistrosServicioProps> = ({ publishers, servi
                         <option value="">Seleccione</option>
                         <optgroup label="Grupos de Servicio">
                             {groups.map(g => <option key={g} value={g}>{g}</option>)}
+                        </optgroup>
+                        <optgroup label="Otros">
+                            <option value={FILTER_OTHER_STATUS}>Otros estatus (se cambiaron, fallecieron, sacados)</option>
+                            <option value={FILTER_NO_GROUP}>Sin grupo</option>
                         </optgroup>
                         <optgroup label="Informes Globales">
                             <option value="global_regulares">Precursores Regulares</option>
