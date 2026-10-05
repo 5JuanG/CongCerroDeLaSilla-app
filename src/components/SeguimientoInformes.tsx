@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Publisher, ServiceReport, ModalInfo } from '../types';
 import { MONTHS } from '../constants';
 import { getPreviousMonthAndYear } from '../utils';
+import { isStatusLikeGroup } from '../groupUtils';
 
 interface SeguimientoInformesProps {
     publishers: Publisher[];
@@ -18,9 +19,9 @@ const SeguimientoInformes: React.FC<SeguimientoInformesProps> = ({ publishers, s
     const [selectedMonth, setSelectedMonth] = useState(currentMonth);
     const [selectedYear, setSelectedYear] = useState(prevYear);
 
-    // Filter active publishers
+    // Filter active publishers (se ignora a quien esté en un "grupo" que en realidad es un estatus, ej. "Se cambió de congregación")
     const activePublishers = useMemo(() => 
-        publishers.filter(p => p.Estatus === 'Activo'), 
+        publishers.filter(p => p.Estatus === 'Activo' && !isStatusLikeGroup(p.Grupo)), 
     [publishers]);
 
     // Group publishers by their group
