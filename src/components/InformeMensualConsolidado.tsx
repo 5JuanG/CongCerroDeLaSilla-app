@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react';
 import { Publisher, ServiceReport } from '../types';
 import { MONTHS } from '../constants';
 import { getPreviousMonthAndYear } from '../utils';
+import { isStatusLikeGroup } from '../groupUtils';
 
 interface InformeMensualConsolidadoProps {
     publishers: Publisher[];
@@ -57,19 +58,26 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
             }
         }
 
-        const regularPioneersCount = publishers.filter(p => p.Estatus === 'Activo' && p['Priv Adicional'] === 'Precursor Regular').length;
+        const regularPioneersCount = publishers.filter(p => p.Estatus === 'Activo' && !isStatusLikeGroup(p.Grupo) && p['Priv Adicional'] === 'Precursor Regular').length;
 
         const reportsInPeriod = serviceReports.filter(report =>
             monthsToCheck.some(range => range.month === report.mes && range.year === report.anioCalendario)
         );
 
+        // Quienes ya se cambiaron de congregación, fallecieron o fueron sacados no cuentan en los totales de "últimos 6 meses"
+        const leftIds = new Set(
+            publishers
+                .filter(p => ['Se cambió de congregación', 'Falleció', 'Sacado de la congregación'].includes(p.Estatus) || isStatusLikeGroup(p.Grupo))
+                .map(p => p.id)
+        );
+
         const uniqueAuxPioneerIds = new Set(
-            reportsInPeriod.filter(r => r.precursorAuxiliar === 'PA').map(r => r.idPublicador)
+            reportsInPeriod.filter(r => r.precursorAuxiliar === 'PA' && !leftIds.has(r.idPublicador)).map(r => r.idPublicador)
         );
         const uniqueAuxPioneersCount = uniqueAuxPioneerIds.size;
 
         const activePublisherIds = new Set(
-            reportsInPeriod.filter(r => r.participacion).map(r => r.idPublicador)
+            reportsInPeriod.filter(r => r.participacion && !leftIds.has(r.idPublicador)).map(r => r.idPublicador)
         );
         const activePublishersCount = activePublisherIds.size;
 
