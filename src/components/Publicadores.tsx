@@ -4,6 +4,7 @@ import { Publisher, ServiceReport, ModalInfo } from '../types';
 import { compressImage, getCalculatedStatus } from '../utils';
 import { DEFAULT_AVATAR, MONTHS } from '../constants';
 import PublisherCardView from './PublisherCardView';
+import { ASSIGNMENT_ROLES, normalizeRoles } from '../assignmentRoles';
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -132,9 +133,9 @@ const PublisherCard: React.FC<{ publisher: Publisher; onEdit: (id: string) => vo
 };
 
 const PublisherForm: React.FC<{ publisher: Publisher | null, onSubmit: (data: any) => void, onCancel: () => void, onShowModal: (info: ModalInfo) => void }> = ({ publisher, onSubmit, onCancel, onShowModal }) => {
-    const [formData, setFormData] = useState<any>(publisher || {
-        Nombre: '', Apellido: '', Estatus: 'Activo', asignacionesDisponibles: [], Familia: ''
-    });
+    const [formData, setFormData] = useState<any>(publisher
+        ? { ...publisher, asignacionesDisponibles: normalizeRoles(publisher.asignacionesDisponibles) }
+        : { Nombre: '', Apellido: '', Estatus: 'Activo', asignacionesDisponibles: [], Familia: '' });
     const [isSaving, setIsSaving] = useState(false);
     const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(publisher?.Foto || null);
     const [letterFileName, setLetterFileName] = useState<string | null>(null);
@@ -225,18 +226,7 @@ const PublisherForm: React.FC<{ publisher: Publisher | null, onSubmit: (data: an
         </div>
     );
 
-    const assignmentRoles = [
-        'Presidente',
-        'Acomodador PP',
-        'Acomodador Puerta del Auditorio',
-        'Acomodador de Auditorio',
-        'Micrófonos',
-        'Vigilante',
-        'Lector de la Atalaya',
-        'Capitán para Predicación',
-        'Oración',
-        'Califica para Discursar'
-    ];
+    const assignmentRoles = ASSIGNMENT_ROLES;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -416,7 +406,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 const calculatedStatus = getCalculatedStatus(p, serviceReports, MONTHS);
                 const fStatus = statusFilter.trim().toLowerCase();
 
-                if (fStatus === 'se mudaron') matchesStatus = calculatedStatus === 'se cambió de congregación';
+                if (fStatus === 'se cambió de congregación') matchesStatus = calculatedStatus === 'se cambió de congregación';
                 else if (fStatus === 'fallecieron') matchesStatus = calculatedStatus === 'falleció';
                 else if (fStatus === 'irregulares') matchesStatus = calculatedStatus === 'irregular';
                 else if (fStatus === 'activos') matchesStatus = calculatedStatus === 'activo';
@@ -738,7 +728,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
             doc.setTextColor(0, 0, 0);
 
             const tableData = groupData.map(p => {
-                const assignments = p.asignacionesDisponibles || [];
+                const assignments = normalizeRoles(p.asignacionesDisponibles);
                 return [
                     `${p.Nombre} ${p.Apellido}`,
                     assignments.includes('Presidente') ? checkmark : '',
@@ -943,7 +933,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                                 <option value="Activos">Activos</option>
                                 <option value="Inactivos">Inactivos</option>
                                 <option value="Irregulares">Irregulares</option>
-                                <option value="Se mudaron">Se mudaron</option>
+                                <option value="Se cambió de congregación">Se cambió de congregación</option>
                                 <option value="Fallecieron">Fallecieron</option>
                             </select>
                         </div>

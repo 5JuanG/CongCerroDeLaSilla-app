@@ -180,7 +180,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
                             <option value="sin-grupo">Activos Sin Grupo</option>
                         </optgroup>
                         <optgroup label="Estatus">
-                            {statusFilters.map(status => <option key={status} value={status}>{status}</option>)}
+                            {statusFilters.filter(status => status !== 'Se cambió de congregación').map(status => <option key={status} value={status}>{status}</option>)}
                         </optgroup>
                     </select>
                 </div>

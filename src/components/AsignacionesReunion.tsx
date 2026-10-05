@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Publisher, MeetingAssignmentSchedule, ModalInfo, DayAssignment, MeetingConfig } from '../types';
 import ShareModal from './ShareModal';
+import { hasRole } from '../assignmentRoles';
 
 interface AsignacionesReunionProps {
     publishers: Publisher[];
@@ -75,11 +76,16 @@ export const AsignacionesReunion: React.FC<AsignacionesReunionProps> = ({
     const getPublisherName = useCallback((id: string | null) => {
         if (!id) return '';
         const pub = activePublishers.find(p => p.id === id);
-        return pub ? [pub.Nombre, pub.Apellido].filter(Boolean).join(' ') : 'N/A';
+        if (!pub) return 'N/A';
+        const base = [pub.Nombre, pub.Apellido].filter(Boolean).join(' ');
+        // Si hay otro publicador activo con el mismo nombre y apellido, se agrega el 2do apellido
+        const duplicated = activePublishers.some(o => o.id !== pub.id && o.Nombre === pub.Nombre && o.Apellido === pub.Apellido);
+        const second = pub['2do Apellido'];
+        return duplicated && second && String(second).toLowerCase() !== 'n/a' ? `${base} ${second}` : base;
     }, [activePublishers]);
 
     const getEligiblePublishers = useCallback((role: string) => {
-        let eligible = malePublishers.filter(p => p.asignacionesDisponibles?.includes(role));
+        let eligible = malePublishers.filter(p => hasRole(p, role));
 
         if (role === 'Conductor de la Atalaya') {
             eligible = eligible.filter(p => p.Privilegio === 'Anciano');
