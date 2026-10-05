@@ -2062,7 +2062,10 @@ const VisitaSC: React.FC<VisitaSCProps> = ({
                                 const refMatch = contentFromDurationLine.match(/^(.*?)\s*(\(.*\))$/);
                                 if (refMatch) { title = refMatch[1].trim(); references = refMatch[2].trim(); }
                                 else { title = contentFromDurationLine; references = ''; }
-                                currentWeek.studentAssignments.push({ title, duration, references, type: isDiscourse ? 'discurso_estudiante' : 'demonstration', studentId: null, helperId: isDiscourse ? null : undefined });
+                                // "¿Qué dirías?" no es asignación de estudiante: la presenta un anciano o siervo ministerial
+                                // como análisis con el auditorio, sin ayudante (S-38-S 8/26, párr. 9).
+                                const isAnalysis = !isDiscourse && /qu[eé]\s+dir[ií]as/i.test(title);
+                                currentWeek.studentAssignments.push({ title, duration, references, type: isAnalysis ? 'que_dirias' : (isDiscourse ? 'discurso_estudiante' : 'demonstration'), studentId: null, helperId: (isDiscourse || isAnalysis) ? null : undefined });
                                 break;
                             }
                             case 'VIDA_CRISTIANA': {
@@ -2820,6 +2823,14 @@ const VyMProgramModal: React.FC<VyMModalProps> = ({ draft, setDraft, programText
         }).sort((a, b) => a.Nombre.localeCompare(b.Nombre));
     }
 
+    // "¿Qué dirías?": hermanos marcados en Configuración (Vida y Ministerio). Si aún no hay nadie marcado,
+    // se ofrecen los ancianos y siervos ministeriales.
+    const getEligibleAnalysis = () => {
+        const all = getEligible('vym_que_dirias');
+        const flagged = all.filter(p => p.vym_que_dirias);
+        return flagged.length > 0 ? flagged : all.filter(p => p.Privilegio === 'Anciano' || p.Privilegio === 'Siervo Ministerial');
+    };
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -2897,10 +2908,10 @@ const VyMProgramModal: React.FC<VyMModalProps> = ({ draft, setDraft, programText
                                                 className="flex-1 p-2 border rounded-lg text-sm"
                                             >
                                                 <option value="">Vacante</option>
-                                                {getEligible('vym_revisita').map(p => <option key={p.id} value={p.id}>{p.Nombre} {p.Apellido}</option>)}
+                                                {(p.type === 'que_dirias' ? getEligibleAnalysis() : getEligible('vym_revisita')).map(pub => <option key={pub.id} value={pub.id}>{pub.Nombre} {pub.Apellido}</option>)}
                                             </select>
                                         </div>
-                                        {p.type !== 'discurso_estudiante' && (
+                                        {p.type !== 'discurso_estudiante' && p.type !== 'que_dirias' && (
                                             <div className="flex gap-4 items-center pl-4">
                                                 <span className="text-[10px] font-bold w-44 truncate text-slate-400 uppercase">/ Ayudante</span>
                                                 <select
