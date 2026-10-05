@@ -128,7 +128,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
     }, [publishers, serviceReports, selectedYear, selectedMonth]);
 
     const publishersWhoDidNotReport = useMemo(() => {
-        const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
+        const activePublishers = publishers.filter(p => p.Estatus === 'Activo' && !isStatusLikeGroup(p.Grupo));
 
         return activePublishers.filter(pub => {
             const hasReported = serviceReports.some(r =>
@@ -169,7 +169,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
             monthsToCheck.push({ month: MONTHS[newMonthIndex], year: newYear });
         }
 
-        const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
+        const activePublishers = publishers.filter(p => p.Estatus === 'Activo' && !isStatusLikeGroup(p.Grupo));
 
         return activePublishers.filter(pub => {
             const isInactiveFor6Months = monthsToCheck.slice(0, 6).every(({ month, year }) => {
@@ -207,7 +207,7 @@ const InformeMensualConsolidado: React.FC<InformeMensualConsolidadoProps> = ({ p
             }
         }
 
-        const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
+        const activePublishers = publishers.filter(p => p.Estatus === 'Activo' && !isStatusLikeGroup(p.Grupo));
 
         const irregulars = activePublishers.map(pub => {
             const missedMonths: string[] = [];
