@@ -1,7 +1,7 @@
   import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Publisher, LMMeetingSchedule, ModalInfo, LMWeekAssignment } from '../types';
 import { MONTHS } from '../constants';
-import { buildS140Pdf } from './s140Pdf';
+import { buildS140Pdf, estimateWeekMinutes } from './s140Pdf';
 
 declare const jspdf: any;
 declare const db: any;
@@ -36,6 +36,9 @@ const STUDENT_ASSIGNMENTS = {
 };
 
 // Las instrucciones S-38-S 8/26 aplican desde el año de servicio 2027 (septiembre 2026 en adelante).
+// Duración total que debe tener la reunión de entre semana, con canciones y oraciones (minutos).
+const MEETING_TARGET_MIN = 105;
+const fmtDuration = (m: number) => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
 const S38_START = { year: 2026, monthIndex: 8 };
 const isS38Period = (year: number, month: string) => year * 12 + MONTHS.indexOf(month) >= S38_START.year * 12 + S38_START.monthIndex;
 // Asignaciones cuyo ayudante puede ser del mismo sexo o un familiar (S-38 párr. 7 y 11). Revisitas y Discípulos: solo del mismo sexo.
@@ -400,6 +403,19 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             const week = ns.weeks[weekIndex];
             if (!week || !week.christianLivingParts) return prev;
             week.christianLivingParts.splice(partIndex, 1);
+            return ns;
+        });
+    };
+
+    // Ajusta la duración del estudio bíblico para que la reunión dure en total MEETING_TARGET_MIN.
+    const handleFitCbsDuration = (weekIndex: number) => {
+        setEditableSchedule(prev => {
+            if (!prev) return null;
+            const ns = JSON.parse(JSON.stringify(prev));
+            const week = ns.weeks[weekIndex];
+            if (!week || !week.hasCbs) return prev;
+            const est = estimateWeekMinutes(week);
+            week.cbsDuration = `${Math.max(5, MEETING_TARGET_MIN - (est.total - est.cbs))} mins.`;
             return ns;
         });
     };
@@ -973,8 +989,27 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 </div>
                             )}
                             {week.hasCbs && <EditableAssignmentRow
-                                label={<><div>Estudio bíblico de la congregación</div>{week.cbsSource && <div className="text-xs text-gray-500 italic">{isEditing ? renderInput(weekIndex, 'cbsSource', 'Referencia') : week.cbsSource}</div>}</>}
-                                time="30 min.">
+                                label={<div>
+                                    <div>Estudio bíblico de la congregación</div>
+                                    {week.cbsSource && <div className="text-xs text-gray-500 italic">{isEditing ? renderInput(weekIndex, 'cbsSource', 'Referencia') : week.cbsSource}</div>}
+                                    {isEditing && (() => {
+                                        const est = estimateWeekMinutes(week);
+                                        const ok = est.total === MEETING_TARGET_MIN;
+                                        return (
+                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                                <span>Duración:</span>
+                                                <input type="text" value={week.cbsDuration ?? '30 mins.'} onChange={e => handleEditChange(weekIndex, 'cbsDuration', e.target.value)} className="w-24 p-1 border rounded bg-yellow-50" placeholder="30 mins." />
+                                                <span className={ok ? 'text-green-700 font-semibold' : 'text-amber-700 font-semibold'}>Reunión estimada: {fmtDuration(est.total)}</span>
+                                                {!ok && (
+                                                    <button type="button" onClick={() => handleFitCbsDuration(weekIndex)} className="px-2 py-0.5 border border-amber-300 bg-amber-50 text-amber-800 rounded hover:bg-amber-100">
+                                                        Ajustar a {fmtDuration(MEETING_TARGET_MIN)}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>}
+                                time={week.cbsDuration || '30 min.'}>
                                 <div>
                                     <div className="flex items-center justify-end mb-1">
                                         <span className="mr-1">Conductor:</span>

@@ -25,6 +25,8 @@ const INTRO_MIN = 1;
 const MIDDLE_SONG_MIN = 5;
 const CBS_MIN = 30;
 const CONCLUSION_MIN = 3;
+const CLOSING_SONG_MIN = 7;   // canción y oración finales (con esto una semana estándar suma 1 h 45 min, como indica el S-38)
+const COUNSEL_MIN = 1;        // consejo del presidente tras cada asignación de estudiante (S-38, párr. 19); no está en la duración de la guía
 
 // Medidas en puntos (hoja carta 612 x 792). Márgenes del modelo: 0.79" a los lados, 0.70" arriba.
 const PAGE_W = 612;
@@ -65,6 +67,16 @@ const fmtClock = (mins: number): string => `${Math.floor(mins / 60) % 12 || 12}:
 // La guía trae la referencia al final del título ("DE CASA EN CASA. (lmd lección 2 punto 3)."); el S-140 solo lleva el título.
 export const cleanTitle = (t?: string | null): string =>
     String(t ?? '').replace(/\s*\((?:[^()]*\b(?:lecci[oó]n|punto|p[aá]g|p[aá]rr|lmd|lff|th|ijwbq|bhs)\b[^()]*)\)\.?\s*$/i, '').trim();
+
+// Duración total estimada (min) de la reunión de una semana, con las mismas suposiciones que usa el PDF.
+export const estimateWeekMinutes = (week: any): { total: number; cbs: number } => {
+    let total = OPENING_SONG_MIN + INTRO_MIN + MIDDLE_SONG_MIN + CONCLUSION_MIN + CLOSING_SONG_MIN;
+    (week.treasuresParts || []).forEach((part: any) => { total += parseMinutes(part.duration, part.type === 'lectura_biblia' ? 4 : 10); });
+    (week.studentAssignments || []).forEach((a: any) => { total += parseMinutes(a.duration, 3) + (a.type === 'que_dirias' ? 0 : COUNSEL_MIN); });
+    (week.christianLivingParts || []).forEach((part: any) => { total += parseMinutes(part.duration, 15); });
+    const cbs = week.hasCbs ? parseMinutes(week.cbsDuration, CBS_MIN) : 0;
+    return { total: total + cbs, cbs };
+};
 
 class Painter {
     constructor(public doc: any, public dry: boolean, public m: Metrics = NORMAL) {}
@@ -190,6 +202,7 @@ const drawWeek = (p: Painter, y0: number, week: any, nameOf: GetName, opts: S140
             label: analysis ? undefined : (discourse ? 'Estudiante:' : 'Estudiante/Ayudante:'),
             name: analysis || discourse ? nameOf(asig.studentId) : join(asig.studentId, asig.helperId),
         });
+        if (!analysis) t += COUNSEL_MIN;
     });
 
     y += drawBar(p, y, 'Nuestra vida cristiana', BURGUNDY, showAux);
@@ -202,7 +215,7 @@ const drawWeek = (p: Painter, y0: number, week: any, nameOf: GetName, opts: S140
     });
     if (week.hasCbs) {
         y += drawRow(p, y, {
-            time: tick(CBS_MIN), text: `${next()}. Estudio bíblico de la congregación`, duration: '30 mins.',
+            time: tick(parseMinutes(week.cbsDuration, CBS_MIN)), text: `${next()}. Estudio bíblico de la congregación`, duration: week.cbsDuration || '30 mins.',
             label: 'Conductor/Lector:', name: join(week.cbsConductorId, week.cbsReaderId),
         });
     }
