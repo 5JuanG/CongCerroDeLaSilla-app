@@ -286,11 +286,27 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
         return () => { alive = false; };
     }, []);
 
+    const cleanPart = (v: any) => (v && String(v).trim().toUpperCase() !== 'N/A' ? String(v).trim() : '');
+    // Nombre completo (Nombre, Apellido, 2do Apellido y Apellido de casada) para distinguir a cada publicador en los select.
+    const getPublisherFullName = useCallback((id: string | null | undefined): string => {
+        if (!id) return '';
+        const pub = publishers.find(p => p.id === id);
+        return pub ? [pub.Nombre, pub.Apellido, pub['2do Apellido'], pub['Apellido de casada']].map(cleanPart).filter(Boolean).join(' ') : 'N/A';
+    }, [publishers]);
+    // Nombres cortos (Nombre y Apellido); si dos publicadores coinciden, se agrega el 2do apellido.
+    const duplicatedShortNames = useMemo(() => {
+        const seen = new Map<string, number>();
+        publishers.forEach(p => { const k = `${p.Nombre} ${p.Apellido}`.trim().toLowerCase(); seen.set(k, (seen.get(k) || 0) + 1); });
+        return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k));
+    }, [publishers]);
     const getPublisherName = useCallback((id: string | null | undefined): string => {
         if (!id) return '';
         const pub = publishers.find(p => p.id === id);
-        return pub ? [pub.Nombre, pub.Apellido].filter(Boolean).join(' ') : 'N/A';
-    }, [publishers]);
+        if (!pub) return 'N/A';
+        const short = [pub.Nombre, pub.Apellido].filter(Boolean).join(' ');
+        const second = cleanPart(pub['2do Apellido']);
+        return duplicatedShortNames.has(short.toLowerCase()) && second ? `${short} ${second}` : short;
+    }, [publishers, duplicatedShortNames]);
 
     const getEligiblePublishers = useCallback((roleKey: string, gender?: 'Hombre' | 'Mujer') => {
         // La pestaña "Configuración" (checkboxes por publicador y tipo de
@@ -377,7 +393,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
         await new Promise(res => setTimeout(res, 50));
 
         try {
-            const lines = programText.split('\n').map(l => l.trim()).filter(Boolean);
+            const lines = programText.normalize('NFC').replace(/[\u00a0\u2007\u202f]/g, ' ').split('\n').map(l => l.trim().replace(/^[•·▪◦‣⁃●*\-–—]+\s*/, '')).filter(Boolean);
             const weekBoundaries = lines.reduce<number[]>((acc, line, index) => {
                 if (/^(\d{1,2}(?:-\d{1,2})? DE [A-ZÁÉÍÓÚÑ]+)/i.test(line)) {
                     acc.push(index);
@@ -422,6 +438,9 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                 };
 
                 let currentSection: 'INIT' | 'TESOROS' | 'MAESTROS' | 'VIDA_CRISTIANA' = 'INIT';
+
+                // Respaldo: si la canción no está al inicio de una línea (o viene junto a otro texto), se toma de cualquier "Canción N" de la semana, en orden.
+                const anySongs = [...weekLines.join('\n').matchAll(/(?:Canci[oó]n|C[aá]ntico)\s+(?:n[úu]m(?:ero|\.)?\s*)?(\d{1,3})/gi)].map(m => m[1]);
 
                 for (let j = 0; j < weekLines.length; j++) {
                     const line = weekLines[j];
@@ -548,6 +567,16 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 j = durationLineIndex;
                             }
                         }
+                    }
+                }
+                const missingSongs = (['song1', 'song2', 'song3'] as const).filter(k => !currentWeek[k]);
+                if (missingSongs.length > 0) {
+                    if (anySongs.length >= 3) {
+                        if (!currentWeek.song1) currentWeek.song1 = anySongs[0];
+                        if (!currentWeek.song2) currentWeek.song2 = anySongs[1];
+                        if (!currentWeek.song3) currentWeek.song3 = anySongs[2];
+                    } else if (missingSongs.length === 3) {
+                        missingSongs.forEach((k, i) => { if (anySongs[i]) currentWeek[k] = anySongs[i]; });
                     }
                 }
                 parsedWeeks.push(currentWeek);
@@ -739,7 +768,10 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                 const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
                 const imgData = canvas.toDataURL('image/jpeg', 0.95);
                 if (i > 0) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                const ratio = canvas.height / canvas.width;
+                const drawH = Math.min(pdfWidth * ratio, pdfHeight);
+                const drawW = drawH / ratio;
+                pdf.addImage(imgData, 'JPEG', 0, 0, drawW, drawH);
             }
 
             pdf.save(`Programa_VyM_${selectedMonth}_${selectedYear}.pdf`);
@@ -773,10 +805,11 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                     value={value}
                     onChange={e => handleEditChange(weekIndex, assignmentKey, e.target.value)}
                     className="w-full p-1 border rounded text-sm bg-yellow-50"
+                    title={getPublisherFullName(value)}
                 >
                     <option value="">-- Vacante --</option>
                     {eligible.map(p => (
-                        <option key={p.id} value={p.id}>{getPublisherName(p.id)}</option>
+                        <option key={p.id} value={p.id}>{getPublisherFullName(p.id)}</option>
                     ))}
                 </select>
             );
