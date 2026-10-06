@@ -1,10 +1,9 @@
   import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Publisher, LMMeetingSchedule, ModalInfo, LMWeekAssignment } from '../types';
 import { MONTHS } from '../constants';
-import SchedulePDFView from './S140Program';
+import { buildS140Pdf } from './s140Pdf';
 
 declare const jspdf: any;
-declare const html2canvas: any;
 declare const db: any;
 
 // Define props
@@ -256,7 +255,6 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
 
     const [isPublic, setIsPublic] = useState(false);
     const [programText, setProgramText] = useState('');
-    const pdfContentRef = useRef<HTMLDivElement>(null);
 
     const activePublishers = useMemo(() => publishers.filter(p => p.Estatus === 'Activo'), [publishers]);
 
@@ -380,6 +378,29 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             }
             current[keys[keys.length - 1]] = value;
             return newSchedule;
+        });
+    };
+
+    // Semanas en las que la guía pide cambiar la sección "Nuestra vida cristiana" (p. ej. informe del Cuerpo Gobernante,
+    // informe de diseño y construcción): se puede agregar una asignación con su título, duración y responsable, o quitar una.
+    const handleAddChristianLivingPart = (weekIndex: number) => {
+        setEditableSchedule(prev => {
+            if (!prev) return null;
+            const ns = JSON.parse(JSON.stringify(prev));
+            const week = ns.weeks[weekIndex];
+            if (!week) return prev;
+            week.christianLivingParts = [...(week.christianLivingParts || []), { title: 'Nueva asignación', duration: '5 mins.', references: '', assigneeId: '', custom: true }];
+            return ns;
+        });
+    };
+    const handleRemoveChristianLivingPart = (weekIndex: number, partIndex: number) => {
+        setEditableSchedule(prev => {
+            if (!prev) return null;
+            const ns = JSON.parse(JSON.stringify(prev));
+            const week = ns.weeks[weekIndex];
+            if (!week || !week.christianLivingParts) return prev;
+            week.christianLivingParts.splice(partIndex, 1);
+            return ns;
         });
     };
 
@@ -748,32 +769,15 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
 
     const handleExportPdf = async () => {
         const scheduleToPrint = draftSchedule || editableSchedule || scheduleForSelectedMonth;
-        const content = pdfContentRef.current;
-        if (!content || !scheduleToPrint) {
+        if (!scheduleToPrint) {
             onShowModal({ type: 'error', title: 'Error', message: 'No hay contenido para exportar a PDF.' });
             return;
         }
         setIsLoading(true);
-        onShowModal({ type: 'info', title: 'Generando PDF', message: 'Por favor, espere...' });
-
         try {
             // @ts-ignore
             const { jsPDF } = jspdf;
-            const pages = Array.from(content.querySelectorAll('[data-s140-page]')) as HTMLElement[];
-            const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            for (let i = 0; i < pages.length; i++) {
-                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-                const imgData = canvas.toDataURL('image/jpeg', 0.95);
-                if (i > 0) pdf.addPage();
-                const ratio = canvas.height / canvas.width;
-                const drawH = Math.min(pdfWidth * ratio, pdfHeight);
-                const drawW = drawH / ratio;
-                pdf.addImage(imgData, 'JPEG', 0, 0, drawW, drawH);
-            }
-
+            const pdf = buildS140Pdf(jsPDF, scheduleToPrint, getPublisherName, { midweekTime });
             pdf.save(`Programa_VyM_${selectedMonth}_${selectedYear}.pdf`);
             onShowModal({ type: 'success', title: 'Éxito', message: 'PDF generado correctamente.' });
         } catch (error) {
@@ -944,6 +948,12 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                         ) : (
                                             part.references && <div className="text-xs text-gray-500 mt-1">{part.references}</div>
                                         )}
+                                        {isEditing && (
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <input type="text" value={part.duration || ''} onChange={e => handleEditChange(weekIndex, `christianLivingParts.${partIndex}.duration`, e.target.value)} className="w-32 p-1 border rounded text-xs bg-yellow-50" placeholder="Duración (ej. 5 mins.)" />
+                                                <button type="button" onClick={() => handleRemoveChristianLivingPart(weekIndex, partIndex)} className="text-xs text-red-600 hover:underline" title="Quitar esta asignación de la semana">Quitar</button>
+                                            </div>
+                                        )}
                                     </div>
                                 } time={`${part.duration || ''}`}>
                                     {part.note ? <em className="text-gray-500">{part.note}</em> : (isEditing ? renderSelect(weekIndex, `christianLivingParts.${partIndex}.assigneeId`, 'vym_vida_cristiana') : (
@@ -954,6 +964,14 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                     ))}
                                 </EditableAssignmentRow>
                             ))}
+                            {isEditing && (
+                                <div className="my-2">
+                                    <button type="button" onClick={() => handleAddChristianLivingPart(weekIndex)} className="px-3 py-1 text-sm font-semibold text-red-800 bg-red-50 border border-red-200 rounded-md hover:bg-red-100">
+                                        ➕ Agregar asignación a Nuestra vida cristiana
+                                    </button>
+                                    <p className="text-xs text-gray-500 mt-1">Para cuando la guía pide agregar un informe u otra parte (p. ej. Informe del Cuerpo Gobernante). Escribe el título, la duración y elige quién la presenta.</p>
+                                </div>
+                            )}
                             {week.hasCbs && <EditableAssignmentRow
                                 label={<><div>Estudio bíblico de la congregación</div>{week.cbsSource && <div className="text-xs text-gray-500 italic">{isEditing ? renderInput(weekIndex, 'cbsSource', 'Referencia') : week.cbsSource}</div>}</>}
                                 time="30 min.">
@@ -1114,16 +1132,6 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
 
     return (
         <div className="container mx-auto max-w-7xl p-4">
-            <div className="absolute -left-[9999px] top-0">
-                {(draftSchedule || editableSchedule || scheduleForSelectedMonth) &&
-                    <SchedulePDFView
-                        ref={pdfContentRef}
-                        schedule={draftSchedule || editableSchedule || scheduleForSelectedMonth}
-                        getPublisherName={getPublisherName}
-                        midweekTime={midweekTime}
-                    />
-                }
-            </div>
             <div className="bg-white p-6 rounded-lg shadow-md">
                 {canConfig && (
                     <div className="mb-4 border-b border-gray-200">
