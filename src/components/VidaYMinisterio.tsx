@@ -1,9 +1,11 @@
-  import React, { useState, useEffect, useMemo, useCallback, useRef, forwardRef } from 'react';
+  import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Publisher, LMMeetingSchedule, ModalInfo, LMWeekAssignment } from '../types';
 import { MONTHS } from '../constants';
+import SchedulePDFView from './S140Program';
 
 declare const jspdf: any;
 declare const html2canvas: any;
+declare const db: any;
 
 // Define props
 interface VidaYMinisterioProps {
@@ -22,13 +24,30 @@ const MALE_ASSIGNMENTS = {
     'Conductor Perlas': 'vym_perlas',
     'Discurso Vida Cristiana': 'vym_vida_cristiana',
     'Conductor Estudio Bíblico': 'vym_conductor_ebc',
+    // Instrucciones S-38 (8/26), párr. 9: la presenta el presidente u otro anciano o siervo ministerial competente.
+    '¿Qué dirías? (Análisis)': 'vym_que_dirias',
 };
 
 const STUDENT_ASSIGNMENTS = {
     'Lectura de la Biblia': 'vym_lectura',
-    'SMM Asig. 4, 5, 6 y 7': 'vym_revisita', // Represents all non-discourse student assignments.
-    'SMM Discurso': 'vym_discurso_estudiante',
+    // S-38 (8/26) párr. 7, 8, 10 y 11 (escenificación): estudiante (hermano o hermana).
+    'SMM Demostraciones (Conversaciones, Revisitas, Discípulos, Creencias)': 'vym_revisita', // Todas las asignaciones de estudiante que no son discurso.
+    // S-38 (8/26) párr. 11 (si es discurso) y 12: solo estudiante varón.
+    'SMM Discurso (Creencias / Discurso)': 'vym_discurso_estudiante',
 };
+
+// Las instrucciones S-38-S 8/26 aplican desde el año de servicio 2027 (septiembre 2026 en adelante).
+const S38_START = { year: 2026, monthIndex: 8 };
+const isS38Period = (year: number, month: string) => year * 12 + MONTHS.indexOf(month) >= S38_START.year * 12 + S38_START.monthIndex;
+// Asignaciones cuyo ayudante puede ser del mismo sexo o un familiar (S-38 párr. 7 y 11). Revisitas y Discípulos: solo del mismo sexo.
+const FAMILY_HELPER_TITLE = /empecemos conversaciones|expliquemos nuestras creencias/i;
+// Línea de canción en la guía: "Canción 3 y oración" (también acepta "Cántico").
+const SONG_LINE = /^(?:C[aá]ntico|Canci[oó]n)\s+(\d+)/i;
+// Encabezado de semana: "5-11 DE OCTUBRE" o "26 DE OCTUBRE A 1 DE NOVIEMBRE", opcionalmente seguido de la lectura semanal ("| ISAÍAS 1-5").
+const WEEK_HEADER = /^(\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s+DE\s+[A-ZÁÉÍÓÚÑ]+(?:\s+(?:A|AL|-|–)\s+\d{1,2}\s+DE\s+[A-ZÁÉÍÓÚÑ]+)?)\s*(?:[|—–:-]\s*)?(.*)$/i;
+// Referencia bíblica sola en una línea: "ISAÍAS 1-5", "1 CRÓNICAS 20-23", "SALMOS 1-10, 20".
+const SCRIPTURE_LINE = /^(?:[1-3]\s*)?[A-Za-zÁÉÍÓÚÑáéíóúñ]+(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]+)*\s+\d+[\d\s,:\-–—y]*$/i;
+const ANALYSIS_TITLE = /qu[eé]\s+dir[ií]as/i;
 
 const ALL_ASSIGNMENT_KEYS = { ...MALE_ASSIGNMENTS, ...STUDENT_ASSIGNMENTS };
 
@@ -215,48 +234,6 @@ const ConfigView: React.FC<ConfigViewProps> = ({ publishers, onUpdatePublisherVy
 
 
 
-const SchedulePDFView = forwardRef<HTMLDivElement, { schedule: LMMeetingSchedule, getPublisherName: (id: string | null | undefined) => string }>(({ schedule, getPublisherName }, ref) => {
-
-    const AssignmentRow: React.FC<{ label: React.ReactNode, name: React.ReactNode }> = ({ label, name }) => (
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dotted #ccc' }}>
-            <div style={{ flex: '1 1 65%' }}>{label}</div>
-            <div style={{ flex: '1 1 35%', textAlign: 'right', fontWeight: 'bold' }}>{name}</div>
-        </div>
-    );
-
-    return (
-        <div ref={ref} className="p-4 bg-white text-black" style={{ width: '7.5in', fontSize: '12pt', fontFamily: 'Arial, sans-serif' }}>
-            {schedule.weeks.map((week, index) => (
-                <div key={index} className="mb-6" style={{ pageBreakInside: 'avoid' }}>
-                    <h3 className="font-bold text-lg border-b-2 border-black pb-1 mb-2">{week.weekRange}</h3>
-                    {week.bibleReadingSource && <p className="text-center font-semibold my-2">Lectura Semanal: {week.bibleReadingSource}</p>}
-
-                    <AssignmentRow label={<>Cántico {week.song1} y oración</>} name={`${getPublisherName(week.presidentId)} (Presidente)`} />
-
-                    <div className="bg-gray-200 font-bold p-1 my-2 text-sm">TESOROS DE LA BIBLIA</div>
-                    {(week.treasuresParts || []).map((part: any, partIndex: number) => (
-                        <AssignmentRow key={partIndex} label={<>{part.title} {part.references && <span className="text-gray-600 text-xs">({part.references})</span>}</>} name={getPublisherName(part.assigneeId)} />
-                    ))}
-
-                    <div className="bg-gray-200 font-bold p-1 my-2 text-sm">SEAMOS MEJORES MAESTROS</div>
-                    {(week.studentAssignments || []).map((asig: any, asigIndex: number) => (
-                        <AssignmentRow key={asigIndex} label={<>{asig.title} <span className="text-gray-600 text-xs">({asig.references})</span></>} name={<>{getPublisherName(asig.studentId)} {asig.helperId !== null && `/ ${getPublisherName(asig.helperId)}`}</>} />
-                    ))}
-
-                    <div className="bg-gray-200 font-bold p-1 my-2 text-sm">NUESTRA VIDA CRISTIANA</div>
-                    <AssignmentRow label={`Cántico ${week.song2}`} name={<></>} />
-                    {(week.christianLivingParts || []).map((part: any, partIndex: number) => (
-                        <AssignmentRow key={partIndex} label={<>{part.title} {part.references && <span className="text-gray-600 text-xs">({part.references})</span>}</>} name={part.note || getPublisherName(part.assigneeId)} />
-                    ))}
-                    {week.hasCbs && <AssignmentRow label={<>Estudio bíblico de la congregación <span className="text-gray-600 text-xs">({week.cbsSource})</span></>} name={<>{getPublisherName(week.cbsConductorId)} / {getPublisherName(week.cbsReaderId)}</>} />}
-                    <AssignmentRow label="Palabras de conclusión" name={getPublisherName(week.presidentId)} />
-                    <AssignmentRow label={<>Cántico {week.song3} y oración</>} name={getPublisherName(week.finalPrayerId)} />
-
-                </div>
-            ))}
-        </div>
-    );
-});
 
 
 const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
@@ -294,6 +271,20 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
         const currentSchedule = lmSchedules.find(s => s.year === selectedYear && s.month === selectedMonth);
         setIsPublic(currentSchedule?.isPublic || false);
     }, [selectedMonth, selectedYear, activeTab, lmSchedules]);
+
+    // Hora de inicio de la reunión de entre semana (Configuración general); se usa para calcular los tiempos del programa.
+    const [midweekTime, setMidweekTime] = useState<string>('19:30');
+    useEffect(() => {
+        let alive = true;
+        try {
+            if (typeof db !== 'undefined') {
+                db.collection('settings').doc('meeting_config').get()
+                    .then((doc: any) => { const t = doc?.data()?.midweekTime; if (alive && t) setMidweekTime(t); })
+                    .catch(() => { /* se queda con 19:30 */ });
+            }
+        } catch { /* sin acceso a la configuración: 19:30 */ }
+        return () => { alive = false; };
+    }, []);
 
     const getPublisherName = useCallback((id: string | null | undefined): string => {
         if (!id) return '';
@@ -398,6 +389,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                 throw new Error("No se encontraron fechas de semana en el texto (Ej: '1-7 DE DICIEMBRE').");
             }
 
+            const useS38 = isS38Period(selectedYear, selectedMonth);
             const parsedWeeks: LMWeekAssignment[] = [];
 
             for (let i = 0; i < weekBoundaries.length; i++) {
@@ -405,8 +397,25 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                 const weekEndIndex = i + 1 < weekBoundaries.length ? weekBoundaries[i + 1] : lines.length;
                 const weekLines = lines.slice(weekStartIndex, weekEndIndex);
 
+                // La fecha queda sola en weekRange; si la lectura semanal viene en el encabezado, se toma de ahí.
+                const headerMatch = lines[weekStartIndex].match(WEEK_HEADER);
+                let weeklyReading: string | null = null;
+                if (headerMatch && headerMatch[2] && !SONG_LINE.test(headerMatch[2].trim())) {
+                    weeklyReading = headerMatch[2].replace(/^Lectura semanal( de la Biblia)?\s*[:|–—-]?\s*/i, '').trim() || null;
+                }
+                if (!weeklyReading) {
+                    // Lectura semanal en las líneas siguientes: "Lectura semanal: X" o la referencia sola ("ISAÍAS 1-5") antes de la primera canción/sección.
+                    for (let k = 1; k < weekLines.length; k++) {
+                        const l = weekLines[k];
+                        const labeled = l.match(/Lectura semanal(?: de la Biblia)?\s*[:|–—-]\s*(.+)/i);
+                        if (labeled) { weeklyReading = labeled[1].trim(); break; }
+                        if (SONG_LINE.test(l) || /TESOROS DE LA BIBLIA|SEAMOS MEJORES MAESTROS|NUESTRA VIDA CRISTIANA/i.test(l) || /^\d+\./.test(l)) break;
+                        if (SCRIPTURE_LINE.test(l) && l.length <= 60) { weeklyReading = l; break; }
+                    }
+                }
+
                 let currentWeek: any = {
-                    weekRange: lines[weekStartIndex], bibleReadingSource: null, song1: null, song2: null, song3: null,
+                    weekRange: headerMatch ? headerMatch[1].trim() : lines[weekStartIndex], bibleReadingSource: weeklyReading, song1: null, song2: null, song3: null,
                     presidentId: null, finalPrayerId: null,
                     treasuresParts: [], studentAssignments: [], christianLivingParts: [],
                     hasCbs: false, cbsConductorId: null, cbsReaderId: null, cbsSource: null,
@@ -421,13 +430,13 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                     if (/SEAMOS MEJORES MAESTROS/.test(line)) { currentSection = 'MAESTROS'; continue; }
                     if (/NUESTRA VIDA CRISTIANA/.test(line)) { currentSection = 'VIDA_CRISTIANA'; continue; }
 
-                    if (/Lectura semanal de la Biblia: (.*)/i.test(line) || /Lectura semanal: (.*)/i.test(line)) {
-                        currentWeek.bibleReadingSource = RegExp.$1.trim();
-                        continue;
+                    if (/Lectura semanal(?: de la Biblia)?\s*[:|–—-]/i.test(line)) {
+                        continue; // ya se tomó arriba
                     }
 
-                    if (/^C(a|á)n(c|t)i(c|o)o?\s+(\d+)/i.test(line)) {
-                        const songNumber = RegExp.$4;
+                    const songMatch = line.match(SONG_LINE);
+                    if (songMatch) {
+                        const songNumber = songMatch[1];
                         if (!currentWeek.song1) currentWeek.song1 = songNumber;
                         else if (!currentWeek.song2) currentWeek.song2 = songNumber;
                         else currentWeek.song3 = songNumber;
@@ -451,7 +460,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 break;
                             }
                             // Stop looking if we hit the next numbered item or section
-                            if (k > j && (/^\d+\./.test(potentialLine) || /SEAMOS MEJORES MAESTROS|NUESTRA VIDA CRISTIANA|TESOROS DE LA BIBLIA|^C(a|á)n(c|t)i(c|o)o?\s+\d+/.test(potentialLine) || /Palabras de conclusión/.test(potentialLine))) {
+                            if (k > j && (/^\d+\./.test(potentialLine) || /SEAMOS MEJORES MAESTROS|NUESTRA VIDA CRISTIANA|TESOROS DE LA BIBLIA/.test(potentialLine) || SONG_LINE.test(potentialLine) || /Palabras de conclusión/.test(potentialLine))) {
                                 break;
                             }
                         }
@@ -484,11 +493,15 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                         title = contentFromDurationLine;
                                         references = '';
                                     }
+                                    // "¿Qué dirías?" no es asignación de estudiante: la presenta un anciano o siervo ministerial
+                                    // como análisis con el auditorio (S-38 8/26, párr. 9). No lleva ayudante.
+                                    const isAnalysis = useS38 && !isDiscourse && ANALYSIS_TITLE.test(title);
                                     currentWeek.studentAssignments.push({
                                         title, duration, references,
-                                        type: isDiscourse ? 'discurso_estudiante' : 'demonstration',
+                                        number: Number((line.match(/^(\d+)\./) || [])[1]) || null, // núm. de la parte en la Guía (4, 5, 6, 7)
+                                        type: isAnalysis ? 'que_dirias' : (isDiscourse ? 'discurso_estudiante' : 'demonstration'),
                                         studentId: null,
-                                        helperId: isDiscourse ? null : undefined,
+                                        helperId: (isDiscourse || isAnalysis) ? null : undefined,
                                     });
                                     break;
                                 }
@@ -546,6 +559,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             }
             const studentFemaleQueue = [...getEligiblePublishers('vym_revisita', 'Mujer')];
             const studentMaleQueue = [...getEligiblePublishers('vym_revisita', 'Hombre')];
+            const allStudentEligible = getEligiblePublishers('vym_revisita');
 
             let assignedLastWeek = new Set<string>();
 
@@ -576,7 +590,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                     return person.id;
                 };
 
-                const assignStudentAndHelper = (assignment: any) => {
+                const assignStudentAndHelper = (assignment: any, allowFamilyHelper: boolean) => {
                     let studentId: string | null = null;
                     let helperId: string | null = null;
 
@@ -605,6 +619,15 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                 const [h] = queue.splice(originalHelperIndex, 1);
                                 queue.push(h);
                             }
+                        } else if (allowFamilyHelper && student.Familia) {
+                            // Sin ayudante del mismo sexo disponible: un familiar también es válido (S-38 párr. 7 y 11).
+                            const familyHelper = allStudentEligible.find(p =>
+                                p.id !== student.id && p.Familia && p.Familia === student.Familia && !assignedThisNight.has(p.id)
+                            );
+                            if (familyHelper) {
+                                helperId = familyHelper.id;
+                                assignedThisNight.add(familyHelper.id);
+                            }
                         }
                     };
 
@@ -629,8 +652,11 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                 for (const asig of week.studentAssignments) {
                     if (asig.type === 'discurso_estudiante') {
                         asig.studentId = assignNext('vym_discurso_estudiante');
+                    } else if (asig.type === 'que_dirias') {
+                        // Si aún no hay nadie marcado en "¿Qué dirías?", se toma de los ancianos/siervos de Vida Cristiana.
+                        asig.studentId = assignNext(queues['vym_que_dirias']?.length ? 'vym_que_dirias' : 'vym_vida_cristiana');
                     } else if (asig.helperId !== null) {
-                        assignStudentAndHelper(asig);
+                        assignStudentAndHelper(asig, useS38 && FAMILY_HELPER_TITLE.test(asig.title));
                     }
                 }
 
@@ -704,42 +730,16 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
         try {
             // @ts-ignore
             const { jsPDF } = jspdf;
-            const canvas = await html2canvas(content, { scale: 2, useCORS: true });
-            const imgData = canvas.toDataURL('image/png');
-
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'pt',
-                format: 'letter'
-            });
-
+            const pages = Array.from(content.querySelectorAll('[data-s140-page]')) as HTMLElement[];
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-            const margin = 40;
 
-            pdf.setFontSize(14);
-            pdf.setFont('helvetica', 'bold');
-            pdf.text("PROGRAMA DE LA REUNION VIDA Y MINISTERIO", pdfWidth / 2, margin, { align: 'center' });
-            pdf.text("CONG. CERRO DE LA SILLA-GPE.", pdfWidth / 2, margin + 16, { align: 'center' });
-
-            pdf.setFontSize(12);
-            pdf.setFont('helvetica', 'normal');
-            pdf.text(`${selectedMonth} ${selectedYear}`.toUpperCase(), pdfWidth / 2, margin + 32, { align: 'center' });
-
-            const imgProps = pdf.getImageProperties(imgData);
-            const imgWidth = pdfWidth - margin * 2;
-            const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-
-            let yPos = margin + 45;
-
-            const availableHeight = pdfHeight - yPos - margin;
-            if (imgHeight > availableHeight) {
-                const scaledHeight = availableHeight;
-                const scaledWidth = scaledHeight * (imgProps.width / imgProps.height);
-                const xPos = (pdfWidth - scaledWidth) / 2;
-                pdf.addImage(imgData, 'PNG', xPos, yPos, scaledWidth, scaledHeight);
-            } else {
-                pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+            for (let i = 0; i < pages.length; i++) {
+                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                if (i > 0) pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
             }
 
             pdf.save(`Programa_VyM_${selectedMonth}_${selectedYear}.pdf`);
@@ -822,7 +822,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                         }
 
                         <div className="text-sm">
-                            <EditableAssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song1 || ''} onChange={e => handleEditChange(weekIndex, 'song1', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song1} y oración</>}>
+                            <EditableAssignmentRow label={<>Canción {isEditing ? <input type="text" value={week.song1 || ''} onChange={e => handleEditChange(weekIndex, 'song1', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song1} y oración</>}>
                                 {isEditing ? renderSelect(weekIndex, 'presidentId', 'vym_presidente') : (
                                     <span className="flex items-center justify-end">
                                         <strong>{getPublisherName(week.presidentId)} (Presidente)</strong>
@@ -853,7 +853,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                         {isEditing && roleKey ? renderSelect(weekIndex, `treasuresParts.${partIndex}.assigneeId`, roleKey, gender) : (
                                             <span className="flex items-center justify-end">
                                                 {getPublisherName(part.assigneeId)}
-                                                <ReminderButton publisherId={part.assigneeId} details={{ date: week.weekRange, title: part.title, source: part.references }} />
+                                                <ReminderButton publisherId={part.assigneeId} details={{ date: week.weekRange, title: part.title, source: part.references, ...(part.type === 'lectura_biblia' ? { s89: true, number: partIndex + 1, studentId: part.assigneeId } : {}) }} />
                                             </span>
                                         )}
                                     </EditableAssignmentRow>
@@ -864,8 +864,9 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                             {(week.studentAssignments || []).map((asig: any, asigIndex: number) => {
                                 const studentId = currentSchedule?.weeks[weekIndex]?.studentAssignments?.[asigIndex]?.studentId;
                                 const isDiscourse = asig.type === 'discurso_estudiante';
-                                const studentRoleKey = isDiscourse ? 'vym_discurso_estudiante' : 'vym_revisita';
-                                const studentGender = isDiscourse ? 'Hombre' : undefined;
+                                const isAnalysis = asig.type === 'que_dirias';
+                                const studentRoleKey = isAnalysis ? 'vym_que_dirias' : (isDiscourse ? 'vym_discurso_estudiante' : 'vym_revisita');
+                                const studentGender = (isDiscourse || isAnalysis) ? 'Hombre' : undefined;
 
                                 return (
                                     <EditableAssignmentRow key={asigIndex} label={
@@ -881,15 +882,15 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                         <div className="flex flex-col items-end">
                                             <div className="flex items-center">
                                                 {isEditing ? renderSelect(weekIndex, `studentAssignments.${asigIndex}.studentId`, studentRoleKey, studentGender) : getPublisherName(asig.studentId)}
-                                                {!isEditing && <ReminderButton publisherId={asig.studentId} details={{ date: week.weekRange, title: asig.title, source: asig.references, helperId: asig.helperId }} />}
+                                                {!isEditing && <ReminderButton publisherId={asig.studentId} details={{ date: week.weekRange, title: asig.title, source: asig.references, helperId: asig.helperId, s89: true, number: asig.number ?? asigIndex + 4, studentId: asig.studentId }} />}
                                             </div>
-                                            {(asig.helperId !== null || isEditing) && (
+                                            {!isAnalysis && (asig.helperId !== null || isEditing) && (
                                                 <div className="flex items-center text-sm text-gray-600 mt-1">
                                                     <span className="mr-1">/ Ayudante:</span>
                                                     {isEditing ? renderSelect(weekIndex, `studentAssignments.${asigIndex}.helperId`, 'vym_revisita', undefined, studentId) : (
                                                         <>
                                                             {getPublisherName(asig.helperId)}
-                                                            <ReminderButton publisherId={asig.helperId} details={{ date: week.weekRange, title: `${asig.title} (Ayudante)`, source: asig.references, role: 'Ayudante' }} />
+                                                            <ReminderButton publisherId={asig.helperId} details={{ date: week.weekRange, title: `${asig.title} (Ayudante)`, source: asig.references, role: 'Ayudante', s89: true, forHelper: true, number: asig.number ?? asigIndex + 4, studentId: asig.studentId }} />
                                                         </>
                                                     )}
                                                 </div>
@@ -900,7 +901,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                             })}
 
                             <div className="bg-red-100 text-red-800 font-bold p-2 my-2 rounded-md">NUESTRA VIDA CRISTIANA</div>
-                            <EditableAssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song2 || ''} onChange={e => handleEditChange(weekIndex, 'song2', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song2}</>}><span></span></EditableAssignmentRow>
+                            <EditableAssignmentRow label={<>Canción {isEditing ? <input type="text" value={week.song2 || ''} onChange={e => handleEditChange(weekIndex, 'song2', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song2}</>}><span></span></EditableAssignmentRow>
                             {(week.christianLivingParts || []).map((part: any, partIndex: number) => (
                                 <EditableAssignmentRow key={partIndex} label={
                                     <div>
@@ -950,7 +951,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                     {/* Usually president does conclusion, no specific reminder needed if separate from president assignment? Or maybe redundancy is fine. */}
                                 </span>
                             </EditableAssignmentRow>
-                            <EditableAssignmentRow label={<>Cántico {isEditing ? <input type="text" value={week.song3 || ''} onChange={e => handleEditChange(weekIndex, 'song3', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song3} y oración</>}>
+                            <EditableAssignmentRow label={<>Canción {isEditing ? <input type="text" value={week.song3 || ''} onChange={e => handleEditChange(weekIndex, 'song3', e.target.value)} className="w-12 inline-block p-1 border rounded text-sm bg-yellow-50" /> : week.song3} y oración</>}>
                                 {isEditing ? renderSelect(weekIndex, 'finalPrayerId', 'vym_oracion') : (
                                     <span className="flex items-center justify-end">
                                         {getPublisherName(week.finalPrayerId)}
@@ -1011,9 +1012,41 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
         window.open(url, '_blank');
     };
 
-    const handleSendReminder = (publisherId: string, assignmentDetails: { date: string, title?: string, role?: string, helperId?: string, room?: string, source?: string }) => {
+    // Abre WhatsApp directo al celular del publicador (si lo tiene capturado) o con el selector de contactos.
+    const openWhatsApp = (publisher: Publisher, message: string) => {
+        const phone = publisher.Cel ? String(publisher.Cel).replace(/\D/g, '') : '';
+        const clean = phone.length === 10 ? '52' + phone : phone;
+        const url = clean
+            ? `https://wa.me/${clean}?text=${encodeURIComponent(message)}`
+            : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+        window.open(url, '_blank');
+    };
+
+    // Mismo formato del formulario S-89-S (Asignación para la reunión Vida y Ministerio Cristianos). Siempre en la sala principal.
+    const buildS89Message = (studentName: string, helperName: string, date: string, number: number | string, title?: string) =>
+        `*ASIGNACIÓN PARA LA REUNIÓN*\n*VIDA Y MINISTERIO CRISTIANOS*\n\n` +
+        `*Nombre:* ${studentName}\n` +
+        `*Ayudante:* ${helperName || '—'}\n` +
+        `*Fecha:* ${date}\n` +
+        `*Intervención núm.:* ${number}${title ? ` (${title})` : ''}\n` +
+        `*Se presentará en:*\n` +
+        `✅ Sala principal\n⬜ Sala auxiliar núm. 1\n⬜ Sala auxiliar núm. 2\n\n` +
+        `*Nota al estudiante:* En la Guía de actividades encontrará la información que necesita para su intervención. ` +
+        `Repase también las indicaciones que se describen en las Instrucciones para la reunión Vida y Ministerio Cristianos (S-38).\n\n` +
+        `S-89-S 11/23`;
+
+    const handleSendReminder = (publisherId: string, assignmentDetails: { date: string, title?: string, role?: string, helperId?: string, room?: string, source?: string, s89?: boolean, forHelper?: boolean, number?: number | string, studentId?: string }) => {
         const publisher = publishers.find(p => p.id === publisherId);
         if (!publisher) return;
+        const fullName = (p?: Publisher | null) => p ? [p.Nombre, p.Apellido].filter(Boolean).join(' ') : '';
+
+        if (assignmentDetails.s89) {
+            const student = publishers.find(p => p.id === assignmentDetails.studentId) || publisher;
+            const helper = assignmentDetails.forHelper ? publisher : (assignmentDetails.helperId ? publishers.find(p => p.id === assignmentDetails.helperId) : null);
+            const cleanTitle = (assignmentDetails.title || '').replace(/\s*\(Ayudante\)\s*$/i, '');
+            openWhatsApp(publisher, buildS89Message(fullName(student), fullName(helper), assignmentDetails.date, assignmentDetails.number ?? '', cleanTitle));
+            return;
+        }
 
         const helper = assignmentDetails.helperId ? publishers.find(p => p.id === assignmentDetails.helperId) : null;
         const helperName = helper ? `${helper.Nombre} ${helper.Apellido}` : 'Nadie';
@@ -1023,13 +1056,11 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             `Ayudante: ${helperName}\n` +
             `Fecha: ${assignmentDetails.date}\n` +
             `Intervención núm.: ${assignmentDetails.title || assignmentDetails.role || 'Asignación'}\n` +
-            `Se presentará en (le precede una casilla de verificación.):\n` +
-            `✅ Sala Principal   ⬜ Sala Auxiliar 1   ⬜ Sala Auxiliar 2\n\n` +
+            `Se presentará en:\n` +
+            `✅ Sala principal\n⬜ Sala auxiliar núm. 1\n⬜ Sala auxiliar núm. 2\n\n` +
             (assignmentDetails.source ? `Fuente: ${assignmentDetails.source}\n` : '') +
-            `Nota al estudiante: En la Guía de actividades encontrará la información que necesita para su intervención. Repase también las indicaciones que se describen en las instrucciones para la reunión Vida y ministerio (S-38).\n`;
-
-        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-        window.open(url, '_blank');
+            `Nota: En la Guía de actividades encontrará la información que necesita para su intervención. Repase también las indicaciones que se describen en las Instrucciones para la reunión Vida y Ministerio Cristianos (S-38).\n`;
+        openWhatsApp(publisher, message);
     };
 
     const ReminderButton = ({ publisherId, details }: { publisherId: string, details: any }) => {
@@ -1056,6 +1087,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                         ref={pdfContentRef}
                         schedule={draftSchedule || editableSchedule || scheduleForSelectedMonth}
                         getPublisherName={getPublisherName}
+                        midweekTime={midweekTime}
                     />
                 }
             </div>
@@ -1133,7 +1165,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                             {canConfig && !draftSchedule && !isEditing && (
                                 <div className="p-4 border rounded-lg bg-gray-50 mb-6">
                                     <label htmlFor="program-text" className="block text-sm font-medium text-gray-700 mb-2">Pegue aquí el programa de la Guía de Actividades:</label>
-                                    <textarea id="program-text" value={programText} onChange={e => setProgramText(e.target.value)} rows={5} className="w-full p-2 border rounded-md shadow-sm" placeholder="Ej: 22-28 DE DICIEMBRE | Lectura semanal: ... | Cántico ... | TESOROS DE LA BIBLIA | 1. Discurso (10 min.) ..."></textarea>
+                                    <textarea id="program-text" value={programText} onChange={e => setProgramText(e.target.value)} rows={5} className="w-full p-2 border rounded-md shadow-sm" placeholder="Ej: 22-28 DE DICIEMBRE | Lectura semanal: ... | Canción ... | TESOROS DE LA BIBLIA | 1. Discurso (10 min.) ..."></textarea>
                                     <div className="text-right mt-2">
                                         <button onClick={handleGenerateSchedule} disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
                                             {isLoading ? 'Generando...' : 'Generar Programa'}
