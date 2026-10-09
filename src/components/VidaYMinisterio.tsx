@@ -39,6 +39,34 @@ const STUDENT_ASSIGNMENTS = {
 // Duración total que debe tener la reunión de entre semana, con canciones y oraciones (minutos).
 const MEETING_TARGET_MIN = 105;
 const fmtDuration = (m: number) => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+// Rotación: cada publicador debe participar en "Seamos mejores maestros" una vez cada SPACING_WEEKS semanas (o más).
+const SPACING_WEEKS = 10;
+const normText = (t: string) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace('setiembre', 'septiembre');
+// Fecha de inicio de una semana a partir de "5-11 DE OCTUBRE" o "26 DE OCTUBRE A 1 DE NOVIEMBRE" y el mes/año del programa.
+const parseWeekStart = (weekRange: string, scheduleYear: number, scheduleMonth: string): Date | null => {
+    const m = String(weekRange || '').match(/(\d{1,2})(?:\s*[-–]\s*\d{1,2})?\s+de\s+([a-záéíóúñ]+)/i);
+    if (!m) return null;
+    const monthIndex = MONTHS.findIndex(x => normText(x) === normText(m[2]));
+    if (monthIndex < 0) return null;
+    const scheduleIndex = MONTHS.findIndex(x => normText(x) === normText(scheduleMonth));
+    let year = scheduleYear;
+    if (scheduleIndex === 0 && monthIndex === 11) year -= 1;
+    else if (scheduleIndex === 11 && monthIndex === 0) year += 1;
+    return new Date(year, monthIndex, Number(m[1]));
+};
+interface ParticipationEntry { date: Date; weekRange: string; title: string; role: 'estudiante' | 'ayudante'; slot: string; scheduleKey: string }
+interface RotationInfo { weeks: number; entry: ParticipationEntry }
+const rotationLabel = (info: RotationInfo | null): string => {
+    if (!info) return 'sin registro';
+    if (info.weeks === 0) return 'esta semana';
+    return info.weeks > 0 ? `hace ${info.weeks} sem.` : `en ${-info.weeks} sem.`;
+};
+const rotationWhen = (weeks: number): string => {
+    if (weeks === 0) return 'ya participa esa misma semana';
+    if (weeks > 0) return `participó hace ${weeks} ${weeks === 1 ? 'semana' : 'semanas'}`;
+    return `participará en ${-weeks} ${weeks === -1 ? 'semana' : 'semanas'}`;
+};
+const cleanTitleForUi = (t?: string) => String(t || '').replace(/\s*\([^()]*\b(?:lecci[oó]n|punto|p[aá]g|lmd|lff|th|ijwbq)\b[^()]*\)\.?\s*$/i, '').trim();
 const S38_START = { year: 2026, monthIndex: 8 };
 const isS38Period = (year: number, month: string) => year * 12 + MONTHS.indexOf(month) >= S38_START.year * 12 + S38_START.monthIndex;
 // Asignaciones cuyo ayudante puede ser del mismo sexo o un familiar (S-38 párr. 7 y 11). Revisitas y Discípulos: solo del mismo sexo.
@@ -253,6 +281,7 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
     // State Management
     const [isLoading, setIsLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [rotationWarning, setRotationWarning] = useState<{ weekIndex: number; key: string; id: string; info: RotationInfo } | null>(null);
     const [editableSchedule, setEditableSchedule] = useState<LMMeetingSchedule | null>(null);
     const [draftSchedule, setDraftSchedule] = useState<LMMeetingSchedule | null>(null);
 
@@ -289,6 +318,56 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
 
     const cleanPart = (v: any) => (v && String(v).trim().toUpperCase() !== 'N/A' ? String(v).trim() : '');
     // Nombre completo (Nombre, Apellido, 2do Apellido y Apellido de casada) para distinguir a cada publicador en los select.
+    // Historial de participación en Seamos mejores maestros (estudiante o ayudante) tomado de los programas guardados.
+    const participation = useMemo(() => {
+        const map = new Map<string, ParticipationEntry[]>();
+        const sources: any[] = lmSchedules.map(sc => (editableSchedule && sc.year === selectedYear && sc.month === selectedMonth) ? editableSchedule : sc);
+        sources.forEach(sc => {
+            (sc.weeks || []).forEach((w: any, wi: number) => {
+                const date = parseWeekStart(w.weekRange, sc.year, sc.month);
+                if (!date) return;
+                (w.studentAssignments || []).forEach((a: any, ai: number) => {
+                    if (a.type === 'que_dirias') return;
+                    const add = (id: string | null | undefined, role: 'estudiante' | 'ayudante') => {
+                        if (!id) return;
+                        const list = map.get(id) || [];
+                        list.push({ date, weekRange: w.weekRange, title: a.title || '', role, slot: `${sc.year}|${sc.month}|${wi}|${ai}|${role}`, scheduleKey: `${sc.year}|${sc.month}` });
+                        map.set(id, list);
+                    };
+                    add(a.studentId, 'estudiante');
+                    add(a.helperId, 'ayudante');
+                });
+            });
+        });
+        return map;
+    }, [lmSchedules, editableSchedule, selectedYear, selectedMonth]);
+
+    // Participación más cercana (antes o después) de un publicador respecto a una semana del programa que se edita.
+    const rotationInfo = (publisherId: string, weekIndex: number, asigIndex: number, role: 'estudiante' | 'ayudante'): RotationInfo | null => {
+        const week = (editableSchedule || draftSchedule)?.weeks?.[weekIndex];
+        const target = week ? parseWeekStart(week.weekRange, selectedYear, selectedMonth) : null;
+        if (!target) return null;
+        const self = `${selectedYear}|${selectedMonth}|${weekIndex}|${asigIndex}|${role}`;
+        let nearest: RotationInfo | null = null;
+        (participation.get(publisherId) || []).forEach(e => {
+            if (e.slot === self) return;
+            const weeks = Math.round((target.getTime() - e.date.getTime()) / (7 * 86400000));
+            if (!nearest || Math.abs(weeks) < Math.abs(nearest.weeks)) nearest = { weeks, entry: e };
+        });
+        return nearest;
+    };
+
+    // Al generar: quien lleva más tiempo sin participar queda primero (sin registro, antes que todos).
+    const sortByRotation = (list: Publisher[], refDate: Date | null, skipScheduleKey: string): Publisher[] => {
+        if (!refDate) return list;
+        const last = (id: string) => {
+            let best = -Infinity;
+            (participation.get(id) || []).forEach(e => { if (e.scheduleKey !== skipScheduleKey && e.date < refDate && e.date.getTime() > best) best = e.date.getTime(); });
+            return best;
+        };
+        return [...list].sort((a, b) => last(a.id) - last(b.id));
+    };
+
     const getPublisherFullName = useCallback((id: string | null | undefined): string => {
         if (!id) return '';
         const pub = publishers.find(p => p.id === id);
@@ -627,6 +706,13 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             const studentMaleQueue = [...getEligiblePublishers('vym_revisita', 'Hombre')];
             const allStudentEligible = getEligiblePublishers('vym_revisita');
 
+            // Rotación: se ordenan por última participación (los que más tiempo llevan sin participar, primero).
+            const refDate = parseWeekStart(parsedWeeks[0]?.weekRange, selectedYear, selectedMonth);
+            const thisMonthKey = `${selectedYear}|${selectedMonth}`;
+            ['vym_revisita', 'vym_discurso_estudiante'].forEach(k => { if (queues[k]) queues[k] = sortByRotation(queues[k], refDate, thisMonthKey); });
+            studentFemaleQueue.splice(0, studentFemaleQueue.length, ...sortByRotation(studentFemaleQueue, refDate, thisMonthKey));
+            studentMaleQueue.splice(0, studentMaleQueue.length, ...sortByRotation(studentMaleQueue, refDate, thisMonthKey));
+
             let assignedLastWeek = new Set<string>();
 
             for (const week of parsedWeeks) {
@@ -810,26 +896,39 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
             return <div className="text-center p-8 bg-gray-50 rounded-lg"><p className="text-gray-500">El programa para este mes aún no está disponible públicamente.</p></div>;
         }
 
-        const renderSelect = (weekIndex: number, assignmentKey: string, roleKey: string, gender?: 'Hombre' | 'Mujer', helperForStudentId?: string) => {
+        const renderSelect = (weekIndex: number, assignmentKey: string, roleKey: string, gender?: 'Hombre' | 'Mujer', helperForStudentId?: string, rotation?: { asigIndex: number; role: 'estudiante' | 'ayudante' }) => {
             let studentGender: 'Hombre' | 'Mujer' | undefined;
             if (helperForStudentId && (editableSchedule || draftSchedule)?.weeks[weekIndex]) {
                 const student = publishers.find(p => p.id === helperForStudentId);
                 studentGender = student?.Sexo as 'Hombre' | 'Mujer' | undefined;
             }
 
-            const eligible = getEligiblePublishers(roleKey, studentGender || gender);
+            let eligible = getEligiblePublishers(roleKey, studentGender || gender);
             const value = assignmentKey.split('.').reduce((o: any, i) => o?.[i], (editableSchedule || draftSchedule)?.weeks[weekIndex]) || '';
+            // En las asignaciones de estudiante se muestra la última participación y se ordena para favorecer la rotación.
+            const infoOf = (id: string) => rotation ? rotationInfo(id, weekIndex, rotation.asigIndex, rotation.role) : null;
+            if (rotation) {
+                const rank = (id: string) => { const i = infoOf(id); return i ? Math.abs(i.weeks) : Infinity; };
+                eligible = [...eligible].sort((a, b) => rank(b.id) - rank(a.id));
+            }
 
             return (
                 <select
                     value={value}
-                    onChange={e => handleEditChange(weekIndex, assignmentKey, e.target.value)}
+                    onChange={e => {
+                        const id = e.target.value;
+                        if (rotation && id) {
+                            const info = infoOf(id);
+                            if (info && Math.abs(info.weeks) < SPACING_WEEKS) { setRotationWarning({ weekIndex, key: assignmentKey, id, info }); return; }
+                        }
+                        handleEditChange(weekIndex, assignmentKey, id);
+                    }}
                     className="w-full p-1 border rounded text-sm bg-yellow-50"
                     title={getPublisherFullName(value)}
                 >
                     <option value="">-- Vacante --</option>
                     {eligible.map(p => (
-                        <option key={p.id} value={p.id}>{getPublisherFullName(p.id)}</option>
+                        <option key={p.id} value={p.id}>{getPublisherFullName(p.id)}{rotation ? ` · ${rotationLabel(infoOf(p.id))}` : ''}</option>
                     ))}
                 </select>
             );
@@ -934,13 +1033,13 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                                     } time={`${asig.duration || ''}`}>
                                         <div className="flex flex-col items-end">
                                             <div className="flex items-center">
-                                                {isEditing ? renderSelect(weekIndex, `studentAssignments.${asigIndex}.studentId`, studentRoleKey, studentGender) : getPublisherName(asig.studentId)}
+                                                {isEditing ? renderSelect(weekIndex, `studentAssignments.${asigIndex}.studentId`, studentRoleKey, studentGender, undefined, isAnalysis ? undefined : { asigIndex, role: 'estudiante' }) : getPublisherName(asig.studentId)}
                                                 {!isEditing && <ReminderButton publisherId={asig.studentId} details={{ date: week.weekRange, title: asig.title, source: asig.references, helperId: asig.helperId, s89: true, number: asig.number ?? asigIndex + 4, studentId: asig.studentId }} />}
                                             </div>
                                             {!isAnalysis && (asig.helperId !== null || isEditing) && (
                                                 <div className="flex items-center text-sm text-gray-600 mt-1">
                                                     <span className="mr-1">/ Ayudante:</span>
-                                                    {isEditing ? renderSelect(weekIndex, `studentAssignments.${asigIndex}.helperId`, 'vym_revisita', undefined, studentId) : (
+                                                    {isEditing ? renderSelect(weekIndex, `studentAssignments.${asigIndex}.helperId`, 'vym_revisita', undefined, studentId, { asigIndex, role: 'ayudante' }) : (
                                                         <>
                                                             {getPublisherName(asig.helperId)}
                                                             <ReminderButton publisherId={asig.helperId} details={{ date: week.weekRange, title: `${asig.title} (Ayudante)`, source: asig.references, role: 'Ayudante', s89: true, forHelper: true, number: asig.number ?? asigIndex + 4, studentId: asig.studentId }} />
@@ -1251,6 +1350,25 @@ const VidaYMinisterio: React.FC<VidaYMinisterioProps> = ({
                             )}
 
                             {ScheduleView()}
+                            {rotationWarning && (() => {
+                                const { weekIndex, key, id, info } = rotationWarning;
+                                const close = () => setRotationWarning(null);
+                                return (
+                                    <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4" onClick={close}>
+                                        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+                                            <h3 className="text-lg font-bold text-amber-700 mb-2">Revisa la rotación</h3>
+                                            <p className="text-sm text-gray-700 mb-2">
+                                                <strong>{getPublisherFullName(id)}</strong> {rotationWhen(info.weeks)} ({info.entry.role} en «{cleanTitleForUi(info.entry.title)}», semana {info.entry.weekRange}).
+                                            </p>
+                                            <p className="text-sm text-gray-600 mb-4">La idea es que cada publicador participe en Seamos mejores maestros una vez cada {SPACING_WEEKS} semanas o más, para que todos tengan oportunidad. ¿Asignarlo de todos modos?</p>
+                                            <div className="flex justify-end gap-3">
+                                                <button type="button" onClick={close} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Cancelar</button>
+                                                <button type="button" onClick={() => { handleEditChange(weekIndex, key, id); close(); }} className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700">Asignar de todos modos</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </>
                     )}
             </div>
