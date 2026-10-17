@@ -489,6 +489,8 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             if (!window.confirm(`La vuelta ${current.vueltaNum} todavía no tiene fecha de completado.\n\n¿Crear una nueva vuelta de todos modos?`)) return;
         }
         handleAddBlankRecordForCurrentYear();
+        // Una vuelta nueva sin fechas deja el pin disponible (gris), sin importar su estado anterior.
+        setEditingMarker(m => (m ? { ...m, status: 'available' } : m));
         setShowHistory(false);
     };
 
@@ -574,19 +576,29 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         }
     };
 
+    // Estado que debe tener el pin. El pin conserva SU estado (el que se ve en el mapa) mientras
+    // no se modifiquen las fechas del registro en este modal. Así abrir un pin que quedó en gris
+    // (p. ej. tras "Iniciar nueva vuelta") no lo vuelve verde solo porque el registro de la
+    // vuelta anterior ya tiene fecha de completado. Si el usuario cambia las fechas, el estado
+    // se recalcula a partir de ellas.
+    const computePinStatus = (): string => {
+        const markerStatus = editingMarker?.status || 'available';
+        if (!editingRecord) return markerStatus;
+        const datesChanged =
+            (editingRecord.assignedDate || '') !== (originalEditingRecord?.assignedDate || '') ||
+            (editingRecord.completedDate || '') !== (originalEditingRecord?.completedDate || '');
+        if (!datesChanged) return markerStatus;
+        if (editingRecord.completedDate) return 'completed';
+        if (editingRecord.assignedDate) return 'assigned';
+        return 'available';
+    };
+
     const handleSave = async () => {
         if (!onSaveMarker || !onSaveRecord || !editingMarker || !editingMarker.terrNum) return;
 
         setIsSaving(true);
         try {
-            let finalStatus = editingMarker.status || 'available';
-            if (editingRecord) {
-                if (editingRecord.assignedDate && !editingRecord.completedDate) {
-                    finalStatus = 'assigned';
-                } else if (editingRecord.completedDate) {
-                    finalStatus = 'completed';
-                }
-            }
+            const finalStatus = computePinStatus();
 
             // Toda la secuencia corre como una sola operación con tiempo límite: si el servidor
             // tarda, la modal se libera pero las escrituras siguen su curso en segundo plano.
@@ -624,11 +636,13 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     };
 
     // ───────── Datos derivados del modal del pin ─────────
-    const derivedStatus: string = editingRecord?.completedDate
-        ? 'completed'
-        : editingRecord?.assignedDate
-            ? 'assigned'
-            : (editingMarker?.status || 'available');
+    const derivedStatus: string = computePinStatus();
+    const formatDateEs = (d?: string) => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || '');
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : (d || '');
+    };
+    // Pin disponible (gris) cuyo registro actual ya tiene fecha de completado: viene de una vuelta anterior.
+    const pinAvailableButRecordDone = derivedStatus === 'available' && !!editingRecord?.completedDate;
     const currentYearOptions = territoryRecordOptions.filter(r => r.serviceYear === currentServiceYear);
     const otherYearOptions = territoryRecordOptions.filter(r => r.serviceYear !== currentServiceYear);
     const renderRecordRow = (r: TerritoryRecord) => (
@@ -1009,6 +1023,12 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                         </button>
                                     </div>
 
+                                    {pinAvailableButRecordDone && (
+                                        <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                                            Este pin está <b>disponible</b> (gris en el mapa). Los datos de abajo son de la vuelta {editingRecord.vueltaNum || 1}, que se completó el {formatDateEs(editingRecord.completedDate)}. Para registrar un nuevo trabajo usa «+ Nueva vuelta».
+                                        </p>
+                                    )}
+
                                     {originalEditingRecord?.id && editingRecord.serviceYear !== currentServiceYear && (
                                         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
                                             Este registro es del año {editingRecord.serviceYear}, no del año de servicio actual ({currentServiceYear}).
@@ -1156,7 +1176,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                                         <option value="completed">Completado</option>
                                                         <option value="delayed">Rezagado</option>
                                                     </select>
-                                                    <p className="text-xs text-slate-500 mt-1">Si el registro tiene fechas, el estado se calcula solo al guardar.</p>
+                                                    <p className="text-xs text-slate-500 mt-1">El estado solo se recalcula si cambias las fechas del registro; si no, se guarda el que elijas aquí.</p>
                                                 </div>
                                                 {originalEditingRecord?.id && onDeleteRecord && (
                                                     <button
