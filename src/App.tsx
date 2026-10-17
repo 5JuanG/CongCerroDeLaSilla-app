@@ -954,8 +954,9 @@ const App: React.FC = () => {
 
     const canManageTerritories = useMemo(() => {
         if (canManage) return true;
+        if (userPermissions.includes('manageTerritorios')) return true;
         return (!!user?.publisherId && !!territoryResponsible && user.publisherId === territoryResponsible.publisherId);
-    }, [canManage, user, territoryResponsible]);
+    }, [canManage, user, territoryResponsible, userPermissions]);
 
     const ALL_COMPONENTS: { [key in View]: React.ReactElement } = {
         home: <HomeDashboard

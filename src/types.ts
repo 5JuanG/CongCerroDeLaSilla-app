@@ -77,6 +77,7 @@ export type GranularPermission =
     'configVidaYMinisterio' |
     'manageMeetingAssignments' |
     'managePublicTalks' |
+    'manageTerritorios' |
     'resetData';
 
 export type Permission = View | GranularPermission;

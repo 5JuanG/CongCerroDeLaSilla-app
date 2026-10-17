@@ -68,6 +68,7 @@ const manageablePermissions: { label: string; items: { permission: Permission; l
             { permission: 'configVidaYMinisterio', label: 'Configuración en "Vida y Ministerio"' },
             { permission: 'manageMeetingAssignments', label: 'Generar/Editar Programa (Acomodadores)' },
             { permission: 'managePublicTalks', label: 'Guardar/Editar en "Reunión Pública"' },
+            { permission: 'manageTerritorios', label: 'Registrar/Editar asignaciones en "Territorios"' },
             { permission: 'resetData', label: 'Limpiar datos' },
         ]
     }
