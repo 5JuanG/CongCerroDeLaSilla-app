@@ -32,6 +32,25 @@ const withTimeout = <T,>(p: Promise<T>, ms: number = WRITE_TIMEOUT_MS): Promise<
     });
 const isWriteTimeout = (e: unknown) => (e as Error)?.message === WRITE_TIMEOUT_TAG;
 
+// Fecha local de hoy en formato YYYY-MM-DD (el que usan los <input type="date">).
+const todayStr = () => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+// Fecha corta legible (ej. "12 oct") a partir de YYYY-MM-DD.
+const fmtShortDate = (s?: string) =>
+    s ? new Date(`${s}T00:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '';
+const STATUS_LABELS: Record<string, string> = {
+    available: 'Disponible', assigned: 'Asignado', completed: 'Completado', delayed: 'Rezagado',
+};
+const STATUS_CHIP: Record<string, string> = {
+    available: 'bg-slate-100 text-slate-700 border-slate-200',
+    assigned: 'bg-blue-50 text-blue-700 border-blue-200',
+    completed: 'bg-green-50 text-green-700 border-green-200',
+    delayed: 'bg-red-50 text-red-700 border-red-200',
+};
+
 interface InteractiveMapProps {
     maps: TerritoryMap[];
     markers: TerritoryMarker[];
@@ -62,6 +81,11 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     // (otherwise changing the vuelta number creates a duplicate/orphan record
     // instead of correcting the existing one).
     const [originalEditingRecord, setOriginalEditingRecord] = useState<Partial<TerritoryRecord> | null>(null);
+    // Secciones plegables del modal del pin: el historial y las correcciones quedan ocultos
+    // por defecto para que el modal muestre solo el trabajo reciente del territorio.
+    const [showHistory, setShowHistory] = useState(false);
+    const [showOldYears, setShowOldYears] = useState(false);
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     // Tracks which marker is currently being dragged, and its live x/y while
@@ -404,6 +428,9 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
     const handleSelectMarker = (marker: TerritoryMarker) => {
         if (!canManage) return;
         setEditingMarker(marker);
+        setShowHistory(false);
+        setShowOldYears(false);
+        setShowAdvanced(false);
 
         // Show every record for this territory regardless of service year, so
         // a record misfiled under the wrong year (e.g. a new "vuelta 1" that
@@ -439,10 +466,15 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         setOriginalEditingRecord(record);
     };
 
-    const handleAddBlankRecordForCurrentYear = () => {
+    // Crea (sin guardar todavía) el registro de la siguiente vuelta del año de servicio actual.
+    // Antes siempre usaba vuelta 1, lo que al guardar sobrescribía la vuelta 1 ya existente.
+    const handleAddBlankRecordForCurrentYear = (options: TerritoryRecord[] = territoryRecordOptions) => {
+        const maxVuelta = options
+            .filter(r => r.serviceYear === currentServiceYear)
+            .reduce((max, r) => Math.max(max, r.vueltaNum || 0), 0);
         setEditingRecord({
             terrNum: editingMarker?.terrNum,
-            vueltaNum: 1,
+            vueltaNum: maxVuelta + 1,
             serviceYear: currentServiceYear,
             asignadoA: '',
             assignedDate: '',
@@ -451,7 +483,19 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
         setOriginalEditingRecord(null);
     };
 
+    const handleNewVuelta = () => {
+        const current = editingRecord;
+        if (current && current.vueltaNum && !current.completedDate && originalEditingRecord?.id) {
+            if (!window.confirm(`La vuelta ${current.vueltaNum} todavía no tiene fecha de completado.\n\n¿Crear una nueva vuelta de todos modos?`)) return;
+        }
+        handleAddBlankRecordForCurrentYear();
+        setShowHistory(false);
+    };
+
     const closeMarkerModal = () => {
+        setShowHistory(false);
+        setShowOldYears(false);
+        setShowAdvanced(false);
         setEditingMarker(null);
         setEditingRecord(null);
         setOriginalEditingRecord(null);
@@ -484,7 +528,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 setEditingRecord(next);
                 setOriginalEditingRecord(next);
             } else {
-                handleAddBlankRecordForCurrentYear();
+                handleAddBlankRecordForCurrentYear(remaining);
             }
             onShowModal({ type: 'success', title: 'Eliminado', message: 'Registro eliminado con éxito.' });
         } catch (error) {
@@ -578,6 +622,27 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             setIsSaving(false);
         }
     };
+
+    // ───────── Datos derivados del modal del pin ─────────
+    const derivedStatus: string = editingRecord?.completedDate
+        ? 'completed'
+        : editingRecord?.assignedDate
+            ? 'assigned'
+            : (editingMarker?.status || 'available');
+    const currentYearOptions = territoryRecordOptions.filter(r => r.serviceYear === currentServiceYear);
+    const otherYearOptions = territoryRecordOptions.filter(r => r.serviceYear !== currentServiceYear);
+    const renderRecordRow = (r: TerritoryRecord) => (
+        <button
+            type="button"
+            key={r.id}
+            onClick={() => { handlePickRecordOption(r); setShowHistory(false); }}
+            className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-all ${originalEditingRecord?.id === r.id ? 'bg-blue-50 border-blue-300 font-bold text-blue-800' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+        >
+            Vuelta {r.vueltaNum} · {r.serviceYear}
+            {r.asignadoA ? ` · ${r.asignadoA}` : ''}
+            {r.completedDate ? ` · ✓ ${fmtShortDate(r.completedDate)}` : r.assignedDate ? ` · ${fmtShortDate(r.assignedDate)}` : ''}
+        </button>
+    );
 
     if (!globalMap) {
         return (
@@ -918,85 +983,60 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Estado Marker</label>
-                                    <select
-                                        value={editingMarker.status}
-                                        onChange={e => setEditingMarker({ ...editingMarker, status: e.target.value as any })}
-                                        className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
-                                    >
-                                        <option value="available">Disponible</option>
-                                        <option value="assigned">Asignado</option>
-                                        <option value="completed">Completado</option>
-                                        <option value="delayed">Resagado</option>
-                                    </select>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Estado</label>
+                                    <div className={`w-full p-3 rounded-xl border font-bold text-center ${STATUS_CHIP[derivedStatus] || STATUS_CHIP.available}`}>
+                                        {STATUS_LABELS[derivedStatus] || 'Disponible'}
+                                    </div>
                                 </div>
                             </div>
 
-                            {territoryRecordOptions.length > 1 && (
-                                <div className="pt-2">
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">
-                                        Se encontraron {territoryRecordOptions.length} registros para este territorio
-                                    </label>
-                                    <select
-                                        value={originalEditingRecord?.id || 'new'}
-                                        onChange={e => {
-                                            const selected = territoryRecordOptions.find(r => r.id === e.target.value);
-                                            if (selected) {
-                                                handlePickRecordOption(selected);
-                                            } else {
-                                                handleAddBlankRecordForCurrentYear();
-                                            }
-                                        }}
-                                        className="w-full p-3 bg-amber-50 rounded-xl border border-amber-200 focus:ring-2 focus:ring-blue-500 font-bold transition-all text-sm"
-                                    >
-                                        {territoryRecordOptions.map(r => (
-                                            <option key={r.id} value={r.id}>
-                                                Vuelta {r.vueltaNum} — Año {r.serviceYear}{r.asignadoA ? ` — ${r.asignadoA}` : ''}
-                                            </option>
-                                        ))}
-                                        <option value="new">+ Nuevo registro (Año {currentServiceYear})</option>
-                                    </select>
-                                    <p className="text-xs text-slate-500 mt-1">Si ves un registro con un año incorrecto, selecciónalo aquí para corregirlo o eliminarlo.</p>
-                                </div>
-                            )}
-
                             {editingRecord && (
                                 <div className="space-y-4 pt-4 border-t border-slate-100">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Registro actual</p>
+                                            <p className="text-lg font-black text-slate-800">
+                                                Vuelta {editingRecord.vueltaNum || 1}
+                                                <span className="text-sm font-bold text-slate-500"> · Año {editingRecord.serviceYear || currentServiceYear}</span>
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleNewVuelta}
+                                            className="px-3 py-2 bg-blue-50 text-blue-700 text-sm font-bold rounded-xl border border-blue-200 hover:bg-blue-100 active:scale-95 transition-all"
+                                        >
+                                            + Nueva vuelta
+                                        </button>
+                                    </div>
+
+                                    {originalEditingRecord?.id && editingRecord.serviceYear !== currentServiceYear && (
+                                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                                            Este registro es del año {editingRecord.serviceYear}, no del año de servicio actual ({currentServiceYear}).
+                                        </p>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 mb-1">Asignado a</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Nombre del hermano"
+                                            value={editingRecord.asignadoA || ''}
+                                            onChange={e => setEditingRecord({ ...editingRecord, asignadoA: e.target.value })}
+                                            className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all text-sm"
+                                        />
+                                    </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-bold text-slate-700 mb-1">Vuelta #</label>
-                                            <input
-                                                type="number"
-                                                value={editingRecord.vueltaNum || 1}
-                                                onChange={e => setEditingRecord({ ...editingRecord, vueltaNum: parseInt(e.target.value) })}
-                                                className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-slate-700 mb-1">Año de Servicio</label>
-                                            <input
-                                                type="number"
-                                                value={editingRecord.serviceYear || currentServiceYear}
-                                                onChange={e => setEditingRecord({ ...editingRecord, serviceYear: parseInt(e.target.value) })}
-                                                className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-bold text-slate-700 mb-1">Asignado a</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Nombre del hermano"
-                                                value={editingRecord.asignadoA || ''}
-                                                onChange={e => setEditingRecord({ ...editingRecord, asignadoA: e.target.value })}
-                                                className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all text-sm"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-bold text-slate-700 mb-1">Fecha Asignación</label>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="block text-sm font-bold text-slate-700">Asignación</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditingRecord({ ...editingRecord, assignedDate: todayStr() })}
+                                                    className="text-xs font-bold text-blue-700 hover:underline"
+                                                >
+                                                    Hoy
+                                                </button>
+                                            </div>
                                             <input
                                                 type="date"
                                                 value={editingRecord.assignedDate || ''}
@@ -1005,7 +1045,16 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-bold text-slate-700 mb-1">Fecha Completado</label>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="block text-sm font-bold text-slate-700">Completado</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditingRecord({ ...editingRecord, completedDate: todayStr() })}
+                                                    className="text-xs font-bold text-blue-700 hover:underline"
+                                                >
+                                                    Hoy
+                                                </button>
+                                            </div>
                                             <input
                                                 type="date"
                                                 value={editingRecord.completedDate || ''}
@@ -1014,15 +1063,113 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
                                             />
                                         </div>
                                     </div>
-                                    {originalEditingRecord?.id && onDeleteRecord && (
+                                    {!editingRecord.completedDate && (
                                         <button
-                                            onClick={handleDeleteRecordOnly}
-                                            disabled={isSaving || isDeleting}
-                                            className="w-full py-2 bg-amber-50 text-amber-700 font-bold rounded-xl border border-amber-200 hover:bg-amber-100 active:scale-95 transition-all disabled:opacity-60 text-sm"
+                                            type="button"
+                                            onClick={() => setEditingRecord({ ...editingRecord, completedDate: todayStr() })}
+                                            className="w-full py-2 bg-green-50 text-green-700 font-bold rounded-xl border border-green-200 hover:bg-green-100 active:scale-95 transition-all text-sm"
                                         >
-                                            {isDeleting ? 'Eliminando...' : '🗑️ Eliminar solo este registro (mantiene el pin)'}
+                                            ✓ Marcar completado hoy
                                         </button>
                                     )}
+
+                                    {territoryRecordOptions.length > 1 && (
+                                        <div className="pt-2 border-t border-slate-100">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowHistory(v => !v)}
+                                                className="text-sm font-bold text-blue-700 hover:underline"
+                                            >
+                                                {showHistory ? '▾ Ocultar historial' : `▸ Ver historial (${territoryRecordOptions.length})`}
+                                            </button>
+                                            {showHistory && (
+                                                <div className="mt-2 space-y-2">
+                                                    {currentYearOptions.length > 0 && (
+                                                        <div>
+                                                            <p className="text-xs font-bold text-slate-500 mb-1">Año de servicio {currentServiceYear}</p>
+                                                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                                                                {currentYearOptions.map(renderRecordRow)}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {otherYearOptions.length > 0 && (
+                                                        <div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowOldYears(v => !v)}
+                                                                className="text-xs font-bold text-slate-500 hover:underline"
+                                                            >
+                                                                {showOldYears ? '▾ Ocultar otros años' : `▸ Otros años (${otherYearOptions.length})`}
+                                                            </button>
+                                                            {showOldYears && (
+                                                                <div className="mt-1 space-y-1 max-h-40 overflow-y-auto">
+                                                                    {otherYearOptions.map(renderRecordRow)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    <p className="text-xs text-slate-500">Toca un registro para verlo o corregirlo.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="pt-2 border-t border-slate-100">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAdvanced(v => !v)}
+                                            className="text-sm font-bold text-slate-500 hover:underline"
+                                        >
+                                            {showAdvanced ? '▾ Ocultar correcciones' : '▸ Correcciones (vuelta, año, estado)'}
+                                        </button>
+                                        {showAdvanced && (
+                                            <div className="mt-3 space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-slate-700 mb-1">Vuelta #</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editingRecord.vueltaNum || 1}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, vueltaNum: parseInt(e.target.value) })}
+                                                            className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-slate-700 mb-1">Año de Servicio</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editingRecord.serviceYear || currentServiceYear}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, serviceYear: parseInt(e.target.value) })}
+                                                            className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-bold text-slate-700 mb-1">Estado del marcador</label>
+                                                    <select
+                                                        value={editingMarker.status}
+                                                        onChange={e => setEditingMarker({ ...editingMarker, status: e.target.value as any })}
+                                                        className="w-full p-3 bg-slate-100 rounded-xl border-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
+                                                    >
+                                                        <option value="available">Disponible</option>
+                                                        <option value="assigned">Asignado</option>
+                                                        <option value="completed">Completado</option>
+                                                        <option value="delayed">Rezagado</option>
+                                                    </select>
+                                                    <p className="text-xs text-slate-500 mt-1">Si el registro tiene fechas, el estado se calcula solo al guardar.</p>
+                                                </div>
+                                                {originalEditingRecord?.id && onDeleteRecord && (
+                                                    <button
+                                                        onClick={handleDeleteRecordOnly}
+                                                        disabled={isSaving || isDeleting}
+                                                        className="w-full py-2 bg-amber-50 text-amber-700 font-bold rounded-xl border border-amber-200 hover:bg-amber-100 active:scale-95 transition-all disabled:opacity-60 text-sm"
+                                                    >
+                                                        {isDeleting ? 'Eliminando...' : '🗑️ Eliminar solo este registro (mantiene el pin)'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
