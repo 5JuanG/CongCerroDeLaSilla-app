@@ -5,8 +5,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { DEFAULT_AVATAR } from '../constants';
 
-declare const storage: any;
-
 // Fecha local (no UTC) en formato YYYY-MM-DD
 const toLocalISO = (d: Date) => {
     const y = d.getFullYear();
@@ -465,6 +463,8 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
     });
     const [sendingId, setSendingId] = useState<string | null>(null);
     const [sentIds, setSentIds] = useState<string[]>([]);
+    // Hojas ya generadas (paso 1) y listas para compartir (paso 2)
+    const [prepared, setPrepared] = useState<Record<string, { file: File; text: string; phone: string }>>({});
 
     const reminderSchedules = useMemo(() =>
         schedules
@@ -478,7 +478,8 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
         return digits;
     };
 
-    const sendReminder = async (schedule: FieldServiceSchedule) => {
+    // Paso 1: genera la hoja de trabajo (puede tardar unos segundos por los mapas)
+    const prepareReminder = async (schedule: FieldServiceSchedule) => {
         const captain = publishers.find(p => p.id === schedule.captainId);
         const phone = normalizePhone(captain?.Cel);
         if (!phone) {
@@ -486,46 +487,62 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
             return;
         }
         setSendingId(schedule.id);
-        // Abrir la pestaña ya (en el clic) para que el navegador no la bloquee
-        const waWindow = window.open('about:blank', '_blank');
-        let worksheetUrl = '';
         try {
             const doc = await buildIndividualPDF(schedule);
             const blob: Blob = doc.output('blob');
-            const ref = storage.ref(`hojas_trabajo_predicacion/${schedule.date}_${schedule.id}.pdf`);
-            const task = ref.put(blob, { contentType: 'application/pdf' });
-            await task;
-            worksheetUrl = await task.snapshot.ref.getDownloadURL();
+            const file = new File([blob], worksheetFileName(schedule), { type: 'application/pdf' });
+
+            const fechaLarga = new Date(schedule.date + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+            const terrs = (schedule.suggestedTerritories || []).join(', ');
+            const lines = [
+                `Hola hermano ${captain?.Nombre || schedule.captainName}, ¡que Jehová te bendiga! 🙏`,
+                ``,
+                `Te recordamos que mañana, ${fechaLarga}, tienes el privilegio de ser capitán de predicación. Gracias por tu disposición y por cuidar a tus hermanos en el servicio. 💪`,
+                ``,
+                `🕒 ${schedule.time} (${schedule.period})`,
+                `📍 ${schedule.meetingPlace}`,
+                terrs ? `🗺️ Territorios sugeridos: ${terrs}` : '',
+                ``,
+                `📄 Te comparto tu hoja de trabajo con los mapas.`,
+                ``,
+                `¡Gracias por tu apoyo!`
+            ].filter((l, i, arr) => !(l === '' && arr[i - 1] === ''));
+
+            setPrepared(prev => ({ ...prev, [schedule.id]: { file, text: lines.join('\n'), phone } }));
         } catch (e) {
-            console.error('No se pudo subir la hoja de trabajo:', e);
+            console.error('No se pudo generar la hoja de trabajo:', e);
+            onShowModal({ type: 'error', title: 'Error', message: 'No se pudo generar la hoja de trabajo.' });
+        } finally {
+            setSendingId(null);
         }
+    };
 
-        const fechaLarga = new Date(schedule.date + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
-        const terrs = (schedule.suggestedTerritories || []).join(', ');
-        const lines = [
-            `Hola hermano ${captain?.Nombre || schedule.captainName}, ¡que Jehová te bendiga! 🙏`,
-            ``,
-            `Te recordamos que mañana, ${fechaLarga}, tienes el privilegio de ser capitán de predicación. Gracias por tu disposición y por cuidar a tus hermanos en el servicio. 💪`,
-            ``,
-            `🕒 ${schedule.time} (${schedule.period})`,
-            `📍 ${schedule.meetingPlace}`,
-            terrs ? `🗺️ Territorios sugeridos: ${terrs}` : '',
-            ``,
-            worksheetUrl ? `📄 Tu hoja de trabajo (con los mapas): ${worksheetUrl}` : `📄 Tu hoja de trabajo te la compartimos por separado.`,
-            ``,
-            `¡Gracias por tu apoyo!`
-        ].filter((l, i, arr) => !(l === '' && arr[i - 1] === ''));
-        const url = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
-        if (waWindow) waWindow.location.href = url; else window.open(url, '_blank');
-
-        if (!worksheetUrl) {
-            // Plan B: descargar el PDF para adjuntarlo a mano en el chat
-            const doc = await buildIndividualPDF(schedule);
-            doc.save(worksheetFileName(schedule));
-            onShowModal({ type: 'info', title: 'Hoja descargada', message: 'No se pudo subir la hoja para enviar el enlace. Se descargó el PDF: adjúntalo en el chat de WhatsApp que se abrió.' });
+    // Paso 2: comparte. Debe ejecutarse directo en el clic para que el navegador lo permita.
+    const shareReminder = async (schedule: FieldServiceSchedule) => {
+        const item = prepared[schedule.id];
+        if (!item) return;
+        const nav: any = navigator;
+        try {
+            if (nav.share && nav.canShare && nav.canShare({ files: [item.file] })) {
+                await nav.share({ files: [item.file], text: item.text, title: 'Hoja de trabajo de predicación' });
+            } else {
+                // Computadora / navegador sin soporte: descarga el PDF y abre el chat con el texto
+                const url = URL.createObjectURL(item.file);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = item.file.name;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                window.open(`https://wa.me/${item.phone}?text=${encodeURIComponent(item.text)}`, '_blank');
+                onShowModal({ type: 'info', title: 'Adjunta la hoja', message: 'Se descargó el PDF y se abrió el chat de WhatsApp con el mensaje. Adjunta el PDF descargado en el chat antes de enviar.' });
+            }
+            setSentIds(prev => prev.includes(schedule.id) ? prev : [...prev, schedule.id]);
+        } catch (e: any) {
+            if (e?.name !== 'AbortError') {
+                console.error('No se pudo compartir:', e);
+                onShowModal({ type: 'error', title: 'Error', message: 'No se pudo abrir el menú para compartir.' });
+            }
         }
-        setSentIds(prev => [...prev, schedule.id]);
-        setSendingId(null);
     };
 
     return (
@@ -596,7 +613,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                         <div>
                             <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><span>🔔</span> Recordatorios a capitanes</h3>
-                            <p className="text-xs text-slate-500">Por defecto muestra las asignaciones de mañana. Cada botón abre WhatsApp con el mensaje y la hoja de trabajo listos.</p>
+                            <p className="text-xs text-slate-500">Por defecto muestra las asignaciones de mañana. Toca “Preparar hoja” y luego “Compartir por WhatsApp”: el PDF viaja como archivo adjunto con el mensaje.</p>
                         </div>
                         <input
                             type="date"
@@ -620,14 +637,24 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                             <p className="text-xs text-slate-500">{s.meetingPlace}{s.suggestedTerritories?.length ? ` · Terr. ${s.suggestedTerritories.join(', ')}` : ''}</p>
                                             {!hasPhone && <p className="text-xs text-red-500 font-semibold">Sin celular registrado</p>}
                                         </div>
-                                        <button
-                                            type="button"
-                                            disabled={!hasPhone || sendingId === s.id}
-                                            onClick={() => sendReminder(s)}
-                                            className="px-4 py-2 bg-green-600 text-white text-xs font-black rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                                        >
-                                            {sendingId === s.id ? 'Preparando hoja…' : sent ? '✓ Enviado · reenviar' : '💬 Enviar por WhatsApp'}
-                                        </button>
+                                        {prepared[s.id] ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => shareReminder(s)}
+                                                className="px-4 py-2 bg-green-600 text-white text-xs font-black rounded-xl hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                {sent ? '✓ Compartido · volver a compartir' : '💬 Compartir por WhatsApp'}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                disabled={!hasPhone || sendingId === s.id}
+                                                onClick={() => prepareReminder(s)}
+                                                className="px-4 py-2 bg-slate-800 text-white text-xs font-black rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                            >
+                                                {sendingId === s.id ? 'Preparando hoja…' : '📄 Preparar hoja'}
+                                            </button>
+                                        )}
                                     </div>
                                 );
                             })}
