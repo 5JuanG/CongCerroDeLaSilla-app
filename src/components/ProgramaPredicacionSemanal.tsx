@@ -5,6 +5,38 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { DEFAULT_AVATAR } from '../constants';
 
+declare const storage: any;
+
+// Fecha local (no UTC) en formato YYYY-MM-DD
+const toLocalISO = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+// Carga una imagen remota y la convierte a JPEG (dataURL) para incrustarla en el PDF
+const loadImageForPdf = (url: string): Promise<{ data: string; w: number; h: number } | null> =>
+    new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return resolve(null);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                resolve({ data: canvas.toDataURL('image/jpeg', 0.92), w: img.naturalWidth, h: img.naturalHeight });
+            } catch (e) { resolve(null); }
+        };
+        img.onerror = () => resolve(null);
+        img.src = url;
+    });
+
 interface ProgramaPredicacionSemanalProps {
     schedules: FieldServiceSchedule[];
     publishers: Publisher[];
@@ -169,6 +201,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                     (s.notes || s.modality).toUpperCase()
                 ]),
                 theme: 'grid',
+                bodyStyles: { fillColor: [226, 236, 250] }, // azul tenue en los campos de asignación
                 styles: { 
                     fontSize: 8, 
                     cellPadding: 3, 
@@ -197,7 +230,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
         doc.save(`Programa_Semanal_Predicacion_${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
-    const generateIndividualPDF = async (schedule: FieldServiceSchedule) => {
+    const buildIndividualPDF = async (schedule: FieldServiceSchedule) => {
         const doc = new jsPDF('p', 'mm', 'letter');
         const pageWidth = doc.internal.pageSize.getWidth();
         const captain = publishers.find(p => p.id === schedule.captainId);
@@ -328,6 +361,35 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
             columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35, fillColor: [240, 245, 255] } }
         });
 
+        // Un mapa por cada territorio sugerido
+        const MAP_MARGIN = 15;
+        for (const terrNum of (schedule.suggestedTerritories || [])) {
+            doc.addPage();
+            doc.setFillColor(0, 32, 96);
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`MAPA DEL TERRITORIO ${terrNum}`, pageWidth / 2, 16, { align: 'center' });
+
+            const terrMap = territoryMaps.find(m => String(m.territoryId) === String(terrNum));
+            const loaded = terrMap ? await loadImageForPdf(terrMap.mapUrl) : null;
+            if (loaded) {
+                const availW = pageWidth - MAP_MARGIN * 2;
+                const availH = 225;
+                const ratio = loaded.h / loaded.w;
+                let w = availW;
+                let h = w * ratio;
+                if (h > availH) { h = availH; w = h / ratio; }
+                doc.addImage(loaded.data, 'JPEG', (pageWidth - w) / 2, 33, w, h, undefined, 'FAST');
+            } else {
+                doc.setTextColor(120, 120, 120);
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'normal');
+                doc.text(terrMap ? 'No se pudo cargar el mapa de este territorio.' : 'Este territorio aún no tiene mapa cargado.', pageWidth / 2, 60, { align: 'center' });
+            }
+        }
+
         // Map Section on Second Page
         doc.addPage();
         doc.setFillColor(0, 32, 96);
@@ -384,7 +446,86 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
             } catch (e) {}
         }
 
-        doc.save(`Hoja_Trabajo_${schedule.date}_${schedule.captainName.replace(/\s+/g, '_')}.pdf`);
+        return doc;
+    };
+
+    const worksheetFileName = (schedule: FieldServiceSchedule) =>
+        `Hoja_Trabajo_${schedule.date}_${schedule.captainName.replace(/\s+/g, '_')}.pdf`;
+
+    const generateIndividualPDF = async (schedule: FieldServiceSchedule) => {
+        const doc = await buildIndividualPDF(schedule);
+        doc.save(worksheetFileName(schedule));
+    };
+
+    // ---- Recordatorios (semiautomático) ----
+    const [reminderDate, setReminderDate] = useState<string>(() => {
+        const t = new Date();
+        t.setDate(t.getDate() + 1);
+        return toLocalISO(t);
+    });
+    const [sendingId, setSendingId] = useState<string | null>(null);
+    const [sentIds, setSentIds] = useState<string[]>([]);
+
+    const reminderSchedules = useMemo(() =>
+        schedules
+            .filter(s => s.date === reminderDate && s.captainId)
+            .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
+        [schedules, reminderDate]);
+
+    const normalizePhone = (raw?: string) => {
+        const digits = String(raw || '').replace(/\D/g, '');
+        if (digits.length === 10) return `52${digits}`;
+        return digits;
+    };
+
+    const sendReminder = async (schedule: FieldServiceSchedule) => {
+        const captain = publishers.find(p => p.id === schedule.captainId);
+        const phone = normalizePhone(captain?.Cel);
+        if (!phone) {
+            onShowModal({ type: 'error', title: 'Sin teléfono', message: `${schedule.captainName} no tiene celular registrado en Publicadores.` });
+            return;
+        }
+        setSendingId(schedule.id);
+        // Abrir la pestaña ya (en el clic) para que el navegador no la bloquee
+        const waWindow = window.open('about:blank', '_blank');
+        let worksheetUrl = '';
+        try {
+            const doc = await buildIndividualPDF(schedule);
+            const blob: Blob = doc.output('blob');
+            const ref = storage.ref(`hojas_trabajo_predicacion/${schedule.date}_${schedule.id}.pdf`);
+            const task = ref.put(blob, { contentType: 'application/pdf' });
+            await task;
+            worksheetUrl = await task.snapshot.ref.getDownloadURL();
+        } catch (e) {
+            console.error('No se pudo subir la hoja de trabajo:', e);
+        }
+
+        const fechaLarga = new Date(schedule.date + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+        const terrs = (schedule.suggestedTerritories || []).join(', ');
+        const lines = [
+            `Hola hermano ${captain?.Nombre || schedule.captainName}, ¡que Jehová te bendiga! 🙏`,
+            ``,
+            `Te recordamos que mañana, ${fechaLarga}, tienes el privilegio de ser capitán de predicación. Gracias por tu disposición y por cuidar a tus hermanos en el servicio. 💪`,
+            ``,
+            `🕒 ${schedule.time} (${schedule.period})`,
+            `📍 ${schedule.meetingPlace}`,
+            terrs ? `🗺️ Territorios sugeridos: ${terrs}` : '',
+            ``,
+            worksheetUrl ? `📄 Tu hoja de trabajo (con los mapas): ${worksheetUrl}` : `📄 Tu hoja de trabajo te la compartimos por separado.`,
+            ``,
+            `¡Gracias por tu apoyo!`
+        ].filter((l, i, arr) => !(l === '' && arr[i - 1] === ''));
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
+        if (waWindow) waWindow.location.href = url; else window.open(url, '_blank');
+
+        if (!worksheetUrl) {
+            // Plan B: descargar el PDF para adjuntarlo a mano en el chat
+            const doc = await buildIndividualPDF(schedule);
+            doc.save(worksheetFileName(schedule));
+            onShowModal({ type: 'info', title: 'Hoja descargada', message: 'No se pudo subir la hoja para enviar el enlace. Se descargó el PDF: adjúntalo en el chat de WhatsApp que se abrió.' });
+        }
+        setSentIds(prev => [...prev, schedule.id]);
+        setSendingId(null);
     };
 
     return (
@@ -449,6 +590,51 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                     </div>
                 </div>
             </div>
+
+            {canManage && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                        <div>
+                            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><span>🔔</span> Recordatorios a capitanes</h3>
+                            <p className="text-xs text-slate-500">Por defecto muestra las asignaciones de mañana. Cada botón abre WhatsApp con el mensaje y la hoja de trabajo listos.</p>
+                        </div>
+                        <input
+                            type="date"
+                            value={reminderDate}
+                            onChange={(e) => setReminderDate(e.target.value)}
+                            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                    {reminderSchedules.length === 0 ? (
+                        <p className="text-sm text-slate-400 py-2">No hay capitanes asignados para esa fecha.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {reminderSchedules.map(s => {
+                                const captain = publishers.find(p => p.id === s.captainId);
+                                const hasPhone = !!normalizePhone(captain?.Cel);
+                                const sent = sentIds.includes(s.id);
+                                return (
+                                    <div key={s.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-blue-50/60 border border-blue-100">
+                                        <div className="text-sm">
+                                            <p className="font-bold text-slate-800">{s.captainName} <span className="text-slate-400 font-medium">· {s.time} ({s.period})</span></p>
+                                            <p className="text-xs text-slate-500">{s.meetingPlace}{s.suggestedTerritories?.length ? ` · Terr. ${s.suggestedTerritories.join(', ')}` : ''}</p>
+                                            {!hasPhone && <p className="text-xs text-red-500 font-semibold">Sin celular registrado</p>}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            disabled={!hasPhone || sendingId === s.id}
+                                            onClick={() => sendReminder(s)}
+                                            className="px-4 py-2 bg-green-600 text-white text-xs font-black rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                        >
+                                            {sendingId === s.id ? 'Preparando hoja…' : sent ? '✓ Enviado · reenviar' : '💬 Enviar por WhatsApp'}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {viewMode === 'document' ? (
                 <div className="bg-white rounded-3xl p-6 md:p-10 shadow-xl border border-slate-100 max-w-5xl mx-auto my-2 fade-in relative overflow-hidden">
