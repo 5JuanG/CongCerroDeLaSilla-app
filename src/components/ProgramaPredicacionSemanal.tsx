@@ -6,6 +6,10 @@ import autoTable from 'jspdf-autotable';
 import { DEFAULT_AVATAR } from '../constants';
 
 // Fecha local (no UTC) en formato YYYY-MM-DD
+// Opción especial: cada Superintendente de Grupo (o su auxiliar) sale a predicar con su propio grupo.
+const GROUP_CAPTAIN_ID = '__SUP_GRUPO_O_AUXILIAR__';
+const GROUP_CAPTAIN_LABEL = 'Sup. de Grupo o Auxiliar';
+
 const toLocalISO = (d: Date) => {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -275,7 +279,14 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
         doc.text('CAPITÁN ASIGNADO', MARGIN, y);
         y += 10;
 
-        if (captain) {
+        if (schedule.captainId === GROUP_CAPTAIN_ID) {
+            doc.setFontSize(13);
+            doc.text(GROUP_CAPTAIN_LABEL, MARGIN, y + 6);
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Cada grupo sale a predicar con su superintendente de grupo o su auxiliar.', MARGIN, y + 14);
+            y += 25;
+        } else if (captain) {
             if (captain.Foto) {
                 try {
                     const img = new Image();
@@ -468,7 +479,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
 
     const reminderSchedules = useMemo(() =>
         schedules
-            .filter(s => s.date === reminderDate && s.captainId)
+            .filter(s => s.date === reminderDate && s.captainId && s.captainId !== GROUP_CAPTAIN_ID)
             .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
         [schedules, reminderDate]);
 
@@ -899,6 +910,12 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                         let newPlace = currentPlace;
                                         let suggested = editingSchedule?.suggestedTerritories || [];
 
+                                        if (e.target.value === GROUP_CAPTAIN_ID) {
+                                            newPlace = 'Según cada grupo';
+                                        } else if (currentPlace === 'Según cada grupo') {
+                                            newPlace = 'Salón del Reino';
+                                        }
+
                                         if (p && p.esLugarEncuentro && (!currentPlace || currentPlace === 'Salón del Reino' || currentPlace.startsWith('Casa de'))) {
                                             newPlace = `FAM. ${p.Familia || p.Apellido}, ${p.Dirección || ''}`;
                                             suggested = generateSuggestions(newPlace);
@@ -907,7 +924,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                         setEditingSchedule({ 
                                             ...editingSchedule!, 
                                             captainId: e.target.value, 
-                                            captainName: p ? `${p.Nombre} ${p.Apellido}` : '',
+                                            captainName: p ? `${p.Nombre} ${p.Apellido}` : (e.target.value === GROUP_CAPTAIN_ID ? GROUP_CAPTAIN_LABEL : ''),
                                             meetingPlace: newPlace,
                                             suggestedTerritories: suggested
                                         });
@@ -915,6 +932,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                     required
                                 >
                                     <option value="">Seleccione un capitán...</option>
+                                    <option value={GROUP_CAPTAIN_ID}>👥 {GROUP_CAPTAIN_LABEL} (cada grupo sale con el suyo)</option>
                                     {publishers
                                         .filter(p => p.Sexo === 'Hombre' && p.asignacionesDisponibles?.includes('Capitán para Predicación'))
                                         .map(p => (
@@ -929,7 +947,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-bold"
                                     value={
                                         (editingSchedule?.meetingPlace && 
-                                        !['Salón del Reino', 'Por Grupos'].includes(editingSchedule.meetingPlace) && 
+                                        !['Salón del Reino', 'Por Grupos', 'Según cada grupo'].includes(editingSchedule.meetingPlace) && 
                                         !editingSchedule.meetingPlace.startsWith('FAM.')) ? 'Otro' : (editingSchedule?.meetingPlace || '')
                                     }
                                     onChange={e => {
@@ -942,6 +960,7 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                     <option value="">Seleccione lugar...</option>
                                     <option value="Salón del Reino">Salón del Reino</option>
                                     <option value="Por Grupos">Por Grupos</option>
+                                    <option value="Según cada grupo">Según cada grupo</option>
                                     <optgroup label="Hogares de Hermanos">
                                         {publishers.filter(p => p.esLugarEncuentro).map(p => (
                                             <option key={p.id} value={`FAM. ${p.Familia || p.Apellido}, ${p.Dirección || ''}`}>

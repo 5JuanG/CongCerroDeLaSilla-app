@@ -1,35 +1,19 @@
 import React from 'react';
-import { DEFAULT_AVATAR } from '../constants';
 
 interface HeaderProps {
-    user: {
-        displayName: string;
-        email: string;
-        photoURL: string;
-    };
     activeViewLabel: string;
+    groupLabel?: string;
 }
 
-const Header: React.FC<HeaderProps> = ({ user, activeViewLabel }) => {
+// Encabezado de página (solo título). El usuario y "Cerrar sesión" ahora viven en la barra superior (Navigation).
+const Header: React.FC<HeaderProps> = ({ activeViewLabel, groupLabel }) => {
     return (
-        <header className="flex-shrink-0 flex justify-between items-center p-4 pl-14 lg:pl-6 sm:p-6 border-b border-gray-200 bg-white">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-800 truncate pr-2">{activeViewLabel}</h1>
-            <div className="flex items-center gap-3 sm:gap-4">
-                <div className="text-right">
-                    <div className="font-semibold text-gray-700 truncate max-w-[120px] sm:max-w-[200px]">{user.displayName}</div>
-                    <div className="text-sm text-gray-500 truncate max-w-[120px] sm:max-w-[200px]">{user.email}</div>
-                </div>
-                <img
-                    src={user.photoURL}
-                    alt="Foto de perfil"
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-blue-500"
-                    onError={(e) => {
-                        // Fallback to a default image if the provided URL fails
-                        (e.target as HTMLImageElement).src = DEFAULT_AVATAR;
-                    }}
-                />
-            </div>
-        </header>
+        <div className="flex-shrink-0 px-4 sm:px-6 py-3 border-b border-gray-200 bg-white">
+            {groupLabel && groupLabel !== activeViewLabel && (
+                <div className="text-xs text-gray-400 mb-0.5">{groupLabel}</div>
+            )}
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-800 truncate">{activeViewLabel}</h1>
+        </div>
     );
 };
 

@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
-import Sidebar from './components/Sidebar';
+import Navigation from './components/Navigation';
+import { getVisibleNavGroups, findGroupForView, flattenGroupItems } from './navConfig';
 import Header from './components/Header';
 import AsistenciaForm from './components/AsistenciaForm';
 import AsistenciaReporte from './components/AsistenciaReporte';
@@ -24,7 +25,7 @@ import VidaYMinisterio from './components/VidaYMinisterio';
 import RegistroTransaccion from './components/RegistroTransaccion';
 import ReunionPublica from './components/ReunionPublica';
 import HomeDashboard from './components/HomeDashboard';
-import Vigilancia from './components/Vigilancia';
+import VigilanciaComplejo from './components/VigilanciaComplejo';
 import VisitaSC from './components/VisitaSC';
 import ProgramaPredicacionSemanal from './components/ProgramaPredicacionSemanal';
 import { DISCURSOS_PUBLICOS } from './components/discursos';
@@ -1020,7 +1021,7 @@ const App: React.FC = () => {
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
         reunionPublica: <ReunionPublica schedule={safePublicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} onUpdatePublisher={handleUpdatePublisher} />,
-        vigilancia: <Vigilancia schedules={vigilanciaSchedules} onSave={handleSaveVigilanciaSchedule} config={vigilanciaConfig!} onSaveConfig={handleSaveVigilanciaConfig} />,
+        vigilancia: <VigilanciaComplejo legacyConfig={vigilanciaConfig} legacySchedules={vigilanciaSchedules} />,
         visitaSC: <VisitaSC
             publishers={publishers}
             lmSchedules={lmSchedules}
@@ -1083,6 +1084,14 @@ const App: React.FC = () => {
         return navItem ? navItem.label : 'Inicio';
     }, [activeView]);
 
+    const navGroups = useMemo(
+        () => getVisibleNavGroups(user?.role as any, userPermissions as any, !!user?.isCommitteeMember),
+        [user?.role, userPermissions, user?.isCommitteeMember]
+    );
+    const activeNavGroup = useMemo(() => findGroupForView(navGroups, activeView), [navGroups, activeView]);
+    // El panel vertical solo aparece si la categoría activa tiene más de una página.
+    const hasSidePanel = !!activeNavGroup && flattenGroupItems(activeNavGroup).length > 1 && !isSidebarCollapsed;
+
     const linkedPublisher = useMemo(() => {
         if (!user || !publishers.length) return null;
         return publishers.find(p => p.authUid === user.id);
@@ -1122,6 +1131,11 @@ const App: React.FC = () => {
             </button>
         </div>
     );
+
+    // Enlace público del programa de vigilancia del complejo (sin inicio de sesión): ?vigilancia=1
+    if (new URLSearchParams(window.location.search).get('vigilancia') === '1') {
+        return <VigilanciaComplejo standalone />;
+    }
 
     if (loading) {
         return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div></div>;
@@ -1720,19 +1734,19 @@ const App: React.FC = () => {
                 )}
 
                 {!isPlayStoreApp && (
-                    <Sidebar 
-                        activeView={activeView} 
-                        setActiveView={setActiveView} 
-                        onLogout={handleLogout} 
-                        userRole={user.role} 
-                        userPermissions={userPermissions} 
-                        isCommitteeMember={user.isCommitteeMember} 
-                        isCollapsed={isSidebarCollapsed} 
-                        setIsCollapsed={setIsSidebarCollapsed} 
+                    <Navigation
+                        groups={navGroups}
+                        activeView={activeView}
+                        setActiveView={setActiveView}
+                        onLogout={handleLogout}
+                        user={userProfileForHeader}
+                        isSidePanelOpen={hasSidePanel}
+                        sidePanelCollapsed={isSidebarCollapsed}
+                        setSidePanelCollapsed={setIsSidebarCollapsed}
                     />
                 )}
                 
-                <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${!isPlayStoreApp ? (isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64') : 'pb-16'}`}>
+                <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${!isPlayStoreApp ? `pt-14 ${hasSidePanel ? 'lg:pl-56' : ''}` : 'pb-16'}`}>
                     {dataLoadError && <ErrorBanner message={dataLoadError} />}
                     {connectionError && (
                         <div className="bg-red-600 text-white text-center p-2 text-sm animate-pulse z-10">
@@ -1740,8 +1754,8 @@ const App: React.FC = () => {
                         </div>
                     )}
                     <Header 
-                        user={userProfileForHeader} 
                         activeViewLabel={isPlayStoreApp ? 'App Cerro' : activeViewLabel} 
+                        groupLabel={isPlayStoreApp ? undefined : activeNavGroup?.label}
                     />
                     <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-4 sm:p-6">
                         {userCanAccessView ? ALL_COMPONENTS[activeView] : (

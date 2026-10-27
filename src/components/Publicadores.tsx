@@ -8,6 +8,7 @@ import { ASSIGNMENT_ROLES, normalizeRoles } from '../assignmentRoles';
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { VotacionPrivilegiosAdmin, loadVotacionDocs, tallyPublisher, ROLE_SHORT } from './VotacionPrivilegios';
 
 interface PublicadoresProps {
     publishers: Publisher[];
@@ -360,6 +361,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingPublisher, setEditingPublisher] = useState<Publisher | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'cards' | 'contactos'>('list');
+    const [showVotacion, setShowVotacion] = useState(false);
 
     const itemsPerPage = 9;
 
@@ -668,7 +670,10 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
         doc.save('Formulario_Datos_Publicador.pdf');
     };
 
-    const handleGenerateChecklistPDF = () => {
+    const handleGenerateChecklistPDF = async () => {
+        // Calificaciones finales según la decisión del cuerpo de ancianos (si ya hay respuestas)
+        const votDocs = await loadVotacionDocs();
+        const hasVotes = votDocs.some(d => d.submitted);
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
@@ -680,7 +685,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
 
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Generado el: ${new Date().toLocaleDateString()}`, pageWidth / 2, 22, { align: 'center' });
+        doc.text(`Generado el: ${new Date().toLocaleDateString()}${hasVotes ? ' · Calificación final según la decisión del cuerpo de ancianos' : ''}`, pageWidth / 2, 22, { align: 'center' });
 
         // Filter and group publishers
         const maleActivePublishers = publishers.filter(p => p.Sexo === 'Hombre' && p.Estatus === 'Activo');
@@ -693,9 +698,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
         });
 
         // Current roles for the table headers (shortened for space)
-        const tableHeaders = [
-            'Nombre', 'PRES', 'A PP', 'A PA', 'A AUD', 'MIC', 'VIG', 'LEC', 'CAP', 'ORA', 'DIS'
-        ];
+        const tableHeaders = ['Nombre', ...ASSIGNMENT_ROLES.map(r => ROLE_SHORT[r] || r)];
 
         let finalY = 30;
         const checkmark = '\u2713'; // Unicode Checkmark ✓
@@ -727,20 +730,25 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
             doc.text(`GRUPO: ${groupName.toUpperCase()}`, 18, finalY + 1);
             doc.setTextColor(0, 0, 0);
 
-            const tableData = groupData.map(p => {
+            // Por celda: 'ok' (calificó), 'no' (no calificó) o 'held' (sin votos, ya lo tiene marcado)
+            const cellKinds: Record<string, 'ok' | 'no' | 'held'> = {};
+            const tableData = groupData.map((p, rowIdx) => {
                 const assignments = normalizeRoles(p.asignacionesDisponibles);
+                const tally = tallyPublisher(votDocs, p.id);
                 return [
                     `${p.Nombre} ${p.Apellido}`,
-                    assignments.includes('Presidente') ? checkmark : '',
-                    assignments.includes('Acomodador PP') ? checkmark : '',
-                    assignments.includes('Acomodador Puerta del Auditorio') ? checkmark : '',
-                    assignments.includes('Acomodador de Auditorio') ? checkmark : '',
-                    assignments.includes('Micrófonos') ? checkmark : '',
-                    assignments.includes('Vigilante') ? checkmark : '',
-                    assignments.includes('Lector de la Atalaya') ? checkmark : '',
-                    assignments.includes('Capitán para Predicación') ? checkmark : '',
-                    assignments.includes('Oración') ? checkmark : '',
-                    assignments.includes('Califica para Discursar') ? checkmark : ''
+                    ...ASSIGNMENT_ROLES.map((role, k) => {
+                        const t = tally.perRole[role];
+                        if (t.total > 0) {
+                            cellKinds[`${rowIdx}-${k + 1}`] = t.ok ? 'ok' : 'no';
+                            return `${t.favor}/${t.total}`;
+                        }
+                        if (assignments.includes(role)) {
+                            cellKinds[`${rowIdx}-${k + 1}`] = 'held';
+                            return '3'; // check en ZapfDingbats
+                        }
+                        return '';
+                    })
                 ];
             });
 
@@ -748,23 +756,18 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 head: [tableHeaders],
                 body: tableData,
                 startY: finalY + 5,
-                theme: 'grid', // GRID theme requested
-                headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 8, halign: 'center' },
-                styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', textColor: [0, 0, 0] },
-                columnStyles: {
-                    0: { cellWidth: 50 }, // Name column wider
-                    1: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    2: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    3: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    4: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    5: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    6: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    7: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    8: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    9: { halign: 'center', fontSize: 10, font: 'zapfdingbats' },
-                    10: { halign: 'center', fontSize: 10, font: 'zapfdingbats' }
+                theme: 'grid',
+                headStyles: { fillColor: [44, 62, 80], textColor: 255, fontSize: 7, halign: 'center', cellPadding: 1.5 },
+                styles: { fontSize: 7.5, cellPadding: 1.8, overflow: 'linebreak', textColor: [0, 0, 0], halign: 'center' },
+                columnStyles: { 0: { cellWidth: 45, halign: 'left' } },
+                margin: { left: 12, right: 12 },
+                didParseCell: (data: any) => {
+                    if (data.section !== 'body' || data.column.index === 0) return;
+                    const kind = cellKinds[`${data.row.index}-${data.column.index}`];
+                    if (kind === 'ok') { data.cell.styles.fillColor = [198, 239, 206]; data.cell.styles.fontStyle = 'bold'; }
+                    else if (kind === 'no') { data.cell.styles.fillColor = [255, 220, 220]; }
+                    else if (kind === 'held') { data.cell.styles.font = 'zapfdingbats'; data.cell.styles.fontSize = 9; }
                 },
-                margin: { left: 15, right: 15 },
                 didDrawPage: (data: any) => {
                     finalY = data.cursor.y;
                 }
@@ -782,9 +785,11 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                 docX.setTextColor(100);
 
                 const legendLines = [
-                    "PRES: Presidente | A PP: Acomodador Puerta Principal | A PA: Acomodador Puerta Auditorio",
-                    "A AUD: Acomodador Auditorio | MIC: Micrófonos | VIG: Vigilante | LEC: Lector Atalaya",
-                    "CAP: Capitán Predicación | ORA: Oración | DIS: Discursar"
+                    "PRES: Presidente | A PP: Acomodador Puerta Principal | A PA: Acomodador Puerta Auditorio | A AUD: Acomodador Auditorio",
+                    "MIC: Micrófonos | VIG: Vigilante | LEC: Lector Atalaya | COND: Conductor Atalaya | CAP: Capitán Predicación | ORA: Oración | DIS: Discursar",
+                    hasVotes
+                        ? "Verde: califica (a favor/votaron, mitad o más) | Rojo: no califica | ✓ sin votación: ya lo tiene marcado en la ficha"
+                        : "✓ = privilegio marcado en la ficha del publicador"
                 ];
 
                 let legendY = docX.internal.pageSize.getHeight() - 18;
@@ -891,6 +896,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
         <div className="bg-gray-100 p-4 sm:p-6 lg:p-8">
             <style>{`.form-section-title { border-bottom: 2px solid #3b82f6; padding-bottom: 5px; margin-top: 25px; margin-bottom: 15px; color: #3b82f6; font-size: 1.1rem; font-weight: bold; }`}</style>
 
+            {showVotacion && <VotacionPrivilegiosAdmin publishers={publishers} onClose={() => setShowVotacion(false)} />}
             {isModalOpen && <PublisherForm publisher={editingPublisher} onSubmit={handleFormSubmit} onCancel={() => setIsModalOpen(false)} onShowModal={onShowModal} />}
 
             <header className="bg-white p-6 rounded-lg shadow-md mb-8">
@@ -900,6 +906,7 @@ const Publicadores: React.FC<PublicadoresProps> = ({ publishers, serviceReports,
                         <button onClick={handleAddPublisher} disabled={!canManage} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 w-full sm:w-auto disabled:bg-gray-400 disabled:cursor-not-allowed">Añadir Publicador</button>
                         <button onClick={handleGenerateFormPDF} className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 w-full sm:w-auto">Generar Formulario</button>
                         <button onClick={handleGenerateChecklistPDF} className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 w-full sm:w-auto">Generar Checklist Varones</button>
+                        {canManage && <button onClick={() => setShowVotacion(true)} className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 w-full sm:w-auto">Decisión del Cuerpo de Ancianos</button>}
                         <button onClick={handleGenerateEmergencyPDF} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 w-full sm:w-auto">Generar PDF Emergencias</button>
                         <button onClick={handleExportCSV} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 w-full sm:w-auto text-sm">Exportar CSV</button>
                     </div>
