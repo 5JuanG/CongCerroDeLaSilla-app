@@ -26,6 +26,7 @@ import RegistroTransaccion from './components/RegistroTransaccion';
 import ReunionPublica from './components/ReunionPublica';
 import HomeDashboard from './components/HomeDashboard';
 import VigilanciaComplejo from './components/VigilanciaComplejo';
+import VotacionPrivilegiosForm from './components/VotacionPrivilegios';
 import VisitaSC from './components/VisitaSC';
 import ProgramaPredicacionSemanal from './components/ProgramaPredicacionSemanal';
 import { DISCURSOS_PUBLICOS } from './components/discursos';
@@ -1143,6 +1144,11 @@ const App: React.FC = () => {
 
     const params = new URLSearchParams(window.location.search);
     const isStandalonePage = params.get('presentacion') === '1' && params.get('view') === 'visitaSC';
+
+    // Enlace público para que los ancianos den su opinión sobre los privilegios de los varones: ?votacion=1
+    if (params.get('votacion') === '1') {
+        return <VotacionPrivilegiosForm publishers={publishers} />;
+    }
 
     if (isStandalonePage) {
         return (
