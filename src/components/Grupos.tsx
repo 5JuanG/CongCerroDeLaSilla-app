@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Publisher } from '../types';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { isStatusLikeGroup } from '../groupUtils';
 
 interface GruposProps {
     publishers: Publisher[];
@@ -16,7 +17,7 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
 
     const groupNames = useMemo(() => {
         const activePublishers = publishers.filter(p => p.Estatus === 'Activo');
-        const allGroups = activePublishers.map(p => p.Grupo).filter(Boolean) as string[];
+        const allGroups = activePublishers.map(p => p.Grupo).filter(g => !!g && !isStatusLikeGroup(g)) as string[];
         return [...new Set(allGroups)].sort();
     }, [publishers]);
 
@@ -263,8 +264,22 @@ const Grupos: React.FC<GruposProps> = ({ publishers, onUpdateGroup, canManage })
             const statusesToTrack: Publisher['Estatus'][] = ['Se cambió de congregación', 'Falleció', 'Sacado de la congregación'];
             const data: Partial<Record<Publisher['Estatus'], Publisher[]>> = {};
 
+            // Un "grupo" que en realidad es un estatus (ej. "Se cambió de congregación") no es un
+            // grupo de servicio: quien lo tenga se muestra aquí según el estatus que indica el nombre.
+            const statusFromGroup = (g?: string | null): Publisher['Estatus'] | null => {
+                const n = String(g ?? '').toLowerCase();
+                if (n.includes('falleci')) return 'Falleció';
+                if (n.includes('sacado')) return 'Sacado de la congregación';
+                if (n.includes('congregaci')) return 'Se cambió de congregación';
+                return null;
+            };
+            const effectiveStatus = (p: Publisher): Publisher['Estatus'] => {
+                if (p.Estatus === 'Activo' && isStatusLikeGroup(p.Grupo)) return statusFromGroup(p.Grupo) || p.Estatus;
+                return p.Estatus;
+            };
+
             statusesToTrack.forEach(status => {
-                const pubsWithStatus = publishers.filter(p => p.Estatus === status).sort((a, b) => a.Nombre.localeCompare(b.Nombre));
+                const pubsWithStatus = publishers.filter(p => effectiveStatus(p) === status).sort((a, b) => a.Nombre.localeCompare(b.Nombre));
                 if (pubsWithStatus.length > 0) data[status] = pubsWithStatus;
             });
             return data;
