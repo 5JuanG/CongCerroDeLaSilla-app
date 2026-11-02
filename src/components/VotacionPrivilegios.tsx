@@ -43,6 +43,28 @@ export type ElderDoc = {
     submittedAt?: any;
 };
 
+// Foto del publicador (círculo). Si no tiene foto o falla la carga, muestra sus iniciales.
+const PubPhoto: React.FC<{ p: Publisher; size?: string }> = ({ p, size = 'w-12 h-12' }) => {
+    const [failed, setFailed] = useState(false);
+    const initials = [p.Nombre, p.Apellido].filter(Boolean).map(n => String(n)[0]).join('').toUpperCase() || '?';
+    if (!p.Foto || failed) {
+        return (
+            <div className={`${size} shrink-0 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-xs border-2 border-slate-300`}>
+                {initials}
+            </div>
+        );
+    }
+    return (
+        <img
+            src={p.Foto}
+            alt={`Foto de ${p.Nombre || ''}`}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            className={`${size} shrink-0 rounded-full object-cover border-2 border-blue-500`}
+        />
+    );
+};
+
 const fullName = (p: Publisher) => [p.Nombre, p.Apellido].filter(Boolean).join(' ').trim();
 
 const isActiveMale = (p: Publisher) =>
@@ -296,12 +318,15 @@ export const VotacionPrivilegiosForm: React.FC<{ publishers: Publisher[] }> = ({
                                             onClick={() => setOpenId(isOpen ? null : b.id)}
                                             className="w-full text-left p-4 flex items-center justify-between gap-3"
                                         >
-                                            <div className="min-w-0">
-                                                <p className="font-semibold text-slate-800 truncate">{fullName(b)}</p>
-                                                <p className="text-xs text-slate-500">
-                                                    {b.Grupo || 'Sin grupo'}{b.Privilegio ? ` · ${b.Privilegio}` : ''}
-                                                    {has.length > 0 && ` · Ya tiene: ${has.map(r => ROLE_SHORT[r] || r).join(', ')}`}
-                                                </p>
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <PubPhoto p={b} />
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-slate-800 truncate">{fullName(b)}</p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {b.Grupo || 'Sin grupo'}{b.Privilegio ? ` · ${b.Privilegio}` : ''}
+                                                        {has.length > 0 && ` · Ya tiene: ${has.map(r => ROLE_SHORT[r] || r).join(', ')}`}
+                                                    </p>
+                                                </div>
                                             </div>
                                             <div className="text-right shrink-0">
                                                 {v?.reviewed
@@ -403,7 +428,7 @@ export const VotacionPrivilegiosForm: React.FC<{ publishers: Publisher[] }> = ({
 // ═════════════════════════════════════════════════════════════════════════════
 // PANEL DE RESULTADOS (dentro de la app)
 // ═════════════════════════════════════════════════════════════════════════════
-export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClose: () => void }> = ({ publishers, onClose }) => {
+export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClose: () => void; readOnly?: boolean }> = ({ publishers, onClose, readOnly = false }) => {
     const [docs, setDocs] = useState<ElderDoc[]>([]);
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
@@ -603,6 +628,16 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
                     <div className="bg-white rounded-xl shadow p-4 lg:col-span-2">
+                        {readOnly ? (
+                            <>
+                                <h3 className="font-bold text-slate-800 mb-2">Resultado final (solo lectura)</h3>
+                                <p className="text-xs text-slate-500">
+                                    Regla: califica si a favor ≥ mitad de los ancianos que enviaron y revisaron a ese hermano
+                                    (mayoría, o mitad y mitad). Un anciano no vota por sí mismo. Aquí se muestra el resultado
+                                    final y las observaciones, sin el detalle de cómo votó cada anciano.
+                                </p>
+                            </>
+                        ) : (<>
                         <h3 className="font-bold text-slate-800 mb-2">Enlace para los ancianos</h3>
                         <input readOnly value={link} onFocus={e => e.currentTarget.select()} className="w-full p-2 border rounded-lg text-sm bg-slate-50" />
                         <div className="flex flex-wrap gap-2 mt-3">
@@ -617,6 +652,7 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                             Regla: cada anciano marca, por hermano, los privilegios que apoya. Califica si a favor ≥ mitad de los
                             ancianos que enviaron y revisaron a ese hermano (mayoría, o mitad y mitad). Un anciano no vota por sí mismo.
                         </p>
+                        </>)}
                     </div>
 
                     <div className="bg-white rounded-xl shadow p-4">
@@ -648,12 +684,12 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                         <button onClick={downloadPDF} disabled={submittedCount === 0} className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40">
                             Descargar PDF
                         </button>
-                        <button onClick={() => setConfirm('apply')} disabled={pendingApply.length === 0 || busy} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40">
+                        {!readOnly && <button onClick={() => setConfirm('apply')} disabled={pendingApply.length === 0 || busy} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40">
                             Aplicar al checklist ({pendingApply.length})
-                        </button>
-                        <button onClick={() => setConfirm('reset')} disabled={docs.length === 0 || busy} className="px-3 py-2 bg-white border border-red-400 text-red-600 rounded-lg text-sm font-semibold disabled:opacity-40">
+                        </button>}
+                        {!readOnly && <button onClick={() => setConfirm('reset')} disabled={docs.length === 0 || busy} className="px-3 py-2 bg-white border border-red-400 text-red-600 rounded-lg text-sm font-semibold disabled:opacity-40">
                             Nueva ronda
-                        </button>
+                        </button>}
                     </div>
                 </div>
 
@@ -676,8 +712,13 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                                     <React.Fragment key={b.id}>
                                         <tr className="border-t">
                                             <td className="p-2 sticky left-0 bg-white font-medium whitespace-nowrap">
-                                                {fullName(b)}
-                                                <span className="block text-[11px] text-slate-400">{b.Grupo || 'Sin grupo'}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <PubPhoto p={b} size="w-9 h-9" />
+                                                    <div>
+                                                        {fullName(b)}
+                                                        <span className="block text-[11px] text-slate-400">{b.Grupo || 'Sin grupo'}</span>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="p-2 text-center text-slate-600">{counted.length}</td>
                                             {ASSIGNMENT_ROLES.map(role => {
@@ -706,7 +747,7 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                                                     <ul className="space-y-1">
                                                         {notes.map(d => (
                                                             <li key={d.id} className="text-slate-700">
-                                                                <b>{d.elderName}:</b> {d.votes[b.id].obs}
+                                                                {readOnly ? <>• {d.votes[b.id].obs}</> : <><b>{d.elderName}:</b> {d.votes[b.id].obs}</>}
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -732,9 +773,12 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                         return (
                             <div key={b.id} className="bg-white rounded-xl shadow p-4">
                                 <div className="flex items-start justify-between gap-3 mb-3">
-                                    <div className="min-w-0">
-                                        <p className="font-bold text-slate-800 leading-tight break-words">{fullName(b)}</p>
-                                        <p className="text-xs text-slate-400">{b.Grupo || 'Sin grupo'}</p>
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <PubPhoto p={b} />
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-800 leading-tight break-words">{fullName(b)}</p>
+                                            <p className="text-xs text-slate-400">{b.Grupo || 'Sin grupo'}</p>
+                                        </div>
                                     </div>
                                     <span className="shrink-0 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
                                         {counted.length} votaron
@@ -774,7 +818,7 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                                                 <ul className="space-y-1 text-sm">
                                                     {notes.map(d => (
                                                         <li key={d.id} className="text-slate-700">
-                                                            <b>{d.elderName}:</b> {d.votes[b.id].obs}
+                                                            {readOnly ? <>• {d.votes[b.id].obs}</> : <><b>{d.elderName}:</b> {d.votes[b.id].obs}</>}
                                                         </li>
                                                     ))}
                                                 </ul>
