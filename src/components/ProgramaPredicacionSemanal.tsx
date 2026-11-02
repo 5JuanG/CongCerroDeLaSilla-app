@@ -693,7 +693,8 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                             No se encontraron programas de predicación.
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                        <>
+                        <div className="hidden lg:block overflow-x-auto rounded-2xl border border-slate-100">
                             <table className="w-full text-left border-collapse text-sm">
                                 <thead>
                                     <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-bold uppercase text-[11px] tracking-wider">
@@ -784,6 +785,101 @@ const ProgramaPredicacionSemanal: React.FC<ProgramaPredicacionSemanalProps> = ({
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Móvil y tablet: tarjetas en lugar de tabla (sin scroll horizontal) */}
+                        <div className="lg:hidden space-y-3">
+                            {filteredSchedules.map((s) => (
+                                <div key={s.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                    <div className="flex items-start justify-between gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
+                                        <div className="min-w-0">
+                                            <p className="font-black text-slate-800 text-sm leading-tight">
+                                                {new Date(s.date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' }).toUpperCase()}
+                                            </p>
+                                            <span className="inline-block mt-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-black rounded uppercase tracking-wider">{s.period}</span>
+                                        </div>
+                                        <p className="text-xl font-black text-blue-600 shrink-0">🕒 {s.time}</p>
+                                    </div>
+
+                                    <div className="px-4 py-3 space-y-3 text-sm">
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-base leading-snug">📍</span>
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Lugar de encuentro</p>
+                                                <p className="font-semibold text-slate-700 leading-snug break-words">{s.meetingPlace}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                                                {s.captainName ? s.captainName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '👤'}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Capitán asignado</p>
+                                                <p className="font-bold text-slate-800 text-sm break-words">{s.captainName || 'Sin asignar'}</p>
+                                            </div>
+                                        </div>
+
+                                        {(s.modality || s.notes) && (
+                                            <div className="flex items-start gap-2">
+                                                <span className="text-base leading-snug">📝</span>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Modalidad / Notas</p>
+                                                    {s.modality && <p className="font-semibold text-slate-700 text-xs">{s.modality}</p>}
+                                                    {s.notes && <p className="text-xs text-slate-400 italic break-words">{s.notes}</p>}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-base leading-snug">🗺️</span>
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Territorios</p>
+                                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                                    {s.suggestedTerritories && s.suggestedTerritories.length > 0 ? (
+                                                        s.suggestedTerritories.map(t => (
+                                                            <span key={t} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[11px] font-black border border-blue-100">{t}</span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400 font-medium">Ninguno</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 px-4 pb-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => generateIndividualPDF(s)}
+                                            className="flex-1 py-2.5 bg-slate-100 text-slate-800 rounded-xl text-xs font-black hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            📄 Hoja de trabajo
+                                        </button>
+                                        {canManage && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenModal(s)}
+                                                    className="px-4 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-black hover:bg-blue-100 transition-all"
+                                                    title="Editar"
+                                                >
+                                                    ✏️ Editar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(s.id)}
+                                                    className="px-3 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all"
+                                                    title="Eliminar"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        </>
                     )}
                 </div>
             ) : (

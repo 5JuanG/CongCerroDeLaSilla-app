@@ -657,7 +657,7 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow overflow-auto">
+                <div className="hidden lg:block bg-white rounded-xl shadow overflow-auto">
                     <table className="min-w-full text-sm">
                         <thead className="bg-slate-800 text-white">
                             <tr>
@@ -718,6 +718,73 @@ export const VotacionPrivilegiosAdmin: React.FC<{ publishers: Publisher[]; onClo
                             })}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Móvil y tablet: una tarjeta por hermano en lugar de la tabla */}
+                <div className="lg:hidden space-y-3">
+                    {filteredRows.length === 0 && (
+                        <p className="bg-white rounded-xl shadow p-6 text-center text-slate-400 text-sm">No se encontraron hermanos.</p>
+                    )}
+                    {filteredRows.map(({ b, counted, perRole }) => {
+                        const has = normalizeRoles(b.asignacionesDisponibles);
+                        const notes = docs.filter(d => d.submitted && d.elderId !== b.id && (d.votes?.[b.id]?.obs || '').trim());
+                        const isOpen = expanded === b.id;
+                        return (
+                            <div key={b.id} className="bg-white rounded-xl shadow p-4">
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-slate-800 leading-tight break-words">{fullName(b)}</p>
+                                        <p className="text-xs text-slate-400">{b.Grupo || 'Sin grupo'}</p>
+                                    </div>
+                                    <span className="shrink-0 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">
+                                        {counted.length} votaron
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {ASSIGNMENT_ROLES.map(role => {
+                                        const t = perRole[role];
+                                        const holds = has.includes(role);
+                                        const cls = t.total === 0
+                                            ? 'bg-slate-50 border-slate-200 text-slate-400'
+                                            : t.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-700';
+                                        return (
+                                            <div key={role} className={`rounded-lg border p-2 ${cls}`}>
+                                                <p className="text-[11px] leading-tight font-medium">{role}</p>
+                                                <p className="mt-1 text-sm font-bold">
+                                                    {t.total === 0 ? '—' : `${t.ok ? '✓' : '✗'} ${t.favor}/${t.total}`}
+                                                    {holds && <span className="text-blue-600 font-normal" title="Ya lo tiene marcado en Publicadores"> ●</span>}
+                                                </p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {notes.length > 0 && (
+                                    <div className="mt-3">
+                                        <button
+                                            onClick={() => setExpanded(isOpen ? null : b.id)}
+                                            className="w-full py-2 rounded-lg bg-slate-100 text-blue-700 text-sm font-semibold"
+                                        >
+                                            💬 Observaciones ({notes.length}) {isOpen ? '▲' : '▼'}
+                                        </button>
+                                        {isOpen && (
+                                            <div className="mt-2 p-3 rounded-lg bg-slate-50">
+                                                <p className="font-semibold text-slate-700 text-sm mb-1">En qué puede mejorar {b.Nombre}:</p>
+                                                <ul className="space-y-1 text-sm">
+                                                    {notes.map(d => (
+                                                        <li key={d.id} className="text-slate-700">
+                                                            <b>{d.elderName}:</b> {d.votes[b.id].obs}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
                 <p className="text-xs text-slate-500 mt-2">
                     ✓ califica · ✗ no califica · — sin votos · ● ya lo tiene marcado en Publicadores. "A favor/votaron" cuenta solo ancianos que enviaron y revisaron al hermano.
