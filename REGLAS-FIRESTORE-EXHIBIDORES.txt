@@ -1,0 +1,13 @@
+Agrega estas reglas DENTRO de "match /databases/{database}/documents { ... }" en Firebase > Firestore > Reglas,
+junto a las que ya tienes, y pulsa "Publicar":
+
+    // Predicación pública con exhibidores (formulario sin inicio de sesión)
+    match /predicacion_publica/{semana} {
+      allow read, write: if true;
+    }
+    match /settings/predicacion_publica_config {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+Si tu regla actual ya es "match /{document=**} { allow read, write: if true; }" no necesitas agregar nada.

@@ -78,6 +78,7 @@ export type GranularPermission =
     'manageMeetingAssignments' |
     'managePublicTalks' |
     'manageTerritorios' |
+    'viewDecisionAncianos' |
     'resetData';
 
 export type Permission = View | GranularPermission;
