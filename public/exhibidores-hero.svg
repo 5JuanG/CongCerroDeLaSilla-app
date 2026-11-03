@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600">
+<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e3a8a"/><stop offset="1" stop-color="#7dd3fc"/></linearGradient></defs>
+<rect width="1200" height="600" fill="url(#s)"/><circle cx="1000" cy="110" r="50" fill="#fde68a"/>
+<path d="M0 420 L120 330 L190 300 L260 350 L340 410 L430 440 L520 400 L600 330 L680 300 L760 360 L870 420 L1000 380 L1200 430 L1200 600 L0 600Z" fill="#14532d" opacity=".8"/>
+<rect y="470" width="1200" height="130" fill="#475569"/><rect y="470" width="1200" height="10" fill="#94a3b8"/>
+<g stroke="#e2e8f0" stroke-width="6" stroke-dasharray="40 30"><line x1="0" y1="560" x2="1200" y2="560"/></g>
+<g transform="translate(600,430) scale(1.6)">
+  <rect x="-70" y="-120" width="140" height="150" rx="10" fill="#ffffff"/>
+  <rect x="-70" y="-120" width="140" height="26" rx="10" fill="#1e3a8a"/>
+  <g fill="#93c5fd"><rect x="-58" y="-82" width="36" height="46" rx="4"/><rect x="-16" y="-82" width="36" height="46" rx="4"/><rect x="26" y="-82" width="32" height="46" rx="4"/></g>
+  <g fill="#86efac"><rect x="-58" y="-28" width="36" height="42" rx="4"/><rect x="-16" y="-28" width="36" height="42" rx="4"/><rect x="26" y="-28" width="32" height="42" rx="4"/></g>
+  <rect x="-70" y="30" width="140" height="10" fill="#334155"/>
+  <circle cx="-44" cy="52" r="16" fill="#0f172a"/><circle cx="-44" cy="52" r="6" fill="#94a3b8"/>
+  <circle cx="44" cy="52" r="16" fill="#0f172a"/><circle cx="44" cy="52" r="6" fill="#94a3b8"/>
+</g>
+<g transform="translate(400,430) scale(1.25)"><g transform="translate(0,0)">
+  <circle cx="0" cy="-150" r="22" fill="#f1c9a5"/>
+  <path d="M-24 -156 Q0 -190 24 -156 Q0 -170 -24 -156Z" fill="#3b2f2a"/>
+  <path d="M-34 -122 Q0 -135 34 -122 L40 0 L-40 0Z" fill="#e2e8f0"/>
+  <rect x="-5" y="-125" width="10" height="55" fill="#1e3a8a"/>
+  <rect x="-28" y="0" width="22" height="90" rx="6" fill="#1f2937"/><rect x="6" y="0" width="22" height="90" rx="6" fill="#1f2937"/>
+</g></g>
+<g transform="translate(800,430) scale(1.25)"><g transform="translate(0,0)">
+  <circle cx="0" cy="-150" r="22" fill="#e0b48f"/>
+  <path d="M-24 -156 Q0 -190 24 -156 Q0 -170 -24 -156Z" fill="#3b2f2a"/>
+  <path d="M-34 -122 Q0 -135 34 -122 L40 0 L-40 0Z" fill="#fef3c7"/>
+  <rect x="-5" y="-125" width="10" height="55" fill="#1e3a8a"/>
+  <rect x="-28" y="0" width="22" height="90" rx="6" fill="#1f2937"/><rect x="6" y="0" width="22" height="90" rx="6" fill="#1f2937"/>
+</g></g>
+</svg>
