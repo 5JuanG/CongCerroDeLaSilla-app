@@ -26,6 +26,7 @@ import RegistroTransaccion from './components/RegistroTransaccion';
 import ReunionPublica from './components/ReunionPublica';
 import HomeDashboard from './components/HomeDashboard';
 import VigilanciaComplejo from './components/VigilanciaComplejo';
+import { PredicacionPublicaForm, PredicacionPublicaView } from './components/PredicacionPublica';
 import VotacionPrivilegiosForm from './components/VotacionPrivilegios';
 import VisitaSC from './components/VisitaSC';
 import ProgramaPredicacionSemanal from './components/ProgramaPredicacionSemanal';
@@ -1022,6 +1023,7 @@ const App: React.FC = () => {
         vidaYMinisterio: <VidaYMinisterio publishers={publishers} lmSchedules={lmSchedules} onSaveSchedule={handleSaveLMSchedule} onUpdatePublisherVyMAssignments={handleUpdatePublisherVyMAssignments} onShowModal={setModalInfo} canConfig={userPermissions.includes('configVidaYMinisterio')} />,
         registroTransaccion: <RegistroTransaccion />,
         reunionPublica: <ReunionPublica schedule={safePublicTalksSchedule} onSave={handleSavePublicTalksSchedule} canManage={userPermissions.includes('managePublicTalks')} publishers={publishers} onShowModal={setModalInfo} onUpdatePublisher={handleUpdatePublisher} />,
+        predicacionPublica: <PredicacionPublicaView canEdit={true} />,
         vigilancia: <VigilanciaComplejo legacyConfig={vigilanciaConfig} legacySchedules={vigilanciaSchedules} />,
         visitaSC: <VisitaSC
             publishers={publishers}
@@ -1132,6 +1134,11 @@ const App: React.FC = () => {
             </button>
         </div>
     );
+
+    // Enlace público de predicación pública con exhibidores: ?exhibidores=1
+    if (new URLSearchParams(window.location.search).get('exhibidores') === '1' && !loading) {
+        return <PredicacionPublicaForm publishers={publishers} />;
+    }
 
     // Enlace público del programa de vigilancia del complejo (sin inicio de sesión): ?vigilancia=1
     if (new URLSearchParams(window.location.search).get('vigilancia') === '1') {

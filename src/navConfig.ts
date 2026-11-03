@@ -42,6 +42,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 title: 'Organización',
                 items: [
                     { view: 'programaPredicacionSemanal', label: 'Programa de Predicación', tooltip: 'Organización semanal de grupos, capitanes y lugares de salida.' },
+                    { view: 'predicacionPublica', label: 'Exhibidores', tooltip: 'Programa semanal de predicación pública con exhibidores y enlace para apuntarse.' },                   
                     { view: 'territorios', label: 'Territorios' },
                 ],
             },

@@ -9,7 +9,7 @@ export const ALL_PERMISSIONS: Permission[] = [
     'informeServicio', 'territorios', 'precursorAuxiliar', 'home', 'controlAcceso',
     'informeMensualGrupo', 'gestionContenidoInvitacion', 'informeMensualConsolidado',
     'dashboardCursos', 'dashboardPrecursores', 'asignacionesReunion',
-    'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica', 'vigilancia', 'visitaSC',
+    'programaServiciosAuxiliares', 'vidaYMinisterio', 'registroTransaccion', 'reunionPublica', 'vigilancia', 'visitaSC','predicacionPublica',
     // Granular Permissions
     'editAsistenciaReporte', 'managePublicadores', 'editRegistrosServicio', 'manageGrupos',
     'configVidaYMinisterio', 'manageMeetingAssignments', 'managePublicTalks', 'manageTerritorios', 'viewDecisionAncianos', 'resetData'
